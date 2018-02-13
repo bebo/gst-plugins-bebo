@@ -351,24 +351,29 @@ gst_shm_sink_allocator_new (GstShmSink * sink)
  * MAIN OBJECT *
  ***************/
 
+#define ALIGN(nr, align) \
+ (nr % align == 0) ? nr : align * (nr / align +1)
 
-void get_buffer_size(size_t *frame_size, uint32_t *frame_data_offset, GstVideoFormat format, uint32_t widht, uint32_t height, uint32_t alignment) {
+void get_buffer_size(size_t *buffer_size, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
     // FIXME  - fix hard coded 720p
-
-    size_t header_size = sizeof(struct frame_header);
-    if (header_size % alignment != 0) {
-        header_size = ((header_size + alignment) / alignment) * alignment ;
-    }
-
     size_t size = 138240;   // i420 720p
-    if (size % alignment != 0) {
-        size = ((size + alignment) / alignment) * alignment ;
-    }
-    frame_size = size + header_size;
-    frame_data_offset = header_size;
+    // reading beyond buffer size is a thing for video buffers - so we need to make the backing buffer a bit bigger
+    size += alignment;
+    *buffer_size = ALIGN(size, alignment);
 }
 
-#define ALIGNMENT 264
+void get_frame_size(size_t *frame_size, size_t *frame_data_offset, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
+    // FIXME  - fix hard coded 720p
+
+    size_t buffer_size;
+    get_buffer_size(&buffer_size, format, width, height, alignment);
+    size_t header_size = ALIGN(sizeof(struct frame_header), alignment);
+
+    *frame_size = buffer_size + header_size;
+    *frame_data_offset = header_size;
+}
+
+#define ALIGNMENT 256
 static void
 gst_shm_sink_init (GstShmSink * self)
 {
@@ -377,12 +382,12 @@ gst_shm_sink_init (GstShmSink * self)
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
 
   uint32_t size = 0;
-  uint32_t header_size = (sizeof(struct shmem_info) + ALIGNMENT) / ALIGNMENT;
+  uint32_t header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   int buffer_count = 5;
   // FIXME  - fix hard coded 720p
-  uint32_t frame_data_offset;
-  uint32_t frame_size;
-  get_buffer_size(&frame_size, &frame_data_offset, GST_VIDEO_FORMAT_I420, 1280, 720, ALIGNMENT);
+  size_t frame_data_offset;
+  size_t frame_size;
+  get_frame_size(&frame_size, &frame_data_offset, GST_VIDEO_FORMAT_I420, 1280, 720, ALIGNMENT);
   size = (frame_size * buffer_count) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
@@ -400,16 +405,16 @@ gst_shm_sink_init (GstShmSink * self)
       return;
   }
 
-  // TODO put on obj
-  struct shmem_info *shmem = (struct shmem_info*) self->shmem;
-  shmem->frame_offset = header_size;
-  shmem->frame_size = frame_size;
-  shmem->count = buffer_count;
-  shmem->start = 0;
-  shmem->end = buffer_count-1;
-  shmem->info.width = 1280;
-  shmem->info.height = 720;
-  shmem->info.video_format = GST_VIDEO_FORMAT_I420;
+  self->shmem->frame_offset = header_size;
+  self->shmem->frame_size = frame_size;
+  self->shmem->buffer_size = frame_size - header_size;
+  self->shmem->count = buffer_count;
+  self->shmem->start = 0;
+  self->shmem->end = buffer_count-1;
+  self->shmem->info.width = 1280;
+  self->shmem->info.height = 720;
+  self->shmem->info.video_format = GST_VIDEO_FORMAT_I420;
+  self->shmem->info.frame_data_offset = frame_data_offset;
 
 // self->perms = DEFAULT_PERMS;
 //  gst_allocation_params_init (&self->params);
@@ -436,8 +441,8 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->event = GST_DEBUG_FUNCPTR (gst_shm_sink_event);
   gstbasesink_class->unlock = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock);
   gstbasesink_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock_stop);
-  //gstbasesink_class->propose_allocation =
-  //    GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
+  gstbasesink_class->propose_allocation =
+      GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
 
   g_object_class_install_property (gobject_class, PROP_SOCKET_PATH,
       g_param_spec_string ("socket-path",
@@ -734,27 +739,34 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
   GstShmSink *self = GST_SHM_SINK (bsink);
     // TODO
-    GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
-        gst_buffer_n_memory (buf),
-        gst_buffer_get_size(buf));
+    //GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
+    //     gst_buffer_n_memory (buf),
+    //    gst_buffer_get_size(buf));
 
+    if (!GST_IS_BUFFER(buf)) {
+        GST_WARNING_OBJECT(self, "NOT A BUFFER???");
+        DebugBreak();
+    }
+  GST_OBJECT_LOCK (self);
     // FIXME: mutex
-    struct shmem_info *shmem = (struct shmem_info*) self->shmem;
-    struct frame_header *frame = ((char*) self->shmem) + shmem->frame_offset + shmem->start * shmem->frame_size;
-    void *data = (((char*)frame) + shmem->info->frame_data_offset;
+    uint64_t i = self->shmem->start % self->shmem->count;
+    self->shmem->start++;
+
+    struct frame_header *frame = ((char*) self->shmem) + self->shmem->frame_offset +  i * self->shmem->frame_size;
+    void *data = ((char*)frame) + self->shmem->info.frame_data_offset;
 
     GstMapInfo map;
     GstMemory *memory = NULL;
 
-    memory = gst_buffer_peek_memory(buf, 0);
+    frame->dts = buf->dts;
+    frame->pts = buf->pts;
 
-    gst_buffer_map (sendbuf, &map, GST_MAP_READ);
-  //  gst_memory_map(memory, &map, GST_MAP_WRITE);
-    gst_buffer_extract(buf, 0, map.data, map.size);
-    gst_memory_unmap(mem, &dest_info);
-    gst_memory_unmap(memory, &map);
+    gst_buffer_map(buf, &map, GST_MAP_READ);
+    gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
+    gst_buffer_unmap(buf, &map);
 
-  while (!gst_shm_sink_can_render (self, GST_BUFFER_TIMESTAMP (buf))) {
+    GST_OBJECT_UNLOCK (self);
+
     return GST_FLOW_OK;
 
 #if 0
@@ -1059,9 +1071,11 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
+#if 0 // TODO ?
   if (self->allocator)
     gst_query_add_allocation_param (query, GST_ALLOCATOR (self->allocator),
         NULL);
+#endif
 
   return TRUE;
 }

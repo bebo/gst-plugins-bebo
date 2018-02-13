@@ -51,7 +51,7 @@ struct _GstShmSink
 
 //  ShmPipe *pipe;
   HANDLE shmem_handle;
-  void *shmem;
+  struct shmem *shmem;
 
   guint perms;
   guint size;
