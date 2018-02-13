@@ -50,7 +50,6 @@ extern "C" {
 			local_registry.ReadValue(key.c_str(), &out);
 		}
 
-
 		const wchar_t* out_c = out.c_str();
 		CHAR * result = (CHAR *)bmalloc(wcslen(out_c) + strlen(file_c) + 1);
 		wsprintfA(result, "%S\\%s", out_c, file_c);
