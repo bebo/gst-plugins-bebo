@@ -1,11 +1,20 @@
-# Bebo Game Capture Direct Show Filter Service
+# gstreamer to directshow
 
-https://github.com/bebo/bebo-capture
+   +------------------------------+       +-------------------------------+
+   |                              |       |                               |
+   |          gstreamer           |       |          DirectShow           |
+   |                              |       |                               |
+   |      +-------------------+   |       |   +--------------------+      |
+   |      |                   |   |       |   |                    |      |
+   |   --->  dshowfiltersink  +--------------->    gst-to-dshow    +-->   |
+   |      |    (sink plugin)  |   |       |   |  (capture filter)  |      |
+   |      |                   |   |       |   |                    |      |
+   |      +-------------------+   |       |   +--------------------+      |
+   |                              |       |                               |
+   +------------------------------+       +-------------------------------+
 
-This projects provides a Direct Show Capture Filter Service for capturing:
-* Direct X and OpenGL games (Direct X, OpenGL)
-* desktop capture (Using the Desktop Duplication API) - TODO
-* windowed applications (GDI) - TODO (commented out at the moment)
+
+This projects provides gstreamer to Direct Show Capture Filter bridge
 
 Currently tested on Windows 10 64 bit
 
