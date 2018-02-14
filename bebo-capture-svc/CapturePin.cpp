@@ -12,6 +12,7 @@
 #include "d3d11.h"
 #include <dxgi.h>
 #include <Psapi.h>
+#include "libyuv/convert.h"
 
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 #define EVENT_READ_REGISTRY "Global\\BEBO_CAPTURE_READ_REGISTRY"
@@ -38,14 +39,6 @@ int show_performance = 0;
 
 volatile bool initialized = false;
 
-static DWORD WINAPI init_hooks(LPVOID unused)
-{
-	info("Init hooks: load graphics offsets start");
-	bool x32 = load_graphics_offsets(true);
-	bool x64 = load_graphics_offsets(false);
-	info("Init hooks: load graphics offsets complete - is32bit: %d, is64bit: %d", x32, x64);
-	return 0;
-}
 
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
@@ -76,7 +69,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	init_hooks_thread(NULL),
 	threadCreated(false),
 	isBlackFrame(true),
-	blackFrameCount(0)
+	blackFrameCount(0),
+    shmem(nullptr)
 {
 	info("CPushPinDesktop");
 
@@ -98,13 +92,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	// Get the device context of the main display, just to get some metrics for it...
 	config = (struct game_capture_config*) malloc(sizeof game_capture_config);
 	memset(config, 0, sizeof game_capture_config);
-
-	if (!initialized) {
-		init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
-		DWORD result = WaitForSingleObject(init_hooks_thread, INFINITE);
-		initialized = true;
-		info("Init hooks result: 0x%08x (%d)", result, result);	
-	}
 
 	if (!readRegistryEvent) {
 		readRegistryEvent = CreateEvent(NULL,
@@ -432,24 +419,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 		ProcessRegistryReadEvent(0);
 
-		int code = E_FAIL;
-
-		switch (m_iCaptureType) {
-		case CAPTURE_INJECT:
-			code = FillBuffer_Inject(pSample);
-			break;
-		case CAPTURE_DESKTOP: 
-			code = FillBuffer_Desktop(pSample);
-			break;
-		case CAPTURE_GDI: 
-			code = FillBuffer_GDI(pSample);
-			break;
-		case CAPTURE_DSHOW:
-			error("LIBDSHOW CAPTURE IS NOT SUPPRTED YET");
-			break;
-		default:
-			error("UNKNOWN CAPTURE TYPE: %d", m_iCaptureType);
-		}			
+		int code = FillBuffer_GST(pSample);
 
 		// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
 		// this failure can happen pretty often due to mobile graphic card
@@ -517,229 +487,56 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	return S_OK;
 }
 
-HRESULT CPushPinDesktop::FillBuffer_Inject(IMediaSample *pSample)
+
+
+HRESULT CPushPinDesktop::OpenShmMem()
 {
-	CheckPointer(pSample, E_POINTER);
-	
-	if (!isReady(&game_context)) {
-		if (m_iFrameNumber > 0) {
-			CleanupCapture();
-		}
+    if (shmem != nullptr) {
+       return S_OK;
+    }
 
-		config->scale_cx = m_iCaptureConfigWidth;
-		config->scale_cy = m_iCaptureConfigHeight;
-		config->force_scaling = 1;
-		config->anticheat_hook = m_bCaptureAntiCheat;
+    shmem_handle = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
+    if (!shmem_handle) {
+        error("could not create mapping %d", GetLastError());
+        return -1;
+    }
 
-		game_context = hook(&game_context, m_pCaptureWindowClassName, m_pCaptureWindowName, config, m_rtFrameLength * 100);
+    shmem_mutex = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
+    WaitForSingleObject(shmem_mutex, INFINITE); /// FIXME maybe timeout  == WAIT_OBJECT_0;
 
-		if (!isReady(&game_context)) {
-			return 2;
-		}
-	}
 
-	CRefTime now;
-	now = 0;
-	CSourceStream::m_pFilter->StreamTime(now);
+    shmem = (struct shmem*) MapViewOfFile(shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
+    if (!shmem) {
+        error("could not map shmem %d", GetLastError());
+        ReleaseMutex(shmem_mutex);
+        return -1;
+    }
+    uint32_t shmem_size = shmem->shmem_size;
+    UnmapViewOfFile(shmem);
 
-	if (now <= 0) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-		debug("no reference graph clock - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (now < (previousFrame + (m_rtFrameLength / 2))) {
-		DWORD dwMilliseconds = (DWORD)max(1, min(10000 + previousFrame + (m_rtFrameLength / 2) - now, (m_rtFrameLength / 2)) / 10000L);
-		debug("sleeping A - %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (now < (previousFrame + m_rtFrameLength)) {
-		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), (m_rtFrameLength / 2)) / 10000L);
-		debug("sleeping B - %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (missed) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-		debug("starting/missed - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-		CSourceStream::m_pFilter->StreamTime(now);
-	}
-	else if (missed == false && m_iFrameNumber == 0) {
-		debug("getting second frame");
-		missed = true;
-	}
-	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-		m_iFrameNumber += missed_nr;
-		countMissed += missed_nr;
-		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-		missed = true;
-	}
-	else {
-		debug("late need to catch up");
-		missed = true;
-	}
-
-	bool frame = get_game_frame(&game_context, missed, pSample);
-	if (!game_context) {
-		frame = false;
-		info("Capture Ended");
-	}
-
-	if (frame && previousFrame <= 0) {
-		frame = false;
-		previousFrame = now;
-		missed = false;
-		debug("skip first frame");
-	}
-
-	if (frame && isBlackFrame) {
-		long size = pSample->GetSize();
-		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
-		BYTE* pData;
-		pSample->GetPointer(&pData);
-		for (int i = 0; i < size; i++) {
-			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				isBlackFrame = false;
-				break;
-			}
-		}
-
-		if (isBlackFrame) {
-			frame = false;
-			previousFrame = now;
-			missed = false;
-			blackFrameCount++;
-
-			if (blackFrameCount == GetFps() * 10 * 2) { // 10s frames, cause we double sampling, texture A and B so 5*2
-				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
-			}
-		}
-	}
-
-	if (!frame) {
-		return 3;
-	}
-
-	return S_OK;
-}
-
-HRESULT CPushPinDesktop::FillBuffer_Desktop(IMediaSample *pSample) {
-	CheckPointer(pSample, E_POINTER);
-
-	if (!m_pDesktopCapture->IsReady()) {
-		if (m_iFrameNumber > 0) {
-			CleanupCapture();
-		}
-
-		info("Initializing desktop capture - adapter: %d, desktop: %d, size: %dx%d",
-			m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-		m_pDesktopCapture->Init(m_iDesktopAdapterNumber, m_iDesktopNumber, getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-
-		if (!m_pDesktopCapture->IsReady()) {
-			return 2;
-		}
-	}
-
-	CRefTime now;
-	now = 0;
-	CSourceStream::m_pFilter->StreamTime(now);
-	if (now <= 0) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-		debug("no reference graph clock - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (now < (previousFrame + m_rtFrameLength)) {
-		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
-		debug("sleeping - %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (missed) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-		debug("starting/missed - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-		CSourceStream::m_pFilter->StreamTime(now);
-	}
-	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-		m_iFrameNumber += missed_nr;
-		countMissed += missed_nr;
-		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-		missed = true;
-	}
-
-	bool frame = m_pDesktopCapture->GetFrame(pSample, false, now);
-
-	if (!frame && missed && now > (previousFrame + 10000000L / 5)) {
-		debug("fake frame");
-		countMissed += 1;
-		frame = m_pDesktopCapture->GetOldFrame(pSample, false);
-	}
-
-	if (frame && previousFrame <= 0) {
-		frame = false;
-		previousFrame = now;
-		missed = false;
-		debug("skip first frame");
-	}
-
-	if (frame && isBlackFrame) {
-		long size = pSample->GetSize();
-		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
-		BYTE* pData;
-		pSample->GetPointer(&pData);
-		for (int i = 0; i < size; i++) {
-			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				isBlackFrame = false;
-				break;
-			}
-		}
-
-		if (isBlackFrame) {
-			frame = false;
-			previousFrame = now;
-			missed = false;
-			blackFrameCount++;
-
-			if (blackFrameCount == GetFps() * 5) { // 5s frames
-				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
-			}
-		}
-	}
-
-	if (!frame) {
-		return 3;
-	}
-
-	return S_OK;
+    shmem = (struct shmem*) MapViewOfFile(shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
+    ReleaseMutex(shmem_mutex);
+    if (!shmem) {
+        error("could not map shmem %d", GetLastError());
+        return -1;
+    }
+    info("Opened Shared Memory Buffer");
+    return S_OK;
 }
 
 
-
-HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
+HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
+    OpenShmMem();
 
-	if (!m_pGDICapture->IsReady()) {
-		if (m_iFrameNumber > 0) {
-			CleanupCapture();
-		}
+    if (!shmem) {
+        return 2;
+    }
 
-		HWND hwnd = FindCaptureWindows(m_bCaptureOnce, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName);
-
-		if (!hwnd) {
-			return 2;
-		}
-
-		info("GDI - window_handle: 0x%016x (%ld), class_name: %ls, window_name: %ls, exe_name: %ls, capture_once: %d",
-			m_iCaptureHandle, m_iCaptureHandle, m_pCaptureWindowClassName, m_pCaptureWindowName, m_pCaptureExeFullName, m_bCaptureOnce);
-
-		m_pGDICapture->SetSize(getNegotiatedFinalWidth(), getNegotiatedFinalHeight());
-		m_pGDICapture->SetCaptureHandle(hwnd);
-	}
+    if (shmem->write_ptr == 0 || shmem->read_ptr >= shmem->write_ptr) {
+        return 2;
+    }
 
 	CRefTime now;
 	now = 0;
@@ -771,48 +568,58 @@ HRESULT CPushPinDesktop::FillBuffer_GDI(IMediaSample *pSample)
 		missed = true;
 	}
 
-	bool frame = m_pGDICapture->GetFrame(pSample);
+    if (WaitForSingleObject(shmem_mutex, INFINITE) == WAIT_OBJECT_0) {
+        info("GOT MUTEX");
+    }
+    uint64_t i = shmem->read_ptr % shmem->count;
+    shmem->read_ptr++;
 
-	if (frame && previousFrame <= 0) {
-		frame = false;
-		previousFrame = now;
-		missed = false;
-		debug("skip first frame");
-	}
+    uint64_t frame_offset = shmem->frame_offset + i * shmem->frame_size;
+    uint64_t data_offset = shmem->frame_data_offset;
+    struct frame_header *frame_header = (struct frame_header*) (((char*)shmem) + frame_offset);
+    BYTE *data = ((BYTE *)frame_header) + data_offset;
 
-	if (frame && isBlackFrame) {
-		long size = pSample->GetSize();
-		long y_size = m_iCaptureConfigWidth * m_iCaptureConfigHeight;
-		BYTE* pData;
-		pSample->GetPointer(&pData);
-		for (int i = 0; i < size; i++) {
-			if ((i < y_size && pData[i] != 0x10) || (i >= y_size && pData[i] != 0x80)) {
-				isBlackFrame = false;
-				break;
-			}
-		}
+    uint64_t sample_size = pSample->GetSize();
+    info("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
+       // frame_header->dts,
+        frame_header->pts,
+        i,
+        frame_offset,
+        data_offset,
+        sample_size);
 
-		if (isBlackFrame) {
-			frame = false;
-			missed = false;
-			previousFrame = now;
-			blackFrameCount++;
+    BYTE *pdata;
+    pSample->GetPointer(&pdata);
 
-			if (blackFrameCount == GetFps() * 5) { // 5s frames
-				error("Black frame detected, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
-			}
-		}
-	}
+    int stride_y = shmem->video_info.width;
+    int stride_u = (shmem->video_info.width + 1) / 2;
+    int stride_v = stride_u;
 
-	if (!frame) {
-		if (!IsWindow(m_pGDICapture->GetCaptureHandle())) {
-			info("capturing window is no longer alive"); // TODO: instead of dying - maybe retrying
-			m_pGDICapture->SetCaptureHandle(NULL);
-		}
+    uint8* pdata_y = pdata;
+    uint8* pdata_u = pdata + (shmem->video_info.width * shmem->video_info.height);
+    uint8* pdata_v = pdata_u + ((shmem->video_info.width * shmem->video_info.height) >> 2);
 
-		return 3;
-	}
+    uint8* gst_y = data;
+    uint8* gst_u = data + (shmem->video_info.width * shmem->video_info.height);
+    uint8* gst_v = gst_u + ((shmem->video_info.width * shmem->video_info.height) >> 2);
 
+    libyuv::I420Copy(
+            gst_y,
+            stride_y,
+            gst_u,
+            stride_u,
+            gst_v,
+            stride_v,
+            pdata_y,
+            stride_y,
+            pdata_u,
+            stride_u,
+            pdata_v,
+            stride_v,
+            shmem->video_info.width,
+            shmem->video_info.height);
+
+    ReleaseMutex(shmem_mutex);
 	return S_OK;
 }
 

@@ -49,9 +49,9 @@ struct _GstShmSink
 
   gchar *socket_path;
 
-//  ShmPipe *pipe;
   HANDLE shmem_handle;
   struct shmem *shmem;
+  HANDLE shmem_mutex;
 
   guint perms;
   guint size;

@@ -14,6 +14,7 @@
 #include "GDICapture.h"
 #include "CommonTypes.h"
 #include "registry.h"
+#include "../shared/bebo_shmem.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -96,8 +97,11 @@ protected:
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();                   
 
-	game_capture_config * config;
-    void * game_context;
+	game_capture_config *config;
+    void *game_context; //FIXME remove
+
+    HANDLE shmem_handle;
+    struct shmem *shmem;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
@@ -137,7 +141,6 @@ protected:
 	UINT64 blackFrameCount;
 
 public:
-	
 	//CSourceStream overrrides
 	HRESULT OnThreadCreate(void);
 	HRESULT OnThreadDestroy(void);
@@ -167,10 +170,13 @@ public:
     CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter);
     ~CPushPinDesktop();
 
+    HRESULT OpenShmMem();
+    HANDLE shmem_mutex;
+
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBuffer_Inject(IMediaSample *pSample);
+    HRESULT FillBuffer_GST(IMediaSample *pSample);
     HRESULT FillBuffer_Desktop(IMediaSample *pSample);
     HRESULT FillBuffer_GDI(IMediaSample *pSample);
 

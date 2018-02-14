@@ -38,6 +38,7 @@
 
 #include "gstshmsink.h"
 #include <gst/gst.h>
+#include <gst/video/video.h>
 #include <string.h>
 #include "../shared/bebo_shmem.h"
 #include <windows.h>
@@ -356,7 +357,7 @@ gst_shm_sink_allocator_new (GstShmSink * sink)
 
 void get_buffer_size(size_t *buffer_size, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
     // FIXME  - fix hard coded 720p
-    size_t size = 138240;   // i420 720p
+    size_t size = 1382400;   // i420 720p
     // reading beyond buffer size is a thing for video buffers - so we need to make the backing buffer a bit bigger
     size += alignment;
     *buffer_size = ALIGN(size, alignment);
@@ -380,6 +381,8 @@ gst_shm_sink_init (GstShmSink * self)
   g_cond_init (&self->cond);
   self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
+  self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
+  
 
   uint32_t size = 0;
   uint32_t header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
@@ -405,17 +408,23 @@ gst_shm_sink_init (GstShmSink * self)
       return;
   }
 
+  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, 1280, 720);
+
+//  for (int i = 0; i < GST_VIDEO_MAX_PLANES; ++i) {
+//      self->shmem->video_info.plane_offsets[i] = GST_VIDEO_INFO_PLANE_OFFSET(&(self->shmem->video_info), i);
+//      self->shmem->video_info.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&(self->shemem->video_info), i);
+//  }
+
   self->shmem->frame_offset = header_size;
   self->shmem->frame_size = frame_size;
   self->shmem->buffer_size = frame_size - header_size;
   self->shmem->count = buffer_count;
-  self->shmem->start = 0;
-  self->shmem->end = buffer_count-1;
-  self->shmem->info.width = 1280;
-  self->shmem->info.height = 720;
-  self->shmem->info.video_format = GST_VIDEO_FORMAT_I420;
-  self->shmem->info.frame_data_offset = frame_data_offset;
+  self->shmem->write_ptr = 0;
+  self->shmem->read_ptr = 0;
+  self->shmem->frame_data_offset = frame_data_offset;
+  self->shmem->shmem_size = size;
 
+  ReleaseMutex(self->shmem_mutex);
 // self->perms = DEFAULT_PERMS;
 //  gst_allocation_params_init (&self->params);
 }
@@ -737,7 +746,7 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+    GstShmSink *self = GST_SHM_SINK (bsink);
     // TODO
     //GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
     //     gst_buffer_n_memory (buf),
@@ -745,27 +754,48 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
     if (!GST_IS_BUFFER(buf)) {
         GST_WARNING_OBJECT(self, "NOT A BUFFER???");
-        DebugBreak();
     }
-  GST_OBJECT_LOCK (self);
-    // FIXME: mutex
-    uint64_t i = self->shmem->start % self->shmem->count;
-    self->shmem->start++;
+    GST_OBJECT_LOCK (self);
 
-    struct frame_header *frame = ((char*) self->shmem) + self->shmem->frame_offset +  i * self->shmem->frame_size;
-    void *data = ((char*)frame) + self->shmem->info.frame_data_offset;
+    DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
+    if (rc == WAIT_OBJECT_0) {
+        GST_WARNING_OBJECT(self, "GOT MUTEX");
+    } else if (rc == WAIT_FAILED) {
+        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+    } else {
+        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
+    }
+    
+    uint64_t i = self->shmem->write_ptr % self->shmem->count;
+    self->shmem->write_ptr++;
+
+    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+    uint64_t data_offset = self->shmem->frame_data_offset;
+
+    struct frame_header *frame = ((char*)self->shmem) + frame_offset;
+    void *data = ((char*)frame) + data_offset;
 
     GstMapInfo map;
     GstMemory *memory = NULL;
 
-    frame->dts = buf->dts;
-    frame->pts = buf->pts;
 
     gst_buffer_map(buf, &map, GST_MAP_READ);
-    gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
+    frame->dts = buf->dts;
+    frame->pts = buf->pts;
+    int size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
     gst_buffer_unmap(buf, &map);
+    GST_WARNING_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
+        //frame->dts / 1000000,
+        frame->pts / 1000000,
+        i,
+        frame_offset,
+        data_offset,
+        size);
 
+    ReleaseMutex(self->shmem_mutex);
     GST_OBJECT_UNLOCK (self);
+
+
 
     return GST_FLOW_OK;
 
