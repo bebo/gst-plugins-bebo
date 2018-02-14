@@ -23,23 +23,22 @@ Currently tested on Windows 10 64 bit
 ## Build Dependencies
 * Visual Studio 2015 (C++)
 
-## To register the capture DLL as a Direct Show Capture Service
+## To register the DLL as a Direct Show Capture Service
 
 run cmd as __Administrator__:
 ```
-regsvr32 BeboGameCapture.DLL
+regsrv32 gst-to-dshow.dll
 ```
 
-## Registry Values
+## To test that gst produces some frames
 
+### Produce some frames from gst
+set GST_PLUGIN_PATH=.
+gst-launch-1.0 videotestsrc ! "video/x-raw,framerate=30/1,height=720,width=1280" ! videoconvert ! "video/x-raw,format=I420" !  dshowfiltersink
 
-* CaptureType
- * "desktop" -> DXGI Desktop Duplication API
- * "inject" -> graphics hook injection
- * "gdi" -> gdi
- * "dshow" -> libdshow
+### Show DirectShow sees some frames
+ffplay -f dshow -video_size 1280x720 -i video=bebo-gst-to-dshow
 
- - defaults to "inject" for backwards compatibility
 
 ## libyuv (notes)
 
@@ -63,14 +62,8 @@ find libyuv_internal.lib and the include directory
 
 
 # Attributions / History
-
-* Really we want to use Chrome / chromium / NW.JS and webRTC to capture all
-  games, but there are some caveats, so we built this for now until webrtc game
-  capture support is seamless and complete
 * We started this code based on the Direct Show Desktop Capture Filter:
   https://github.com/rdp/screen-capture-recorder-to-video-windows-free
-* OBS https://obsproject.com is awesome at capturing the frames from a game,
-  so we use that code for capturing frames from games
 * All direct show filters make heavy use of the Micosoft DirectShow SDK
   BaseClasses
 * We use the super fast g2log by Kjell Hedstroem for logging
