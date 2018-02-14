@@ -81,7 +81,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 {
 
 public:
-    long m_iFrameNumber;
+    uint64_t m_iFrameNumber;
 
 protected:
 	RegKey registry;

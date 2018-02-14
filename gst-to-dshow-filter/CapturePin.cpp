@@ -23,9 +23,9 @@ extern "C" {
 }
 
 DWORD globalStart; // for some debug performance benchmarking
-long countMissed = 0;
-long fastestRoundMillis = 1000000; // random big number
-long sumMillisTook = 0;
+uint64_t countMissed = 0;
+long double fastestRoundMillis = 1000000; // random big number
+long double sumMillisTook = 0;
 
 wchar_t out[1024];
 // FIXME :  move these
@@ -39,7 +39,6 @@ int show_performance = 0;
 #endif
 
 volatile bool initialized = false;
-
 
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
@@ -133,9 +132,9 @@ void CPushPinDesktop::CleanupCapture() {
 	isBlackFrame = true;
 	blackFrameCount = 0;
 
-	_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
+	_swprintf(out, L"done video frame! total frames: %I64d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %I64d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
 		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), 
-		0, 0, 0, 0, 0, 0, countMissed, 
+		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, countMissed, 
 		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 }
 
@@ -286,41 +285,7 @@ int CPushPinDesktop::GetGameFromRegistry(void) {
 		}
 	}
 
-	if (registry.HasValue(TEXT("CaptureAntiCheat"))) {
-		DWORD qout;
 
-		registry.ReadValueDW(TEXT("CaptureAntiCheat"), &qout);
-		if (m_bCaptureAntiCheat != qout) {
-			m_bCaptureAntiCheat = (qout == 1);
-			message << "CaptureAntiCheat: " << m_bCaptureAntiCheat << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureOnce"))) {
-		DWORD qout;
-
-		registry.ReadValueDW(TEXT("CaptureOnce"), &qout);
-
-		if (m_bCaptureOnce != qout) {
-			m_bCaptureOnce = (qout == 1);
-			message << "CaptureOnce: " << m_bCaptureOnce << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureFPS"))) {
-		DWORD oldCaptureFPS = GetFps();
-		DWORD newCaptureFPS = -1;
-
-		registry.ReadValueDW(TEXT("CaptureFPS"), &newCaptureFPS);
-
-		if (oldCaptureFPS != newCaptureFPS) {
-			m_rtFrameLength = UNITS / newCaptureFPS;
-			message << "CaptureFPS: " << newCaptureFPS << ", ";
-			numberOfChanges++;
-		}
-	}
 
 	if (numberOfChanges > 0) {
 		std::wstring wstr = message.str();
@@ -362,7 +327,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 
 	CheckPointer(pSample, E_POINTER);
 
-	long double millisThisRoundTook = 0;
+	uint64_t millisThisRoundTook = 0;
 	CRefTime now;
 	now = 0;
 
@@ -467,7 +432,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
         ReleaseMutex(shmem_mutex);
         return -1;
     }
-    uint32_t shmem_size = shmem->shmem_size;
+    uint64_t shmem_size = shmem->shmem_size;
     UnmapViewOfFile(shmem);
 
     shmem = (struct shmem*) MapViewOfFile(shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
@@ -515,7 +480,7 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
 		CSourceStream::m_pFilter->StreamTime(now);
 	}
 	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-		int missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+		uint64_t missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
 		m_iFrameNumber += missed_nr;
 		countMissed += missed_nr;
 		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",

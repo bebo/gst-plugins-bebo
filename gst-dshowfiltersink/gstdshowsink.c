@@ -36,7 +36,7 @@
 #include "config.h"
 #endif
 
-#include "gstshmsink.h"
+#include "gstdshowsink.h"
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <string.h>
@@ -384,14 +384,14 @@ gst_shm_sink_init (GstShmSink * self)
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
   
 
-  uint32_t size = 0;
-  uint32_t header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
+  DWORD size = 0;
+  DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   int buffer_count = 5;
   // FIXME  - fix hard coded 720p
   size_t frame_data_offset;
   size_t frame_size;
   get_frame_size(&frame_size, &frame_data_offset, GST_VIDEO_FORMAT_I420, 1280, 720, ALIGNMENT);
-  size = (frame_size * buffer_count) + header_size;
+  size = ((DWORD) frame_size * buffer_count) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
         0, size, BEBO_SHMEM_NAME);
@@ -500,12 +500,12 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gst_element_class_add_static_pad_template (gstelement_class, &sinktemplate);
 
   gst_element_class_set_static_metadata (gstelement_class,
-      "Shared Memory Sink",
+      "Direct Show Filter Sink",
       "Sink",
-      "Send data over shared memory to the matching source",
-      "Olivier Crete <olivier.crete@collabora.co.uk>");
+      "Send data over shared memory to gst-to-dshow DirectShow Filter Source",
+      "Florian P. Nierhaus <fpn@bebo.com>");
 
-  GST_DEBUG_CATEGORY_INIT (shmsink_debug, "shmsink", 0, "Shared Memory Sink");
+  GST_DEBUG_CATEGORY_INIT (shmsink_debug, "dshowfiltersink", 0, "DirectShow Filter Sink");
 }
 
 static void
@@ -772,19 +772,18 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
     uint64_t data_offset = self->shmem->frame_data_offset;
 
-    struct frame_header *frame = ((char*)self->shmem) + frame_offset;
+    struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset));
     void *data = ((char*)frame) + data_offset;
 
     GstMapInfo map;
     GstMemory *memory = NULL;
 
-
     gst_buffer_map(buf, &map, GST_MAP_READ);
     frame->dts = buf->dts;
     frame->pts = buf->pts;
-    int size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
+    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
     gst_buffer_unmap(buf, &map);
-    GST_WARNING_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
+    GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
         //frame->dts / 1000000,
         frame->pts / 1000000,
         i,
@@ -921,7 +920,7 @@ static gpointer
 pollthread_func (gpointer data)
 {
   GstShmSink *self = GST_SHM_SINK (data);
-  GList *item;
+//  GList *item;
   GstClockTime timeout = GST_CLOCK_TIME_NONE;
   int rv = 0;
 

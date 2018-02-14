@@ -79,6 +79,7 @@ void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd) {
 	}
 
 	DrawIcon(hMemDC, p.x - lpRect->left, p.y - lpRect->top, hcur); // 0.042ms
-	if (show_performance)
-		debug("add mouse took %.02f ms", GetCounterSinceStartMillis(start)); // sum takes around 0.125 ms
+    if (show_performance) {
+        debug("add mouse took %.02f ms", GetCounterSinceStartMillis(start)); // sum takes around 0.125 ms
+    }
 }

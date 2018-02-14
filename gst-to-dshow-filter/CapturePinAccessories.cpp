@@ -325,7 +325,7 @@ HRESULT CPushPinDesktop::SetMediaType(const CMediaType *pMediaType)
 	char debug_buffer[1024];
 	if (hr == S_OK) {
 		snprintf(debug_buffer, 1024, "SetMediaType - S_OK requested/negotiated[fps:%.02f x:%d y:%d bitcount:%d]",
-			(UNITS / pvi->AvgTimePerFrame), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
+			(1.0 * UNITS / pvi->AvgTimePerFrame), pvi->bmiHeader.biWidth, pvi->bmiHeader.biHeight, pvi->bmiHeader.biBitCount);
 		info_pmt(debug_buffer, pMediaType);
 	} else {
 		snprintf(debug_buffer, 1024, "SetMediaType - E_INVALIDARG [bitcount requested/negotiated: %d]", pvi->bmiHeader.biBitCount);
