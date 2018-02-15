@@ -70,6 +70,12 @@ public:
 	STDMETHODIMP Stop(); //http://social.msdn.microsoft.com/Forums/en/windowsdirectshowdevelopment/thread/a9e62057-f23b-4ce7-874a-6dd7abc7dbf7
 };
 
+enum TimeOffsetType
+{
+    TIME_OFFSET_NONE,
+    TIME_OFFSET_DTS,
+    TIME_OFFSET_PTS
+};
 
 // child
 class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKsPropertySet //CSourceStream is ... CBasePin
@@ -123,6 +129,11 @@ protected:
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
+    REFERENCE_TIME lastFrame_ = 0;
+    int64_t time_offset_dts_ns_;
+    int64_t time_offset_pts_ns_;
+    TimeOffsetType time_offset_type_;
+
 	HANDLE readRegistryEvent;
 	QWORD m_iCaptureHandle;
 	UINT64 blackFrameCount;
@@ -161,9 +172,7 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBuffer_GST(IMediaSample *pSample);
-    HRESULT FillBuffer_Desktop(IMediaSample *pSample);
-    HRESULT FillBuffer_GDI(IMediaSample *pSample);
+    HRESULT FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
@@ -180,7 +189,6 @@ public:
     {
         return E_FAIL;
     }
-
 	
     //////////////////////////////////////////////////////////////////////////
     //  IKsPropertySet

@@ -16,6 +16,8 @@
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 #endif
 
+#define NS_TO_REFERENCE_TIME(t) (t)/100
+
 DWORD globalStart; // for some debug performance benchmarking
 uint64_t countMissed = 0;
 long double fastestRoundMillis = 1000000; // random big number
@@ -61,6 +63,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	threadCreated(false),
 	isBlackFrame(true),
 	blackFrameCount(0),
+    time_offset_type_(TIME_OFFSET_NONE),
     shmem_(nullptr)
 {
 	info("CPushPinDesktop");
@@ -133,6 +136,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	uint64_t millisThisRoundTook = 0;
 	CRefTime now;
 	now = 0;
+    REFERENCE_TIME startFrame;
+    REFERENCE_TIME endFrame;
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
@@ -142,7 +147,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		}
 
 
-		int code = FillBuffer_GST(pSample);
+		int code = FillBuffer_GST(pSample, &startFrame, &endFrame);
 
 		// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
 		// this failure can happen pretty often due to mobile graphic card
@@ -182,8 +187,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 	// auto-correct drift
 	previousFrame = previousFrame + m_rtFrameLength;
 
-	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
-	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
+//	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
+//	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
 	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
 	CSourceStream::m_pFilter->StreamTime(now);
 	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
@@ -254,7 +259,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
 }
 
 
-HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
+HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame)
 {
 	CheckPointer(pSample, E_POINTER);
     if (OpenShmMem() != S_OK) {
@@ -271,15 +276,14 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
 
     while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
 
-        debug("waiting - no data read_ptr: %d write_ptr: %d",
-            shmem_->read_ptr,
-            shmem_->write_ptr);
         DWORD result = SignalObjectAndWait(shmem_mutex_,
                                            shmem_new_data_semaphore_,
                                            200,
                                            false);
         if (result == WAIT_TIMEOUT) {
-            debug("timed out after 200ms");
+            debug("timed out after 200ms read_ptr: %d write_ptr: %d",
+                shmem_->read_ptr,
+                shmem_->write_ptr);
             return 2;
         } else if (result == WAIT_ABANDONED) {
             warn("semarphore is abandoned");
@@ -297,15 +301,17 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
             }
         }
     }
+    bool first_buffer = false;
+    if (shmem_->read_ptr == 0) {
+        first_buffer = true;
 
-    if (shmem_->read_ptr == 0
-        && shmem_->write_ptr - shmem_->read_ptr > 1) {
+        if (shmem_->write_ptr - shmem_->read_ptr > 1) {
 
-        shmem_->read_ptr = shmem_->write_ptr - 1;
-        debug("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
-            shmem_->read_ptr, shmem_->write_ptr);
-    }
-    else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
+            shmem_->read_ptr = shmem_->write_ptr - 1;
+            debug("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
+                shmem_->read_ptr, shmem_->write_ptr);
+        }
+    } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
         uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
         debug("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr-shmem_->read_ptr, read_ptr);
@@ -313,10 +319,6 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
         shmem_->read_ptr = read_ptr;
     } 
 
-	CRefTime now;
-	now = 0;
-
-	CSourceStream::m_pFilter->StreamTime(now);
 
 //	if (now <= 0) {
 //		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
@@ -345,12 +347,73 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
 //	}
 
     uint64_t i = shmem_->read_ptr % shmem_->count;
-    shmem_->read_ptr++;
 
     uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
     uint64_t data_offset = shmem_->frame_data_offset;
     struct frame_header *frame_header = (struct frame_header*) (((char*)shmem_) + frame_offset);
     BYTE *data = ((BYTE *)frame_header) + data_offset;
+
+    CRefTime now;
+    CSourceStream::m_pFilter->StreamTime(now);
+    now = max(0, now); // can be negative before it started and negative will mess us up
+    uint64_t now_in_ns = now * 100;
+
+    int64_t time_offset_ns;
+
+    if (first_buffer) {
+        // TODO take start delta/behind into account
+        // we prefer dts because it is monotonic
+        if (frame_header->dts != GST_CLOCK_TIME_NONE) {
+            time_offset_dts_ns_ = frame_header->dts - now_in_ns;
+            time_offset_type_ = TIME_OFFSET_DTS;
+            debug("using DTS as refernence delta in ns: %I64d", time_offset_dts_ns_);
+        }
+        if (frame_header->pts != GST_CLOCK_TIME_NONE) {
+            time_offset_pts_ns_ = frame_header->pts - now_in_ns;
+            if (time_offset_type_ == TIME_OFFSET_NONE) {
+                time_offset_type_ = TIME_OFFSET_PTS;
+                warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
+            } else {
+                debug("PTS as delta in ns: %I64d", time_offset_pts_ns_);
+            }
+        }
+    }
+
+    bool have_time = false;
+    if (time_offset_type_ == TIME_OFFSET_DTS) {
+        if (frame_header->dts != GST_CLOCK_TIME_NONE) {
+            *startFrame = NS_TO_REFERENCE_TIME(frame_header->dts - time_offset_dts_ns_);
+            have_time = true;
+        } else {
+            warn("missing DTS timestamp");
+        }
+    } else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
+        if (frame_header->pts != GST_CLOCK_TIME_NONE) {
+            *startFrame = NS_TO_REFERENCE_TIME(frame_header->pts - time_offset_pts_ns_);
+            have_time = true;
+        } else {
+            warn("missing PTS timestamp");
+        }
+    }
+
+    uint64_t duration_ns = frame_header->duration;
+    if (duration_ns == GST_CLOCK_TIME_NONE) {
+        warn("missing duration timestamp");
+        // FIXME: fake duration if we don't get it
+    }
+
+    if (!have_time) {
+        *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns);
+    }
+
+    if (lastFrame_ != 0 && lastFrame_ >= *startFrame) {
+        warn("timestamp not monotonic last: %dI64t new: %dI64t", lastFrame_, *startFrame);
+        // fake it
+        *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
+    }
+
+    *endFrame = *startFrame + NS_TO_REFERENCE_TIME(duration_ns);
+    lastFrame_ = *startFrame;
 
     uint64_t sample_size = pSample->GetSize();
     debug("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
@@ -395,6 +458,7 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
             shmem_->video_info.width,
             shmem_->video_info.height);
 
+    shmem_->read_ptr++;
     ReleaseMutex(shmem_mutex_);
 	return S_OK;
 }

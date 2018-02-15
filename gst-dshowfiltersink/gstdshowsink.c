@@ -784,6 +784,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     gst_buffer_map(buf, &map, GST_MAP_READ);
     frame->dts = buf->dts;
     frame->pts = buf->pts;
+    frame->duration = buf->duration;
     gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
     gst_buffer_unmap(buf, &map);
     GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",

@@ -23,6 +23,7 @@
     struct frame_header {
         uint64_t dts;
         uint64_t pts;
+        uint64_t duration;
     };
 
     struct shmem {
