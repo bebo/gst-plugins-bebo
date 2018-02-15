@@ -33,12 +33,15 @@ regsrv32 gst-to-dshow.dll
 ## To test that gst produces some frames
 
 ### Produce some frames from gst
+```
 set GST_PLUGIN_PATH=.
 gst-launch-1.0 videotestsrc ! "video/x-raw,framerate=30/1,height=720,width=1280" ! videoconvert ! "video/x-raw,format=I420" !  dshowfiltersink
+```
 
 ### Show DirectShow sees some frames
+```
 ffplay -f dshow -video_size 1280x720 -i video=bebo-gst-to-dshow
-
+```
 
 ## libyuv (notes)
 
