@@ -266,12 +266,12 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
     }
 
     if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
-        info("GOT MUTEX");
+        // FIXME handle all error cases
     }
 
     while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
 
-        info("waiting - no data read_ptr: %d write_ptr: %d",
+        debug("waiting - no data read_ptr: %d write_ptr: %d",
             shmem_->read_ptr,
             shmem_->write_ptr);
         DWORD result = SignalObjectAndWait(shmem_mutex_,
@@ -291,10 +291,9 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
             error("unknown semaphore event 0x%010x", result);
             return 2;
         } else  {
-            info("waiting - done");
             if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
-                info("GOT MUTEX");
                 continue;
+            // FIXME handle all error cases
             }
         }
     }
@@ -354,7 +353,7 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
     BYTE *data = ((BYTE *)frame_header) + data_offset;
 
     uint64_t sample_size = pSample->GetSize();
-    info("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
+    debug("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
        // frame_header->dts,
         frame_header->pts,
         i,
