@@ -8,6 +8,7 @@
 
 #pragma once
 
+
 #ifdef _WIN64
 // b44bf41d - a061 - 4c8e - 8f03 - 783580c40f6c
 DEFINE_GUID(CLSID_PushSourceDesktop, 0xb44bf41d, 0xa061, 0x4c8e, \
@@ -17,3 +18,8 @@ DEFINE_GUID(CLSID_PushSourceDesktop, 0xb44bf41d, 0xa061, 0x4c8e, \
 DEFINE_GUID(CLSID_PushSourceDesktop, 0xf55fa525, 0x30f4, 0x45cb, \
     0x9f, 0xc8, 0x6e, 0x51, 0xd5, 0xbf, 0x22, 0xd0);
 #endif
+
+// Filter name strings
+#define DS_FILTER_DESCRIPTION    L"Bebo GStreamer to Direct Show Filter"
+#define DS_FILTER_NAME           L"bebo-gst-to-dshow"
+#define DS_LOG_NAME              "bantha"

@@ -12,6 +12,7 @@
 #include "CommonTypes.h"
 #include "registry.h"
 #include "../shared/bebo_shmem.h"
+#include "names_and_ids.h"
 
 /*
 // UNITS = 10 ^ 7  
@@ -28,8 +29,6 @@ const REFERENCE_TIME FPS_2  = UNITS / 2;
 const REFERENCE_TIME FPS_1  = UNITS / 1;
 */
 
-// Filter name strings
-#define g_wszPushDesktop    L"Bebo Gstreamer to Direct Show Filter"
 typedef unsigned __int64 QWORD;
 
 const float MAX_FPS = 60;

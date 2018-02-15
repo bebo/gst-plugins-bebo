@@ -342,7 +342,7 @@
     <ClInclude Include="..\third_party\g2log\shared_queue.h" />
     <ClInclude Include="CommonTypes.h" />
     <ClInclude Include="DibHelper.h" />
-    <ClInclude Include="CaptureGuids.h" />
+    <ClInclude Include="names_and_ids.h" />
     <ClInclude Include="Capture.h" />
     <ClInclude Include="Logging.h" />
     <ClInclude Include="registry.h" />

@@ -10,17 +10,11 @@
 #include <streams.h>
 #include <initguid.h>
 #include "Logging.h"
-#include "CaptureGuids.h"
+#include "names_and_ids.h"
 #include "Capture.h"
 #include "DibHelper.h"
 
-#define     BeboCaptureApiProgId L"Bebo.GameCaptureApi"
-
 HMODULE g_hModule = NULL;
-
-extern "C" {
-	extern char *bebo_find_file(const char *file);
-}
 
 // Note: It is better to register no media types than to register a partial 
 // media type (subtype == GUID_NULL) because that can slow down intelligent connect 
@@ -69,7 +63,7 @@ const AMOVIESETUP_PIN sudOutputPinDesktop =
 const AMOVIESETUP_FILTER sudPushSourceDesktop =
 {
     &CLSID_PushSourceDesktop,// Filter CLSID
-    g_wszPushDesktop,       // String name
+    DS_FILTER_DESCRIPTION,       // String name
     MERIT_DO_NOT_USE,       // Filter merit
     1,                      // Number pins
     &sudOutputPinDesktop    // Pin details
@@ -84,7 +78,7 @@ const AMOVIESETUP_FILTER sudPushSourceDesktop =
 CFactoryTemplate g_Templates[2] = 
 {
     { 
-      g_wszPushDesktop,               // Name
+      DS_FILTER_DESCRIPTION,               // Name
       &CLSID_PushSourceDesktop,       // CLSID
       CGameCapture::CreateInstance, // Method to create an instance of MyComponent
       NULL,                           // Initialization function
@@ -149,18 +143,18 @@ STDAPI RegisterFilters( BOOL bRegister )
                 rf2.rgPins = &sudOutputPinDesktop;
 				// this is the name that actually shows up in VLC et al. weird
 				
-				info("Registering PushSourceDesktop, bebo-gst-to-dshow filter");
-                hr = fm->RegisterFilter(CLSID_PushSourceDesktop, L"bebo-gst-to-dshow", &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
+                info("Registering %S", DS_FILTER_NAME);
+                hr = fm->RegisterFilter(CLSID_PushSourceDesktop, DS_FILTER_NAME, &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
 				if (FAILED(hr)) {
-					error("Failed to RegisterFilter %ld", hr);
+					error("Failed to RegisterFilter %S %ld", DS_FILTER_NAME, hr);
 				}
             }
             else
             {
-				info("Unregistering PushSourceDesktop, bebo-gst-to-dshow filter");
+                info("Unregistering %S", DS_FILTER_NAME);
                 hr = fm->UnregisterFilter(&CLSID_VideoInputDeviceCategory, 0, CLSID_PushSourceDesktop);
 				if (FAILED(hr)) {
-					error("Failed to UnregisterFilter %ld", hr);
+					error("Failed to UnregisterFilter %S %ld", DS_FILTER_NAME, hr);
 				}
             }
         }

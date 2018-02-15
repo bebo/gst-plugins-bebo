@@ -2,7 +2,7 @@
 
 #include <tchar.h>
 #include "Capture.h"
-#include "CaptureGuids.h"
+#include "names_and_ids.h"
 #include "DibHelper.h"
 #include <wmsdkidl.h>
 #include "Logging.h"
@@ -15,12 +15,6 @@
 #ifndef MIN
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 #endif
-
-#define EVENT_READ_REGISTRY "Global\\BEBO_CAPTURE_READ_REGISTRY"
-
-extern "C" {
-	extern bool load_graphics_offsets(bool is32bit);
-}
 
 DWORD globalStart; // for some debug performance benchmarking
 uint64_t countMissed = 0;
@@ -72,26 +66,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	info("CPushPinDesktop");
 
 	registry.Open(HKEY_CURRENT_USER, L"Software\\Bebo\\GstCapture", KEY_READ);
-
-	if (!readRegistryEvent) {
-		readRegistryEvent = CreateEvent(NULL,
-			TRUE,
-			FALSE,
-			TEXT(EVENT_READ_REGISTRY));
-
-		if (readRegistryEvent == NULL) {
-			warn("Failed to create read registry signal event. Attempting to open event.");
-			readRegistryEvent = OpenEvent(EVENT_ALL_ACCESS,
-				FALSE,
-				TEXT(EVENT_READ_REGISTRY));
-
-			if (readRegistryEvent == NULL) {
-				error("Failed to open registry signal event, after attempted to create it. We should die here.");
-			}
-		} else {
-			info("Created read registry signal event. Handle: %llu", readRegistryEvent);
-		}
-	}
 
 	// now read some custom settings...
 	WarmupCounter();
