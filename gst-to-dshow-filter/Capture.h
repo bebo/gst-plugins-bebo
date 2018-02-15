@@ -94,8 +94,10 @@ protected:
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();                   
 
-    HANDLE shmem_handle;
-    struct shmem *shmem;
+    HANDLE shmem_handle_;
+    struct shmem *shmem_;
+    HANDLE shmem_mutex_;
+    HANDLE shmem_new_data_semaphore_;
 
 	int m_iCaptureConfigWidth;
 	int m_iCaptureConfigHeight;
@@ -162,7 +164,6 @@ public:
     ~CPushPinDesktop();
 
     HRESULT OpenShmMem();
-    HANDLE shmem_mutex;
 
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);

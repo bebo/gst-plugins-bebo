@@ -52,6 +52,7 @@ struct _GstShmSink
   HANDLE shmem_handle;
   struct shmem *shmem;
   HANDLE shmem_mutex;
+  HANDLE shmem_new_data_semaphore;
 
   guint perms;
   guint size;

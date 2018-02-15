@@ -8,6 +8,7 @@
 
 #define BEBO_SHMEM_NAME L"BEBO_SHARED_MEMORY_BUFFER"
 #define BEBO_SHMEM_MUTEX L"BEBO_SHARED_MEMORY_BUFFER_MUTEX"
+#define BEBO_SHMEM_DATA_SEM L"BEBO_SHARE_MEMORY_NEW_DATA_SEMAPHORE"
 /*
  * Will use a ring buffer for frames, and will trigger semaphore when new items are in the buffer
  */

@@ -381,8 +381,11 @@ gst_shm_sink_init (GstShmSink * self)
   g_cond_init (&self->cond);
   self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
+
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
-  
+  // FIXME handle creation error
+  self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
+  // FIXME handle creation error
 
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
@@ -793,8 +796,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
     ReleaseMutex(self->shmem_mutex);
     GST_OBJECT_UNLOCK (self);
-
-
+    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
 
     return GST_FLOW_OK;
 

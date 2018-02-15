@@ -67,7 +67,7 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	threadCreated(false),
 	isBlackFrame(true),
 	blackFrameCount(0),
-    shmem(nullptr)
+    shmem_(nullptr)
 {
 	info("CPushPinDesktop");
 
@@ -350,8 +350,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			gotFrame = true;
 		} else if (code == 2) { // not initialized yet
 			gotFrame = false;
-			long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
-			ProcessRegistryReadEvent(sleep);
+			//long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
+			ProcessRegistryReadEvent(0);
 			continue;
 		} else if (code == 3) { // black frame
 			gotFrame = false;
@@ -409,35 +409,39 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 }
 
 
-
 HRESULT CPushPinDesktop::OpenShmMem()
 {
-    if (shmem != nullptr) {
+    if (shmem_ != nullptr) {
        return S_OK;
     }
 
-    shmem_handle = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
-    if (!shmem_handle) {
+    shmem_new_data_semaphore_ = OpenSemaphore(SYNCHRONIZE, false, BEBO_SHMEM_DATA_SEM);
+    if (!shmem_new_data_semaphore_) {
+        error("could not open semaphore mapping %d", GetLastError());
+        return -1;
+    }
+
+    shmem_handle_ = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
+    if (!shmem_handle_) {
         error("could not create mapping %d", GetLastError());
         return -1;
     }
 
-    shmem_mutex = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
-    WaitForSingleObject(shmem_mutex, INFINITE); /// FIXME maybe timeout  == WAIT_OBJECT_0;
+    shmem_mutex_ = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
+    WaitForSingleObject(shmem_mutex_, INFINITE); /// FIXME maybe timeout  == WAIT_OBJECT_0;
 
-
-    shmem = (struct shmem*) MapViewOfFile(shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
-    if (!shmem) {
+    shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
+    if (!shmem_) {
         error("could not map shmem %d", GetLastError());
-        ReleaseMutex(shmem_mutex);
+        ReleaseMutex(shmem_mutex_);
         return -1;
     }
-    uint64_t shmem_size = shmem->shmem_size;
-    UnmapViewOfFile(shmem);
+    uint64_t shmem_size = shmem_->shmem_size;
+    UnmapViewOfFile(shmem_);
 
-    shmem = (struct shmem*) MapViewOfFile(shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
-    ReleaseMutex(shmem_mutex);
-    if (!shmem) {
+    shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
+    ReleaseMutex(shmem_mutex_);
+    if (!shmem_) {
         error("could not map shmem %d", GetLastError());
         return -1;
     }
@@ -449,80 +453,118 @@ HRESULT CPushPinDesktop::OpenShmMem()
 HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
-    OpenShmMem();
-
-    if (!shmem) {
+    if (OpenShmMem() != S_OK) {
         return 2;
     }
 
-    if (shmem->write_ptr == 0 || shmem->read_ptr >= shmem->write_ptr) {
+    if (!shmem_) {
         return 2;
     }
+
+    if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
+        info("GOT MUTEX");
+    }
+
+    while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
+
+        info("waiting - no data read_ptr: %d write_ptr: %d",
+            shmem_->read_ptr,
+            shmem_->write_ptr);
+        DWORD result = SignalObjectAndWait(shmem_mutex_,
+                                           shmem_new_data_semaphore_,
+                                           200,
+                                           false);
+        if (result == WAIT_TIMEOUT) {
+            debug("timed out after 200ms");
+            return 2;
+        } else if (result == WAIT_ABANDONED) {
+            warn("semarphore is abandoned");
+            return 2;
+        } else if (result == WAIT_FAILED) {
+            warn("semaphore wait failed 0x%010x", GetLastError());
+            return 2;
+        } else if (result != WAIT_OBJECT_0) {
+            error("unknown semaphore event 0x%010x", result);
+            return 2;
+        } else  {
+            info("waiting - done");
+            if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
+                info("GOT MUTEX");
+                continue;
+            }
+        }
+    }
+
+    // FIXME - handle late start case
+    // FIXME - handle delay case
+
+//    ReleaseMutex(shmem_mutex);
 
 	CRefTime now;
 	now = 0;
 
 	CSourceStream::m_pFilter->StreamTime(now);
-	if (now <= 0) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-		debug("no reference graph clock - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (now < (previousFrame + m_rtFrameLength)) {
-		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
-		debug("sleeping - %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-	}
-	else if (missed) {
-		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-		debug("starting/missed - sleeping %d", dwMilliseconds);
-		Sleep(dwMilliseconds);
-		CSourceStream::m_pFilter->StreamTime(now);
-	}
-	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-		uint64_t missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-		m_iFrameNumber += missed_nr;
-		countMissed += missed_nr;
-		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-		missed = true;
-	}
 
-    if (WaitForSingleObject(shmem_mutex, INFINITE) == WAIT_OBJECT_0) {
-        info("GOT MUTEX");
-    }
-    uint64_t i = shmem->read_ptr % shmem->count;
-    shmem->read_ptr++;
+//	if (now <= 0) {
+//		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
+//		debug("no reference graph clock - sleeping %d", dwMilliseconds);
+//		Sleep(dwMilliseconds);
+//	}
+//	else if (now < (previousFrame + m_rtFrameLength)) {
+//		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
+//		debug("sleeping - %d", dwMilliseconds);
+//		Sleep(dwMilliseconds);
+//	}
+//	else if (missed) {
+//		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
+//		debug("starting/missed - sleeping %d", dwMilliseconds);
+//		Sleep(dwMilliseconds);
+//		CSourceStream::m_pFilter->StreamTime(now);
+//	}
+//	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
+//		uint64_t missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
+//		m_iFrameNumber += missed_nr;
+//		countMissed += missed_nr;
+//		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
+//			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
+//		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
+//		missed = true;
+//	}
 
-    uint64_t frame_offset = shmem->frame_offset + i * shmem->frame_size;
-    uint64_t data_offset = shmem->frame_data_offset;
-    struct frame_header *frame_header = (struct frame_header*) (((char*)shmem) + frame_offset);
+    uint64_t i = shmem_->read_ptr % shmem_->count;
+    shmem_->read_ptr++;
+
+    uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
+    uint64_t data_offset = shmem_->frame_data_offset;
+    struct frame_header *frame_header = (struct frame_header*) (((char*)shmem_) + frame_offset);
     BYTE *data = ((BYTE *)frame_header) + data_offset;
 
     uint64_t sample_size = pSample->GetSize();
-    info("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
+    info("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
        // frame_header->dts,
         frame_header->pts,
         i,
         frame_offset,
         data_offset,
-        sample_size);
+        sample_size,
+        shmem_->read_ptr,
+        shmem_->write_ptr,
+        shmem_->write_ptr - shmem_->read_ptr);
 
     BYTE *pdata;
     pSample->GetPointer(&pdata);
 
-    int stride_y = shmem->video_info.width;
-    int stride_u = (shmem->video_info.width + 1) / 2;
+    int stride_y = shmem_->video_info.width;
+    int stride_u = (shmem_->video_info.width + 1) / 2;
     int stride_v = stride_u;
 
     uint8* pdata_y = pdata;
-    uint8* pdata_u = pdata + (shmem->video_info.width * shmem->video_info.height);
-    uint8* pdata_v = pdata_u + ((shmem->video_info.width * shmem->video_info.height) >> 2);
+    uint8* pdata_u = pdata + (shmem_->video_info.width * shmem_->video_info.height);
+    uint8* pdata_v = pdata_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
 
     uint8* gst_y = data;
-    uint8* gst_u = data + (shmem->video_info.width * shmem->video_info.height);
-    uint8* gst_v = gst_u + ((shmem->video_info.width * shmem->video_info.height) >> 2);
+    uint8* gst_u = data + (shmem_->video_info.width * shmem_->video_info.height);
+    uint8* gst_v = gst_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
 
     libyuv::I420Copy(
             gst_y,
@@ -537,10 +579,10 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
             stride_u,
             pdata_v,
             stride_v,
-            shmem->video_info.width,
-            shmem->video_info.height);
+            shmem_->video_info.width,
+            shmem_->video_info.height);
 
-    ReleaseMutex(shmem_mutex);
+    ReleaseMutex(shmem_mutex_);
 	return S_OK;
 }
 
