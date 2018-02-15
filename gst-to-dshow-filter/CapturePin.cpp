@@ -96,7 +96,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	// now read some custom settings...
 	WarmupCounter();
 
-	GetGameFromRegistry();
 }
 
 CPushPinDesktop::~CPushPinDesktop()
@@ -138,163 +137,6 @@ void CPushPinDesktop::CleanupCapture() {
 		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 }
 
-int CPushPinDesktop::GetGameFromRegistry(void) {
-	std::wstringstream message;
-	message << "Reading from registry: ";
-
-	int numberOfChanges = 0;
-
-	if (registry.HasValue(TEXT("CaptureType"))) {
-		std::wstring data;
-		registry.ReadValue(TEXT("CaptureType"), &data);
-
-		int newCaptureType = -1;
-		wchar_t type[1024];
-		_swprintf(type, L"%ls", data.c_str());
-
-		if (wcscmp(type, L"desktop") == 0) {
-			newCaptureType = CAPTURE_DESKTOP;
-		}
-		else if (wcscmp(type, L"inject") == 0) {
-			newCaptureType = CAPTURE_INJECT;
-		}
-		else if (wcscmp(type, L"gdi") == 0) {
-			newCaptureType = CAPTURE_GDI;
-		}
-		else if (wcscmp(type, L"dshow") == 0) {
-			newCaptureType = CAPTURE_DSHOW;
-		}
-		if (newCaptureType > -1 && m_iCaptureType != newCaptureType) {
-			m_iCaptureType = newCaptureType;
-			m_pCaptureTypeName = data;
-			message << "CaptureType: " << type << " (" << m_iCaptureType << "), ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureId"))) {
-		std::wstring data;
-		registry.ReadValue(TEXT("CaptureId"), &data);
-
-		wchar_t text[1024];
-		_swprintf(text, L"%ls", data.c_str());
-
-		int oldAdapterId = m_iDesktopAdapterNumber;
-		int oldDesktopId = m_iDesktopNumber;
-		int newAdapterId = m_iDesktopAdapterNumber;
-		int newDesktopId = m_iDesktopNumber;
-
-		wchar_t * typeName = _wcstok(text, L":");
-		wchar_t * adapterId = _wcstok(NULL, L":");
-		wchar_t * desktopId = _wcstok(NULL, L":");
-
-		if (adapterId != NULL) {
-			if (wcscmp(typeName, L"desktop") == 0) {
-				newAdapterId = _wtoi(adapterId);
-			}
-		}
-
-		if (desktopId != NULL) {
-			if (wcscmp(typeName, L"desktop") == 0) {
-				newDesktopId = _wtoi(desktopId);
-			}
-		}
-
-		if (oldAdapterId != newAdapterId ||
-			oldDesktopId != newDesktopId) {
-			m_iDesktopAdapterNumber = newAdapterId;
-			m_iDesktopNumber = newDesktopId;
-			m_pCaptureId = data;
-			message << "CaptureId: " << typeName << ":" << m_iDesktopAdapterNumber << ":" << m_iDesktopNumber << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureWindowName"))) {
-		std::wstring data;
-
-		registry.ReadValue(TEXT("CaptureWindowName"), &data);
-
-		if (m_pCaptureWindowName == NULL || wcscmp(data.c_str(), m_pCaptureWindowName) != 0) {
-			if (m_pCaptureWindowName != NULL) {
-				delete[] m_pCaptureWindowName;
-			}
-			m_pCaptureWindowName = _wcsdup(data.c_str());
-			message << "CaptureWindowName: " << m_pCaptureWindowName << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureWindowClassName"))) {
-		std::wstring data;
-
-		registry.ReadValue(TEXT("CaptureWindowClassName"), &data);
-
-		if (m_pCaptureWindowClassName == NULL || wcscmp(data.c_str(), m_pCaptureWindowClassName) != 0) {
-			if (m_pCaptureWindowClassName != NULL) {
-				delete[] m_pCaptureWindowClassName;
-			}
-			m_pCaptureWindowClassName = _wcsdup(data.c_str());
-			message << "CaptureWindowClassName: " << m_pCaptureWindowClassName << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureExeFullName"))) {
-		std::wstring data;
-
-		registry.ReadValue(TEXT("CaptureExeFullName"), &data);
-
-		if (m_pCaptureExeFullName == NULL || wcscmp(data.c_str(), m_pCaptureExeFullName) != 0) {
-			if (m_pCaptureExeFullName != NULL) {
-				delete[] m_pCaptureExeFullName;
-			}
-			m_pCaptureExeFullName = _wcsdup(data.c_str());
-			message << "CaptureExeFullName: " << m_pCaptureExeFullName << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureLabel"))) {
-		std::wstring data;
-
-		registry.ReadValue(TEXT("CaptureLabel"), &data);
-
-		if (m_iCaptureType == CAPTURE_DESKTOP && data.length() == 0) {
-			if (m_pCaptureLabel.compare(m_pCaptureId) != 0) {
-				m_pCaptureLabel = m_pCaptureId;
-				message << "CaptureLabel: " << m_pCaptureLabel << ", ";
-				numberOfChanges++;
-			}
-		} else if (data.compare(m_pCaptureLabel) != 0) {
-			m_pCaptureLabel = data;
-			message << "CaptureLabel: " << m_pCaptureLabel << ", ";
-			numberOfChanges++;
-		}
-	}
-
-	if (registry.HasValue(TEXT("CaptureWindowHandle"))) {
-		int64_t qout;
-
-		registry.ReadInt64(TEXT("CaptureWindowHandle"), &qout);
-
-		if (m_iCaptureHandle != qout) {
-			m_iCaptureHandle = qout;
-			message << "CaptureWindowHandle: " << m_iCaptureHandle << ", ";
-			numberOfChanges++;
-		}
-	}
-
-
-
-	if (numberOfChanges > 0) {
-		std::wstring wstr = message.str();
-		wstr.erase(wstr.size() - 2);
-		info("%ls", wstr.c_str());
-	}
-
-	return numberOfChanges;
-}
 
 
 HRESULT CPushPinDesktop::Inactive(void) {
@@ -307,19 +149,6 @@ HRESULT CPushPinDesktop::Active(void) {
 	return CSourceStream::Active();
 };
 
-void CPushPinDesktop::ProcessRegistryReadEvent(long timeout) {
-	DWORD result = WaitForSingleObject(readRegistryEvent, timeout);
-	if (result == WAIT_OBJECT_0) {
-		int changeCount = GetGameFromRegistry();
-
-		if (changeCount > 0) {
-		    info("Received re-read registry event, number of changes in registry: %d", changeCount);
-			CleanupCapture();
-		}
-
-		ResetEvent(readRegistryEvent);
-	}
-}
 
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
@@ -338,7 +167,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			return S_FALSE;
 		}
 
-		ProcessRegistryReadEvent(0);
 
 		int code = FillBuffer_GST(pSample);
 
@@ -351,7 +179,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 		} else if (code == 2) { // not initialized yet
 			gotFrame = false;
 			//long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
-			ProcessRegistryReadEvent(0);
 			continue;
 		} else if (code == 3) { // black frame
 			gotFrame = false;
@@ -368,7 +195,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 				1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
 		} else {
 			gotFrame = false;
-			ProcessRegistryReadEvent(5000);
 		}
 	}
 
@@ -697,93 +523,3 @@ HRESULT CPushPinDesktop::OnThreadStartPlay() {
 	debug("CPushPinDesktop::OnThreadStartPlay()");
 	return NOERROR;
 };
-
-BOOL CALLBACK WindowsProcVerifier(HWND hwnd, LPARAM param)
-{
-	EnumWindowParams* p = reinterpret_cast<EnumWindowParams*>(param);
-	bool hwnd_match = (QWORD) hwnd == p->find_hwnd;
-	bool hwnd_must_match = p->find_hwnd_must_match; // capture type specify instance only TODO
-
-	if (!hwnd_match && hwnd_must_match) { 
-		return TRUE;
-	}
-
-	if (!IsWindowVisible(hwnd)) {
-		return TRUE;
-	}
-
-	HWND hwnd_try = GetAncestor(hwnd, GA_ROOTOWNER);
-	HWND hwnd_walk = NULL;
-	while (hwnd_try != hwnd_walk) {
-		hwnd_walk = hwnd_try;
-		hwnd_try = GetLastActivePopup(hwnd_walk);
-		if (IsWindowVisible(hwnd_try))
-			break;
-	}
-
-	if (hwnd_walk != hwnd) {
-		return TRUE;
-	}
-
-	TITLEBARINFO ti;
-	// the following removes some task tray programs and "Program Manager"
-	ti.cbSize = sizeof(ti);
-	GetTitleBarInfo(hwnd, &ti);
-	if (ti.rgstate[0] & STATE_SYSTEM_INVISIBLE && !(ti.rgstate[0] & STATE_SYSTEM_FOCUSABLE)) {
-		return TRUE;
-	}
-
-	// Tool windows should not be displayed either, these do not appear in the
-	// task bar.
-	if (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
-		return TRUE;
-	}
-
-	const int buf_len = 1024;
-
-	TCHAR class_name[buf_len] = { 0 };
-	GetClassName(hwnd, class_name, buf_len);
-
-	// check if class match
-	bool class_match = lstrcmp(class_name, p->find_class_name) == 0;
-
-	// check exe match
-	bool exe_match = false;
-
-	if (p->find_exe_name && wcslen(p->find_exe_name) > 0) {
-		DWORD pid;
-		GetWindowThreadProcessId(hwnd, &pid);
-		HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
-		TCHAR exe_name[buf_len] = { 0 };
-
-		if (handle != NULL) {
-			GetModuleFileNameEx(handle, NULL, exe_name, buf_len);
-			exe_match = lstrcmp(exe_name, p->find_exe_name) == 0;
-			CloseHandle(handle);
-		}
-	} else {
-		exe_match = true;
-	}
-
-	bool found = exe_match && class_match;
-	if (found) {
-		p->to_capture_hwnd = hwnd;
-		p->to_window_found = true;
-	}
-
-	return !found;
-}
-
-HWND CPushPinDesktop::FindCaptureWindows(bool hwnd_must_match, QWORD capture_handle, LPWSTR capture_class, LPWSTR capture_name, LPWSTR capture_exe_name) {
-	EnumWindowParams cb;
-	cb.find_hwnd = capture_handle;
-	cb.find_class_name = capture_class;
-	cb.find_window_name = capture_name;
-	cb.find_exe_name = capture_exe_name;
-	cb.find_hwnd_must_match = hwnd_must_match;
-	cb.to_window_found = false;
-	cb.to_capture_hwnd = NULL;
-
-	EnumWindows(&WindowsProcVerifier, reinterpret_cast<LPARAM>(&cb));
-	return cb.to_capture_hwnd;
-}

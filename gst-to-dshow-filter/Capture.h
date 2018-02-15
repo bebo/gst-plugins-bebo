@@ -29,13 +29,9 @@ const REFERENCE_TIME FPS_1  = UNITS / 1;
 */
 
 // Filter name strings
-#define g_wszPushDesktop    L"Bebo Game Capture Filter"
+#define g_wszPushDesktop    L"Bebo Gstreamer to Direct Show Filter"
 typedef unsigned __int64 QWORD;
 
-const int CAPTURE_INJECT = 0;
-const int CAPTURE_GDI = 1;
-const int CAPTURE_DESKTOP = 2;
-const int CAPTURE_DSHOW = 3;
 const float MAX_FPS = 60;
 
 class CPushPinDesktop;
@@ -121,7 +117,6 @@ protected:
 
 	float GetFps();
 	float GetMaxFps() { return MAX_FPS; };
-	void ProcessRegistryReadEvent(long timeout);
 
 	int m_iCaptureType;
 	int m_iDesktopNumber;
@@ -138,7 +133,6 @@ public:
 	HRESULT OnThreadCreate(void);
 	HRESULT OnThreadDestroy(void);
 	HRESULT OnThreadStartPlay(void);
-	int GetGameFromRegistry(void);
 	void CleanupCapture();
 	HRESULT Inactive(void);
 	HRESULT Active(void);
@@ -196,19 +190,6 @@ public:
     HRESULT STDMETHODCALLTYPE Get(REFGUID guidPropSet, DWORD dwPropID, void *pInstanceData,DWORD cbInstanceData, void *pPropData, DWORD cbPropData, DWORD *pcbReturned);
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
 
-private:
-	HWND FindCaptureWindows(bool hwnd_must_match, QWORD captureHandle, LPWSTR className, LPWSTR windowName, LPWSTR exeName);
-
 };
 
-struct EnumWindowParams {
-	bool find_hwnd_must_match;
-	QWORD find_hwnd;
-	LPWSTR find_class_name;
-	LPWSTR find_window_name;
-	LPWSTR find_exe_name;
-
-	bool to_window_found;
-	HWND to_capture_hwnd;
-};
 #endif
