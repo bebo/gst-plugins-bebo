@@ -14,6 +14,8 @@ void getLogsPath(CHAR *filename) {
 	DWORD size = SIZE;
 	memset(filename, 0, size);
 
+    // FIXME: this is almost certainly the wrong key
+
 	RegKey registry(HKEY_CURRENT_USER, L"Software\\Bebo\\GameCapture", KEY_READ);
 
 	if (registry.HasValue(L"Logs")) {

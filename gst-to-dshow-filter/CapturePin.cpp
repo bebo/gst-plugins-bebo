@@ -240,6 +240,10 @@ HRESULT CPushPinDesktop::OpenShmMem()
     UnmapViewOfFile(shmem_);
 
     shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
+
+    shmem_->read_ptr = 0;
+    // TODO read config from shared data!
+
     ReleaseMutex(shmem_mutex_);
     if (!shmem_) {
         error("could not map shmem %d", GetLastError());
@@ -295,10 +299,20 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample)
         }
     }
 
-    // FIXME - handle late start case
-    // FIXME - handle delay case
+    if (shmem_->read_ptr == 0
+        && shmem_->write_ptr - shmem_->read_ptr > 1) {
 
-//    ReleaseMutex(shmem_mutex);
+        shmem_->read_ptr = shmem_->write_ptr - 1;
+        debug("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
+            shmem_->read_ptr, shmem_->write_ptr);
+    }
+    else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
+        uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
+        debug("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
+            shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr-shmem_->read_ptr, read_ptr);
+        countMissed += read_ptr - shmem_->read_ptr;
+        shmem_->read_ptr = read_ptr;
+    } 
 
 	CRefTime now;
 	now = 0;
