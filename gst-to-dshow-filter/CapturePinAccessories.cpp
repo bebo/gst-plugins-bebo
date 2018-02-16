@@ -538,7 +538,6 @@ STDMETHODIMP CGameCapture::Stop() {
 	HRESULT hr = CBaseFilter::Stop();
 
 	//Reset pin resources
-	m_pPin->m_iFrameNumber = 0;
 
 	logRotate();
 	return hr;
@@ -626,23 +625,24 @@ HRESULT CPushPinDesktop::Get(
 	return S_OK;
 }
 
+enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };
+// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
+//
+// GetMediaType
+//
+// Prefer 5 formats - 8, 16 (*2), 24 or 32 bits per pixel
+//
+// Prefered types should be ordered by quality, with zero as highest quality.
+// Therefore, iPosition =
+//      0    Return a 24bit mediatype "as the default" since I guessed it might be faster though who knows
+//      1    Return a 24bit mediatype
+//      2    Return 16bit RGB565
+//      3    Return a 16bit mediatype (rgb555)
+//      4    Return 8 bit palettised format
+//      >4   Invalid
+// except that we changed the orderings a bit...
+//
 
-enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB32 = 102 };// from http://www.conaito.com/docus/voip-video-evo-sdk-capi/group__videocapture.html
-																						  //
-																						  // GetMediaType
-																						  //
-																						  // Prefer 5 formats - 8, 16 (*2), 24 or 32 bits per pixel
-																						  //
-																						  // Prefered types should be ordered by quality, with zero as highest quality.
-																						  // Therefore, iPosition =
-																						  //      0    Return a 24bit mediatype "as the default" since I guessed it might be faster though who knows
-																						  //      1    Return a 24bit mediatype
-																						  //      2    Return 16bit RGB565
-																						  //      3    Return a 16bit mediatype (rgb555)
-																						  //      4    Return 8 bit palettised format
-																						  //      >4   Invalid
-																						  // except that we changed the orderings a bit...
-																						  //
 HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDIA_TYPE basically == CMediaType
 {
 	//DebugBreak();

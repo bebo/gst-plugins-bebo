@@ -14,25 +14,6 @@
 #include "../shared/bebo_shmem.h"
 #include "names_and_ids.h"
 
-/*
-// UNITS = 10 ^ 7  
-// UNITS / 30 = 30 fps;
-// UNITS / 20 = 20 fps, etc
-const REFERENCE_TIME FPS_50 = UNITS / 50;
-const REFERENCE_TIME FPS_30 = UNITS / 30;
-const REFERENCE_TIME FPS_20 = UNITS / 20;
-const REFERENCE_TIME FPS_10 = UNITS / 10;
-const REFERENCE_TIME FPS_5  = UNITS / 5;
-const REFERENCE_TIME FPS_4  = UNITS / 4;
-const REFERENCE_TIME FPS_3  = UNITS / 3;
-const REFERENCE_TIME FPS_2  = UNITS / 2;
-const REFERENCE_TIME FPS_1  = UNITS / 1;
-*/
-
-typedef unsigned __int64 QWORD;
-
-const float MAX_FPS = 60;
-
 class CPushPinDesktop;
 
 // parent
@@ -81,69 +62,47 @@ enum TimeOffsetType
 class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKsPropertySet //CSourceStream is ... CBasePin
 {
 
-public:
-    uint64_t m_iFrameNumber;
-
 protected:
 	RegKey registry;
 
-    //int m_FramesWritten;				// To track where we are
-    REFERENCE_TIME m_rtFrameLength; // also used to get the fps
-	// float m_fFps; use the method to get this now
-	REFERENCE_TIME previousFrame;
+    REFERENCE_TIME m_rtFrameLength = UNITS / 30 ; // also used to get the fps
 
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();                   
 
     HANDLE shmem_handle_;
-    struct shmem *shmem_;
+    struct shmem *shmem_ = nullptr;
     HANDLE shmem_mutex_;
     HANDLE shmem_new_data_semaphore_;
 
-	int m_iCaptureConfigWidth;
-	int m_iCaptureConfigHeight;
-	std::wstring m_pCaptureTypeName;
-	std::wstring m_pCaptureId;
-	std::wstring m_pCaptureLabel;
-	LPWSTR m_pCaptureWindowName;
-	LPWSTR m_pCaptureWindowClassName;
-	LPWSTR m_pCaptureExeFullName;
-
-	HANDLE init_hooks_thread;
+	int m_iCaptureConfigWidth = 0;
+	int m_iCaptureConfigHeight = 0;
 
 	CGameCapture* m_pParent;
 
-	bool m_bFormatAlreadySet;
-	bool m_bCaptureOnce;
-	volatile bool active;
-	bool m_bCaptureAntiCheat;
-	bool isBlackFrame;
-	bool threadCreated;
-
+	bool m_bFormatAlreadySet = false;
+	volatile bool active = false;
 	float GetFps();
-	float GetMaxFps() { return MAX_FPS; };
 
-	int m_iCaptureType;
-	int m_iDesktopNumber;
-	int m_iDesktopAdapterNumber;
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
     REFERENCE_TIME lastFrame_ = 0;
-    int64_t time_offset_dts_ns_;
-    int64_t time_offset_pts_ns_;
-    TimeOffsetType time_offset_type_;
+    int64_t time_offset_dts_ns_ = 0;
+    int64_t time_offset_pts_ns_ = 0;
+    TimeOffsetType time_offset_type_ = TIME_OFFSET_NONE;
 
-	HANDLE readRegistryEvent;
-	QWORD m_iCaptureHandle;
-	UINT64 blackFrameCount;
+    uint64_t frame_start_ = 0;
+    uint64_t frame_total_cnt_ = 0;
+    uint64_t frame_sent_cnt_ = 0;
+    uint64_t frame_dropped_cnt_ = 0;
+    uint64_t first_frame_ms_ = 0;
+    long double frame_processing_time_ms_ = 0.0;
+
+    wchar_t out_[1024];
 
 public:
 	//CSourceStream overrrides
-	HRESULT OnThreadCreate(void);
-	HRESULT OnThreadDestroy(void);
-	HRESULT OnThreadStartPlay(void);
-	void CleanupCapture();
 	HRESULT Inactive(void);
 	HRESULT Active(void);
 
@@ -172,7 +131,7 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame);
+    HRESULT FillBufferFromShMem(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);

@@ -18,53 +18,16 @@
 
 #define NS_TO_REFERENCE_TIME(t) (t)/100
 
-DWORD globalStart; // for some debug performance benchmarking
-uint64_t countMissed = 0;
-long double fastestRoundMillis = 1000000; // random big number
-long double sumMillisTook = 0;
-
-wchar_t out[1024];
-// FIXME :  move these
-bool ever_started = false;
-boolean missed = false;
-
 #ifdef _DEBUG 
 int show_performance = 1;
 #else
 int show_performance = 0;
 #endif
 
-volatile bool initialized = false;
-
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 	: CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
-	m_iFrameNumber(0),
-	m_pParent(pFilter),
-	m_bFormatAlreadySet(false),
-	previousFrame(0),
-	active(false),
-	m_iCaptureType(-1),
-	m_pCaptureTypeName(L""),
-	m_pCaptureLabel(L""),
-	m_pCaptureId(L""),
-	m_pCaptureWindowName(NULL),
-	m_pCaptureWindowClassName(NULL),
-	m_pCaptureExeFullName(NULL),
-	m_iDesktopNumber(-1),
-	m_iDesktopAdapterNumber(-1),
-	m_iCaptureHandle(-1),
-	m_bCaptureOnce(0),
-	m_iCaptureConfigWidth(0),
-	m_iCaptureConfigHeight(0),
-	m_rtFrameLength(UNITS / 30),
-	readRegistryEvent(NULL),
-	init_hooks_thread(NULL),
-	threadCreated(false),
-	isBlackFrame(true),
-	blackFrameCount(0),
-    time_offset_type_(TIME_OFFSET_NONE),
-    shmem_(nullptr)
+	m_pParent(pFilter)
 {
 	info("CPushPinDesktop");
 
@@ -78,46 +41,11 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 CPushPinDesktop::~CPushPinDesktop()
 {
     // FIXME release resources...
-
-	if (readRegistryEvent) {
-		CloseHandle(readRegistryEvent);
-	}
-
-	CleanupCapture();
 }
-
-void CPushPinDesktop::CleanupCapture() {
-
-	if (!threadCreated) {
-		LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << ", before thread created.";
-	} else {
-		char out_c[1024] = { 0 };
-		WideCharToMultiByte(CP_UTF8, 0, out, 1024, out_c, 1024, NULL, NULL);
-		LOG(INFO) << "Total no. Frames written: " << m_iFrameNumber << " " << out_c;
-	}
-
-	// reset counter values 
-
-	globalStart = GetTickCount();
-	missed = true;
-	countMissed = 0;
-	sumMillisTook = 0;
-	fastestRoundMillis = LONG_MAX;
-	m_iFrameNumber = 0;
-	previousFrame = 0;
-	isBlackFrame = true;
-	blackFrameCount = 0;
-
-	_swprintf(out, L"done video frame! total frames: %I64d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %I64d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
-		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), 
-		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, countMissed, 
-		m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
-}
-
-
 
 HRESULT CPushPinDesktop::Inactive(void) {
 	active = false;
+    info("STATS: %s", out_);
 	return CSourceStream::Inactive();
 };
 
@@ -129,15 +57,11 @@ HRESULT CPushPinDesktop::Active(void) {
 
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
-	__int64 startThisRound = StartCounter();
-
 	CheckPointer(pSample, E_POINTER);
 
-	uint64_t millisThisRoundTook = 0;
-	CRefTime now;
-	now = 0;
     REFERENCE_TIME startFrame;
     REFERENCE_TIME endFrame;
+    BOOL discontinuity;
 
 	boolean gotFrame = false;
 	while (!gotFrame) {
@@ -146,70 +70,26 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 			return S_FALSE;
 		}
 
-
-		int code = FillBuffer_GST(pSample, &startFrame, &endFrame);
-
-		// failed to initialize desktop capture, sleep is to reduce the # of log that we failed
-		// this failure can happen pretty often due to mobile graphic card
-		// we should detect + log this smartly instead of putting 3s sleep hack.
+		int code = FillBufferFromShMem(pSample, &startFrame, &endFrame, &discontinuity);
 
 		if (code == S_OK) {
 			gotFrame = true;
 		} else if (code == 2) { // not initialized yet
 			gotFrame = false;
-			//long sleep = (m_iCaptureType == CAPTURE_DESKTOP) ? 3000 : 300;
 			continue;
 		} else if (code == 3) { // black frame
 			gotFrame = false;
-
-			long double avg_fps = (sumMillisTook == 0) ? 0 : 1.0 * 1000 * m_iFrameNumber / sumMillisTook;
-			long double max = (millisThisRoundTook == 0) ? 0 : 1.0 * 1000 / millisThisRoundTook;
-
-			double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-
-			_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
-				m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, 
-				getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 
-				max, sumMillisTook, 
-				1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
+			continue;
 		} else {
 			gotFrame = false;
 		}
 	}
-
-	missed = false;
-	millisThisRoundTook = GetCounterSinceStartMillis(startThisRound);
-	fastestRoundMillis = min(millisThisRoundTook, fastestRoundMillis);
-	sumMillisTook += millisThisRoundTook;
-
-	// accomodate for 0 to avoid startup negatives, which would kill our math on the next loop...
-	previousFrame = max(0, previousFrame);
-	// auto-correct drift
-	previousFrame = previousFrame + m_rtFrameLength;
-
-//	REFERENCE_TIME startFrame = m_iFrameNumber * m_rtFrameLength;
-//	REFERENCE_TIME endFrame = startFrame + m_rtFrameLength;
 	pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-	CSourceStream::m_pFilter->StreamTime(now);
-	debug("timestamping (%11f) video packet %llf -> %llf length:(%11f) drift:(%llf)", 0.0001 * now, 0.0001 * startFrame, 0.0001 * endFrame, 0.0001 * (endFrame - startFrame), 0.0001 * (now - previousFrame));
-
-	m_iFrameNumber++;
-
-	if ((m_iFrameNumber - countMissed) == 1) {
-		info("Got first frame, type: %ls, name: %ls", m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str());
-	}
 
 	// Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
 	pSample->SetSyncPoint(TRUE);
+    pSample->SetDiscontinuity(discontinuity);
 
-	// only set discontinuous for the first...I think...
-	pSample->SetDiscontinuity(m_iFrameNumber <= 1);
-
-	double m_fFpsSinceBeginningOfTime = ((double)m_iFrameNumber) / (GetTickCount() - globalStart) * 1000;
-	_swprintf(out, L"done video frame! total frames: %d this one %dx%d -> (%dx%d) took: %.02Lfms, %.02f ave fps (%.02f is the theoretical max fps based on this round, ave. possible fps %.02f, fastest round fps %.02f, negotiated fps %.06f), frame missed: %d, type: %ls, name: %ls, black frame: %d, black frame count: %llu",
-		m_iFrameNumber, m_iCaptureConfigWidth, m_iCaptureConfigHeight, getNegotiatedFinalWidth(), getNegotiatedFinalHeight(), millisThisRoundTook, m_fFpsSinceBeginningOfTime, 1.0 * 1000 / millisThisRoundTook,
-		/* average */ 1.0 * 1000 * m_iFrameNumber / sumMillisTook, 1.0 * 1000 / fastestRoundMillis, GetFps(), countMissed, m_pCaptureTypeName.c_str(), m_pCaptureLabel.c_str(), isBlackFrame, blackFrameCount);
-//FIXM	debug(out);
 	return S_OK;
 }
 
@@ -259,7 +139,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
 }
 
 
-HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame)
+HRESULT CPushPinDesktop::FillBufferFromShMem(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity)
 {
 	CheckPointer(pSample, E_POINTER);
     if (OpenShmMem() != S_OK) {
@@ -301,9 +181,13 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *s
             }
         }
     }
+
+	uint64_t start_processing = StartCounter();
     bool first_buffer = false;
     if (shmem_->read_ptr == 0) {
         first_buffer = true;
+        frame_start_ = shmem_->write_ptr - 1;
+        first_frame_ms_ = GetTickCount64();
 
         if (shmem_->write_ptr - shmem_->read_ptr > 1) {
 
@@ -315,36 +199,8 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *s
         uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
         debug("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr-shmem_->read_ptr, read_ptr);
-        countMissed += read_ptr - shmem_->read_ptr;
         shmem_->read_ptr = read_ptr;
     } 
-
-
-//	if (now <= 0) {
-//		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 10000L);
-//		debug("no reference graph clock - sleeping %d", dwMilliseconds);
-//		Sleep(dwMilliseconds);
-//	}
-//	else if (now < (previousFrame + m_rtFrameLength)) {
-//		DWORD dwMilliseconds = (DWORD)max(1, min((previousFrame + m_rtFrameLength - now), m_rtFrameLength) / 10000L);
-//		debug("sleeping - %d", dwMilliseconds);
-//		Sleep(dwMilliseconds);
-//	}
-//	else if (missed) {
-//		DWORD dwMilliseconds = (DWORD)(m_rtFrameLength / 20000L);
-//		debug("starting/missed - sleeping %d", dwMilliseconds);
-//		Sleep(dwMilliseconds);
-//		CSourceStream::m_pFilter->StreamTime(now);
-//	}
-//	else if (now > (previousFrame + 2 * m_rtFrameLength)) {
-//		uint64_t missed_nr = (now - m_rtFrameLength - previousFrame) / m_rtFrameLength;
-//		m_iFrameNumber += missed_nr;
-//		countMissed += missed_nr;
-//		debug("missed %d frames can't keep up %d %d %.02f %llf %llf %11f",
-//			missed_nr, m_iFrameNumber, countMissed, (100.0L*countMissed / m_iFrameNumber), 0.0001 * now, 0.0001 * previousFrame, 0.0001 * (now - m_rtFrameLength - previousFrame));
-//		previousFrame = previousFrame + missed_nr * m_rtFrameLength;
-//		missed = true;
-//	}
 
     uint64_t i = shmem_->read_ptr % shmem_->count;
 
@@ -415,7 +271,11 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *s
     *endFrame = *startFrame + NS_TO_REFERENCE_TIME(duration_ns);
     lastFrame_ = *startFrame;
 
+    *discontinuity = first_buffer || frame_header->discontinuity ? true : false;
+
     uint64_t sample_size = pSample->GetSize();
+
+#if 0
     debug("pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
        // frame_header->dts,
         frame_header->pts,
@@ -426,6 +286,7 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *s
         shmem_->read_ptr,
         shmem_->write_ptr,
         shmem_->write_ptr - shmem_->read_ptr);
+#endif
 
     BYTE *pdata;
     pSample->GetPointer(&pdata);
@@ -458,8 +319,30 @@ HRESULT CPushPinDesktop::FillBuffer_GST(IMediaSample *pSample, REFERENCE_TIME *s
             shmem_->video_info.width,
             shmem_->video_info.height);
 
+
     shmem_->read_ptr++;
+    uint64_t read_ptr = shmem_->read_ptr;
+
     ReleaseMutex(shmem_mutex_);
+
+    frame_sent_cnt_++;
+    frame_total_cnt_ = read_ptr - frame_start_;
+    frame_dropped_cnt_ = frame_total_cnt_ - frame_sent_cnt_;
+
+    double avg_fps = 1000.0 * frame_sent_cnt_ / (GetTickCount64() - first_frame_ms_);
+
+    long double processing_time_ms = GetCounterSinceStartMillis(start_processing);
+    frame_processing_time_ms_ += processing_time_ms;
+    
+    _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
+        frame_total_cnt_,
+        frame_dropped_cnt_,
+        100.0 * frame_dropped_cnt_ / frame_total_cnt_,
+        avg_fps,
+        GetFps(),
+        frame_processing_time_ms_/frame_sent_cnt_
+    );
+
 	return S_OK;
 }
 
@@ -549,28 +432,5 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 		return E_FAIL;
 	}
 
-	previousFrame = 0; // reset
-	m_iFrameNumber = 0;
-
 	return NOERROR;
 } // DecideBufferSize
-
-
-HRESULT CPushPinDesktop::OnThreadCreate() {
-	info("CPushPinDesktop OnThreadCreate");
-	previousFrame = 0; // reset <sigh> dunno if this helps FME which sometimes had inconsistencies, or not
-	m_iFrameNumber = 0;
-	threadCreated = true;
-	return S_OK;
-}
-
-HRESULT CPushPinDesktop::OnThreadDestroy() {
-	info("CPushPinDesktop::OnThreadDestroy");
-	CleanupCapture();
-	return NOERROR;
-};
-
-HRESULT CPushPinDesktop::OnThreadStartPlay() {
-	debug("CPushPinDesktop::OnThreadStartPlay()");
-	return NOERROR;
-};

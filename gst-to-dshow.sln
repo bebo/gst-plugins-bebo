@@ -12,9 +12,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shared", "shared\shared.vcxitems", "{A33BC1F3-7D93-4611-8E33-CA407C62E95A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gst-to-dshow-filter", "gst-to-dshow-filter\gst-to-dshow-filter.vcxproj", "{39469123-3EB7-45F3-A15B-3854DFD2C2EB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gst-to-dshow", "gst-to-dshow-filter\gst-to-dshow-filter.vcxproj", "{39469123-3EB7-45F3-A15B-3854DFD2C2EB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gst-dshowfilter", "gst-dshowfiltersink\gst-dshowfiltersink.vcxproj", "{1BF002B8-39C7-47C3-8D5B-354BCC31E26B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E8A3F6FA-AE1C-4C8E-A0B6-9C8480324EAA} = {E8A3F6FA-AE1C-4C8E-A0B6-9C8480324EAA}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
