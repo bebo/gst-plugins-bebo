@@ -761,11 +761,9 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_OBJECT_LOCK (self);
 
     DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
-    if (rc == WAIT_OBJECT_0) {
-        GST_WARNING_OBJECT(self, "GOT MUTEX");
-    } else if (rc == WAIT_FAILED) {
+    if (rc == WAIT_FAILED) {
         GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
-    } else {
+    } else if (rc != WAIT_OBJECT_0) {
         GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
     }
     

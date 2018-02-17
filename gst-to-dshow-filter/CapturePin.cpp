@@ -102,7 +102,9 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
     shmem_new_data_semaphore_ = OpenSemaphore(SYNCHRONIZE, false, BEBO_SHMEM_DATA_SEM);
     if (!shmem_new_data_semaphore_) {
+        // TODO: log only once...
         error("could not open semaphore mapping %d", GetLastError());
+        Sleep(100);
         return -1;
     }
 
