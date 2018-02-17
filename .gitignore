@@ -34,9 +34,9 @@ tags
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
-x64/
-x86/
-Win32/
+/x64/
+/x86/
+/Win32/
 bld/
 [Bb]in/
 [Oo]bj/
