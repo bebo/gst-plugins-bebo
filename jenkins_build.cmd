@@ -4,7 +4,7 @@ mkdir dist
 copy x64\Release\gst-to-dshow.DLL dist
 copy x64\Release\libgstdshowfiltersink.dll dist
 
-set FILENAME=%JOBNAME%_%TAG%.zip
+set FILENAME=bebo-gst-to-dshow_%TAG%.zip
 "C:\Program Files\7-Zip\7z.exe" a -r %FILENAME% -w .\dist\* -mem=AES256
 
 "C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/bebo-gst-to-dshow/%FILENAME% --body %FILENAME%
