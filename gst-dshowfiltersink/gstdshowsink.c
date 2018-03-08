@@ -115,7 +115,7 @@ static guint signals[LAST_SIGNAL] = { 0 };
  * CUSTOM ALLOCATOR *
  ********************/
 
-#if 0 // no allocator for now
+#if 1 // no allocator for now
 
 #define GST_TYPE_SHM_SINK_ALLOCATOR \
   (gst_shm_sink_allocator_get_type())
@@ -148,7 +148,7 @@ typedef struct _GstShmSinkMemory
 
   gchar *data;
   GstShmSink *sink;
-//  ShmBlock *block;
+  struct shmem * block;
 } GstShmSinkMemory;
 
 GType gst_shm_sink_allocator_get_type (void);
@@ -174,7 +174,7 @@ gst_shm_sink_allocator_free (GstAllocator * allocator, GstMemory * mem)
 
   if (mymem->block) {
     GST_OBJECT_LOCK (mymem->sink);
-    sp_writer_free_block (mymem->block);
+    //sp_writer_free_block (mymem->block);
     GST_OBJECT_UNLOCK (mymem->sink);
     gst_object_unref (mymem->sink);
   }
@@ -258,7 +258,7 @@ gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
     GstAllocationParams * params)
 {
   GstMemory *memory = NULL;
-  ShmBlock *block = NULL;
+  struct shmem *block = NULL;
   gsize maxsize = size + params->prefix + params->padding;
   gsize align = params->align;
 
@@ -267,14 +267,14 @@ gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
   /* allocate more to compensate for alignment */
   maxsize += align;
 
-  block = sp_writer_alloc_block (self->sink->pipe, maxsize);
+  block = NULL;//sp_writer_alloc_block (self->sink->pipe, maxsize);
   if (block) {
     GstShmSinkMemory *mymem;
     gsize aoffset, padding;
 
-    GST_LOG_OBJECT (self,
-        "Allocated block %p with %" G_GSIZE_FORMAT " bytes at %p", block, size,
-        sp_writer_block_get_buf (block));
+	GST_LOG_OBJECT(self,
+		"Allocated block %p with %" G_GSIZE_FORMAT " bytes at", block, size);
+        //sp_writer_block_get_buf (block));
 
     mymem = g_slice_new0 (GstShmSinkMemory);
     memory = GST_MEMORY_CAST (mymem);
@@ -311,7 +311,7 @@ gst_shm_sink_allocator_alloc (GstAllocator * allocator, gsize size,
   GstMemory *memory = NULL;
 
   GST_OBJECT_LOCK (self->sink);
-  memory = gst_shm_sink_allocator_alloc_locked (self, size, params);
+ // memory = gst_shm_sink_allocator_alloc_locked (self, size, params);
   GST_OBJECT_UNLOCK (self->sink);
 
   if (!memory) {
@@ -1102,11 +1102,10 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
-#if 0 // TODO ?
   if (self->allocator)
     gst_query_add_allocation_param (query, GST_ALLOCATOR (self->allocator),
         NULL);
-#endif
+
 
   return TRUE;
 }
