@@ -82,7 +82,7 @@ typedef struct _GstShmSinkAllocatorClass
 	GstAllocatorClass parent;
 }   GstShmSinkAllocatorClass;
 
-typedef struct _GstShmSinkMemory
+typedef struct _GstDShowSinkMemory
 {
 	GstMemory mem;
 	gchar *data;
