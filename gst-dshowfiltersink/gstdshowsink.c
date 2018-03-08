@@ -178,7 +178,7 @@ gst_shm_sink_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
     gsize * offset)
 {
 
-	DebugBreak();
+	//DebugBreak();
   GstDShowSinkMemory *mymem1 = (GstDShowSinkMemory *) mem1;
   GstDShowSinkMemory *mymem2 = (GstDShowSinkMemory *) mem2;
 
@@ -305,7 +305,7 @@ gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
 static GstShmSinkAllocator *
 gst_shm_sink_allocator_new (GstShmSink * sink)
 {
-	DebugBreak();
+	//DebugBreak();
   GstShmSinkAllocator *self = g_object_new (GST_TYPE_SHM_SINK_ALLOCATOR, NULL);
 
   self->sink = gst_object_ref (sink);
