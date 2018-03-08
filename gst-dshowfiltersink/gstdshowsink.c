@@ -262,7 +262,7 @@ static GstMemory *
 gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
     GstAllocationParams * params)
 {
-
+	DebugBreak();
 	GST_DEBUG_OBJECT(self, "-------> gst_shm_sink_allocator_alloc_locked");
 
   GstMemory *memory = NULL;
@@ -289,7 +289,7 @@ gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
 
     mymem = g_slice_new0 (GstShmSinkMemory);
     memory = GST_MEMORY_CAST (mymem);
-    mymem->data = sp_writer_block_get_buf (block);
+    //mymem->data = sp_writer_block_get_buf (block);
     mymem->sink = gst_object_ref (self->sink);
     mymem->block = block;
 
@@ -323,7 +323,7 @@ gst_shm_sink_allocator_alloc (GstAllocator * allocator, gsize size,
   GstMemory *memory = NULL;
 
   GST_OBJECT_LOCK (self->sink);
- // memory = gst_shm_sink_allocator_alloc_locked (self, size, params);
+  memory = gst_shm_sink_allocator_alloc_locked (self, size, params);
   GST_OBJECT_UNLOCK (self->sink);
 
   if (!memory) {
