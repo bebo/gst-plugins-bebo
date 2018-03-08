@@ -174,6 +174,7 @@ gst_shm_sink_allocator_free (GstAllocator * allocator, GstMemory * mem)
 
   if (mymem->block) {
     GST_OBJECT_LOCK (mymem->sink);
+
     //sp_writer_free_block (mymem->block);
     GST_OBJECT_UNLOCK (mymem->sink);
     gst_object_unref (mymem->sink);
@@ -225,6 +226,8 @@ static gboolean
 gst_shm_sink_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
     gsize * offset)
 {
+
+	DebugBreak();
   GstShmSinkMemory *mymem1 = (GstShmSinkMemory *) mem1;
   GstShmSinkMemory *mymem2 = (GstShmSinkMemory *) mem2;
 
@@ -244,6 +247,8 @@ gst_shm_sink_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
 static void
 gst_shm_sink_allocator_init (GstShmSinkAllocator * self)
 {
+
+	GST_DEBUG_OBJECT(self, "-------> gst_shm_sink_allocator_init");
   GstAllocator *allocator = GST_ALLOCATOR (self);
 
   allocator->mem_map = gst_shm_sink_allocator_mem_map;
@@ -257,6 +262,9 @@ static GstMemory *
 gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
     GstAllocationParams * params)
 {
+
+	GST_DEBUG_OBJECT(self, "-------> gst_shm_sink_allocator_alloc_locked");
+
   GstMemory *memory = NULL;
   struct shmem *block = NULL;
   gsize maxsize = size + params->prefix + params->padding;
@@ -267,8 +275,11 @@ gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
   /* allocate more to compensate for alignment */
   maxsize += align;
 
-  block = NULL;//sp_writer_alloc_block (self->sink->pipe, maxsize);
+  block = malloc(sizeof(struct shmem));
+
   if (block) {
+
+	  DebugBreak();
     GstShmSinkMemory *mymem;
     gsize aoffset, padding;
 
@@ -307,6 +318,7 @@ static GstMemory *
 gst_shm_sink_allocator_alloc (GstAllocator * allocator, gsize size,
     GstAllocationParams * params)
 {
+	DebugBreak();
   GstShmSinkAllocator *self = GST_SHM_SINK_ALLOCATOR (allocator);
   GstMemory *memory = NULL;
 
@@ -328,6 +340,8 @@ gst_shm_sink_allocator_alloc (GstAllocator * allocator, gsize size,
 static void
 gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
 {
+
+	DebugBreak();
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
@@ -339,6 +353,7 @@ gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
 static GstShmSinkAllocator *
 gst_shm_sink_allocator_new (GstShmSink * sink)
 {
+	DebugBreak();
   GstShmSinkAllocator *self = g_object_new (GST_TYPE_SHM_SINK_ALLOCATOR, NULL);
 
   self->sink = gst_object_ref (sink);
@@ -630,60 +645,9 @@ gst_shm_sink_start (GstBaseSink * bsink)
 
   self->stop = FALSE;
 
-#if 0
-  if (!self->socket_path) {
-    GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
-        ("Could not open socket."), (NULL));
-    return FALSE;
-  }
-
-#endif
-
-  GST_DEBUG_OBJECT (self, "Creating new socket at %s"
-      " with shared memory of %d bytes", self->socket_path, self->size);
-#if 0
-  self->pipe = sp_writer_create (self->socket_path, self->size, self->perms);
-
-  if (!self->pipe) {
-    GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
-        ("Could not open socket."), (NULL));
-    return FALSE;
-  }
-
-  sp_set_data (self->pipe, self);
-  g_free (self->socket_path);
-  self->socket_path = g_strdup (sp_writer_get_path (self->pipe));
-
-  GST_DEBUG ("Created socket at %s", self->socket_path);
+  self->allocator = gst_shm_sink_allocator_new(self);
 
 
-  self->poll = gst_poll_new (TRUE);
-  gst_poll_fd_init (&self->serverpollfd);
-  self->serverpollfd.fd = sp_get_fd (self->pipe);
-  gst_poll_add_fd (self->poll, &self->serverpollfd);
-  gst_poll_fd_ctl_read (self->poll, &self->serverpollfd, TRUE);
-
-  self->pollthread =
-      g_thread_try_new ("gst-shmsink-poll-thread", pollthread_func, self, &err);
-
-  if (!self->pollthread)
-    goto thread_error;
-
-  self->allocator = gst_shm_sink_allocator_new (self);
-
-  return TRUE;
-
-thread_error:
-
-  sp_writer_close (self->pipe, NULL, NULL);
-  self->pipe = NULL;
-  gst_poll_free (self->poll);
-
-  GST_ELEMENT_ERROR (self, CORE, THREAD, ("Could not start thread"),
-      ("%s", err->message));
-  g_error_free (err);
-  return FALSE;
-#endif
   return TRUE;
 }
 
@@ -1102,9 +1066,15 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
+  //DebugBreak();
+
   if (self->allocator)
-    gst_query_add_allocation_param (query, GST_ALLOCATOR (self->allocator),
-        NULL);
+  {
+	  //GST_DEBUG_LOG(self, "-------> gst_shm_sink_propose_allocation");
+
+	  gst_query_add_allocation_param(query, GST_ALLOCATOR(self->allocator),
+		  NULL);
+  }
 
 
   return TRUE;
