@@ -56,21 +56,12 @@ enum
 enum
 {
   PROP_0,
-  PROP_SOCKET_PATH,
-  PROP_PERMS,
-  PROP_SHM_SIZE,
   PROP_WAIT_FOR_CONNECTION,
   PROP_BUFFER_TIME
 };
 
 
-/*
-struct GstShmClient
-{
-  ShmClient *client;
-  GstPollFD pollfd;
-};
-*/
+G_DEFINE_TYPE(GstShmSinkAllocator, gst_shm_sink_allocator, GST_TYPE_ALLOCATOR);
 
 #define DEFAULT_SIZE ( 64 * 1024 * 1024 )
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
@@ -105,7 +96,7 @@ static gboolean gst_shm_sink_unlock_stop (GstBaseSink * bsink);
 static gboolean gst_shm_sink_propose_allocation (GstBaseSink * sink,
     GstQuery * query);
 
-static gpointer pollthread_func (gpointer data);
+
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
@@ -117,43 +108,10 @@ static guint signals[LAST_SIGNAL] = { 0 };
 
 #if 1 // no allocator for now
 
-#define GST_TYPE_SHM_SINK_ALLOCATOR \
-  (gst_shm_sink_allocator_get_type())
-#define GST_SHM_SINK_ALLOCATOR(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHM_SINK_ALLOCATOR, \
-      GstShmSinkAllocator))
-#define GST_SHM_SINK_ALLOCATOR_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK_ALLOCATOR, \
-      GstShmSinkAllocatorClass))
-#define GST_IS_SHM_SINK_ALLOCATOR(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK_ALLOCATOR))
-#define GST_IS_SHM_SINK_ALLOCATOR_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK_ALLOCATOR))
 
-struct _GstShmSinkAllocator
-{
-  GstAllocator parent;
 
-  GstShmSink *sink;
-};
 
-typedef struct _GstShmSinkAllocatorClass
-{
-  GstAllocatorClass parent;
-} GstShmSinkAllocatorClass;
 
-typedef struct _GstShmSinkMemory
-{
-  GstMemory mem;
-
-  gchar *data;
-  GstShmSink *sink;
-  struct shmem * block;
-} GstShmSinkMemory;
-
-GType gst_shm_sink_allocator_get_type (void);
-
-G_DEFINE_TYPE (GstShmSinkAllocator, gst_shm_sink_allocator, GST_TYPE_ALLOCATOR);
 
 static void
 gst_shm_sink_allocator_dispose (GObject * object)
@@ -404,7 +362,7 @@ static void
 gst_shm_sink_init (GstShmSink * self)
 {
   g_cond_init (&self->cond);
-  self->size = DEFAULT_SIZE;
+  //self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
 
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
@@ -481,27 +439,8 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
 
-  g_object_class_install_property (gobject_class, PROP_SOCKET_PATH,
-      g_param_spec_string ("socket-path",
-          "Path to the control socket",
-          "The path to the control socket used to control the shared memory "
-          "transport. This may be modified during the NULL->READY transition",
-          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-#if 0
-  g_object_class_install_property (gobject_class, PROP_PERMS,
-      g_param_spec_uint ("perms",
-          "Permissions on the shm area",
-          "Permissions to set on the shm area",
-          0, 07777, DEFAULT_PERMS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-#endif
 
-  g_object_class_install_property (gobject_class, PROP_SHM_SIZE,
-      g_param_spec_uint ("shm-size",
-          "Size of the shm area",
-          "Size of the shared memory area",
-          0, G_MAXUINT, DEFAULT_SIZE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_WAIT_FOR_CONNECTION,
       g_param_spec_boolean ("wait-for-connection",
@@ -542,7 +481,6 @@ gst_shm_sink_finalize (GObject * object)
   GstShmSink *self = GST_SHM_SINK (object);
 
   g_cond_clear (&self->cond);
-  g_free (self->socket_path);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -622,15 +560,7 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
   GST_OBJECT_LOCK (object);
 
   switch (prop_id) {
-    case PROP_SOCKET_PATH:
-      g_value_set_string (value, self->socket_path);
-      break;
-    case PROP_PERMS:
-      g_value_set_uint (value, self->perms);
-      break;
-    case PROP_SHM_SIZE:
-      g_value_set_uint (value, self->size);
-      break;
+  
     case PROP_WAIT_FOR_CONNECTION:
       g_value_set_boolean (value, self->wait_for_connection);
       break;
@@ -668,14 +598,12 @@ gst_shm_sink_stop (GstBaseSink * bsink)
   GstShmSink *self = GST_SHM_SINK (bsink);
 
   self->stop = TRUE;
-  gst_poll_set_flushing (self->poll, TRUE);
+
 
   if (self->allocator)
     gst_object_unref (self->allocator);
   self->allocator = NULL;
 
-  g_thread_join (self->pollthread);
-  self->pollthread = NULL;
 
   GST_DEBUG_OBJECT (self, "Stopping");
 
@@ -893,135 +821,6 @@ free_buffer_locked (GstBuffer * buffer, void *data)
   *list = g_slist_prepend (*list, buffer);
 }
 
-static gpointer
-pollthread_func (gpointer data)
-{
-  GstShmSink *self = GST_SHM_SINK (data);
-//  GList *item;
-  GstClockTime timeout = GST_CLOCK_TIME_NONE;
-  int rv = 0;
-
-  while (!self->stop) {
-
-    do {
-      rv = gst_poll_wait (self->poll, timeout);
-    } while (rv < 0 && errno == EINTR);
-
-#if 0
-    if (rv < 0) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed waiting on fd activity"),
-                         ("gst_poll_wait returned %d, errno: %d", rv, errno));
-      return NULL;
-    }
-
-    timeout = GST_CLOCK_TIME_NONE;
-
-    if (self->stop)
-      return NULL;
-
-    if (gst_poll_fd_has_closed (self->poll, &self->serverpollfd)) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed read from shmsink"),
-          ("Control socket has closed"));
-      return NULL;
-    }
-
-    if (gst_poll_fd_has_error (self->poll, &self->serverpollfd)) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed to read from shmsink"),
-          ("Control socket has error"));
-      return NULL;
-    }
-
-    if (gst_poll_fd_can_read (self->poll, &self->serverpollfd)) {
-      ShmClient *client;
-      struct GstShmClient *gclient;
-
-      GST_OBJECT_LOCK (self);
-      client = sp_writer_accept_client (self->pipe);
-      GST_OBJECT_UNLOCK (self);
-
-      if (!client) {
-        GST_ELEMENT_ERROR (self, RESOURCE, READ,
-            ("Failed to read from shmsink"),
-            ("Control socket returns wrong data"));
-        return NULL;
-      }
-
-      gclient = g_slice_new (struct GstShmClient);
-      gclient->client = client;
-      gst_poll_fd_init (&gclient->pollfd);
-      gclient->pollfd.fd = sp_writer_get_client_fd (client);
-      gst_poll_add_fd (self->poll, &gclient->pollfd);
-      gst_poll_fd_ctl_read (self->poll, &gclient->pollfd, TRUE);
-      self->clients = g_list_prepend (self->clients, gclient);
-      g_signal_emit (self, signals[SIGNAL_CLIENT_CONNECTED], 0,
-          gclient->pollfd.fd);
-      /* we need to call gst_poll_wait before calling gst_poll_* status
-         functions on that new descriptor, so restart the loop, so _wait
-         will have been called on all elements of self->poll, whether
-         they have just been added or not. */
-      timeout = 0;
-      continue;
-    }
-
-  again:
-    for (item = self->clients; item; item = item->next) {
-      struct GstShmClient *gclient = item->data;
-
-      if (gst_poll_fd_has_closed (self->poll, &gclient->pollfd)) {
-        GST_WARNING_OBJECT (self, "One client is gone, closing");
-        goto close_client;
-      }
-
-      if (gst_poll_fd_has_error (self->poll, &gclient->pollfd)) {
-        GST_WARNING_OBJECT (self, "One client fd has error, closing");
-        goto close_client;
-      }
-
-      if (gst_poll_fd_can_read (self->poll, &gclient->pollfd)) {
-        int rv;
-        gpointer tag = NULL;
-
-        GST_OBJECT_LOCK (self);
-        rv = sp_writer_recv (self->pipe, gclient->client, &tag);
-        GST_OBJECT_UNLOCK (self);
-
-        if (rv < 0) {
-          GST_WARNING_OBJECT (self, "One client has read error,"
-              " closing (retval: %d errno: %d)", rv, errno);
-          goto close_client;
-        }
-
-        g_assert (rv == 0 || tag == NULL);
-
-        if (rv == 0)
-          gst_buffer_unref (tag);
-      }
-      continue;
-    close_client:
-      {
-        GSList *list = NULL;
-        GST_OBJECT_LOCK (self);
-        sp_writer_close_client (self->pipe, gclient->client,
-            (sp_buffer_free_callback) free_buffer_locked, (void **) &list);
-        GST_OBJECT_UNLOCK (self);
-        g_slist_free_full (list, (GDestroyNotify) gst_buffer_unref);
-      }
-
-      gst_poll_remove_fd (self->poll, &gclient->pollfd);
-      self->clients = g_list_remove (self->clients, gclient);
-
-      g_signal_emit (self, signals[SIGNAL_CLIENT_DISCONNECTED], 0,
-          gclient->pollfd.fd);
-      g_slice_free (struct GstShmClient, gclient);
-
-      goto again;
-    }
-#endif
-    g_cond_broadcast (&self->cond);
-  }
-
-  return NULL;
-}
 
 static gboolean
 gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)

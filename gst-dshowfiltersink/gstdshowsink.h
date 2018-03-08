@@ -47,21 +47,11 @@ struct _GstShmSink
 {
   GstBaseSink element;
 
-  gchar *socket_path;
 
   HANDLE shmem_handle;
   struct shmem *shmem;
   HANDLE shmem_mutex;
   HANDLE shmem_new_data_semaphore;
-
-  guint perms;
-  guint size;
-
-  GList *clients;
-
-  GThread *pollthread;
-  GstPoll *poll;
-  GstPollFD serverpollfd;
 
   gboolean wait_for_connection;
   gboolean stop;
@@ -80,7 +70,47 @@ struct _GstShmSinkClass
   GstBaseSinkClass parent_class;
 };
 
-GType gst_shm_sink_get_type (void);
+struct _GstShmSinkAllocator
+{
+	GstAllocator parent;
+
+	GstShmSink *sink;
+};
+
+typedef struct _GstShmSinkAllocatorClass
+{
+	GstAllocatorClass parent;
+}   GstShmSinkAllocatorClass;
+
+typedef struct _GstShmSinkMemory
+{
+	GstMemory mem;
+	gchar *data;
+	GstShmSink *sink;
+	struct shmem * block;
+} GstShmSinkMemory;
+
+GType gst_shm_sink_get_type(void);
+
+
+#define GST_TYPE_SHM_SINK_ALLOCATOR \
+  (gst_shm_sink_allocator_get_type())
+#define GST_SHM_SINK_ALLOCATOR(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHM_SINK_ALLOCATOR, \
+      GstShmSinkAllocator))
+#define GST_SHM_SINK_ALLOCATOR_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK_ALLOCATOR, \
+      GstShmSinkAllocatorClass))
+#define GST_IS_SHM_SINK_ALLOCATOR(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK_ALLOCATOR))
+#define GST_IS_SHM_SINK_ALLOCATOR_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK_ALLOCATOR))
+
+GType gst_shm_sink_allocator_get_type(void);
+
+
+
+
 
 G_END_DECLS
 #endif /* __GST_SHM_SINK_H__ */
