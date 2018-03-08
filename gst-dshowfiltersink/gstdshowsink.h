@@ -88,7 +88,7 @@ typedef struct _GstShmSinkMemory
 	gchar *data;
 	GstShmSink *sink;
 	struct shmem * block;
-} GstShmSinkMemory;
+} GstDShowSinkMemory;
 
 GType gst_shm_sink_get_type(void);
 
