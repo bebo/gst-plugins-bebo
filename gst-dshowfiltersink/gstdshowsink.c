@@ -293,6 +293,16 @@ gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
     mymem->sink = gst_object_ref (self->sink);
     mymem->block = block;
 
+
+	uint64_t i = self->sink->shmem->write_ptr % self->sink->shmem->count;
+	self->sink->shmem->write_ptr++;
+		uint64_t frame_offset = self->sink->shmem->frame_offset + i * self->sink->shmem->frame_size;
+	uint64_t data_offset = self->sink->shmem->frame_data_offset;
+
+	struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->sink->shmem) + frame_offset));
+	void *data = ((char*)frame) + data_offset;
+	mymem->data = data;
+
     /* do alignment */
     if ((aoffset = ((guintptr) mymem->data & align))) {
       aoffset = (align + 1) - aoffset;
@@ -748,8 +758,9 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->pts = buf->pts;
     frame->duration = buf->duration;
     frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
-    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
+//    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
     gst_buffer_unmap(buf, &map);
+#if 0
     GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
         //frame->dts / 1000000,
         frame->pts / 1000000,
@@ -757,7 +768,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
         frame_offset,
         data_offset,
         size);
-
+#endif
     ReleaseMutex(self->shmem_mutex);
     GST_OBJECT_UNLOCK (self);
     ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
