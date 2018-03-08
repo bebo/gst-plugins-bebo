@@ -27,7 +27,7 @@ Currently tested on Windows 10 64 bit
 
 run cmd as __Administrator__:
 ```
-regsrv32 gst-to-dshow.dll
+regsvr32 gst-to-dshow.dll
 ```
 
 ## To test that gst produces some frames
