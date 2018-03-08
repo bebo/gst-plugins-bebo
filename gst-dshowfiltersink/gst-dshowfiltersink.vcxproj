@@ -150,11 +150,13 @@
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="gstdshowsink.h" />
+    <ClInclude Include="my-vidmem.h" />
     <ClInclude Include="shmalloc.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gstdshowfilter.c" />
     <ClCompile Include="gstdshowsink.c" />
+    <ClCompile Include="my-vidmem.c" />
     <ClCompile Include="shmalloc.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
