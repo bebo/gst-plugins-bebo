@@ -36,12 +36,18 @@
 #include "config.h"
 #endif
 
+#include <windows.h>
+#include <gst/gst.h>
+#include <gst/gl/gl.h>
+
+#include <GL/glext.h>
+#include <GL/wglext.h>
+
 #include "gstdshowsink.h"
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <string.h>
 #include "../shared/bebo_shmem.h"
-#include <windows.h>
 
 
 /* signals */
@@ -61,21 +67,27 @@ enum
 };
 
 
-G_DEFINE_TYPE(GstShmSinkAllocator, gst_shm_sink_allocator, GST_TYPE_ALLOCATOR);
+#define allocator_parent_class gst_shm_sink_allocator_parent_class
+G_DEFINE_TYPE(GstShmSinkAllocator, gst_shm_sink_allocator,
+    GST_TYPE_GL_MEMORY_ALLOCATOR);
 
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
-
-
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
 
-//TODO: define caps
+#define GST_GL_SINK_CAPS \
+    "video/x-raw(" GST_CAPS_FEATURE_MEMORY_GL_MEMORY "), "              \
+    "format = (string) RGBA, "                                          \
+    "width = " GST_VIDEO_SIZE_RANGE ", "                                \
+    "height = " GST_VIDEO_SIZE_RANGE ", "                               \
+    "framerate = " GST_VIDEO_FPS_RANGE ", "                             \
+    "texture-target = (string) { 2D, external-oes }"
+
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS_ANY);
-
+    GST_STATIC_CAPS (GST_GL_SINK_CAPS));
 
 #define gst_shm_sink_parent_class parent_class
 G_DEFINE_TYPE (GstShmSink, gst_shm_sink, GST_TYPE_BASE_SINK);
@@ -178,7 +190,7 @@ gst_shm_sink_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
     gsize * offset)
 {
 
-	//DebugBreak();
+  //DebugBreak();
   GstDShowSinkMemory *mymem1 = (GstDShowSinkMemory *) mem1;
   GstDShowSinkMemory *mymem2 = (GstDShowSinkMemory *) mem2;
 
@@ -199,72 +211,76 @@ static void
 gst_shm_sink_allocator_init (GstShmSinkAllocator * self)
 {
 
-	GST_DEBUG_OBJECT(self, "-------> gst_shm_sink_allocator_init");
-  GstAllocator *allocator = GST_ALLOCATOR (self);
+  GST_DEBUG_OBJECT(self, "-------> gst_shm_sink_allocator_init");
+  GstAllocator *allocator = GST_ALLOCATOR_CAST (self);
 
-  allocator->mem_map = gst_shm_sink_allocator_mem_map;
-  allocator->mem_unmap = gst_shm_sink_allocator_mem_unmap;
-  allocator->mem_share = gst_shm_sink_allocator_mem_share;
-  allocator->mem_is_span = gst_shm_sink_allocator_mem_is_span;
+  //  A_CLASS (b_parent_class)->method_to_call (obj, some_param);
+
+
+  /* allocator->mem_map = gst_shm_sink_allocator_mem_map; */
+  /* allocator->mem_unmap = gst_shm_sink_allocator_mem_unmap; */
+  /* allocator->mem_share = gst_shm_sink_allocator_mem_share; */
+  /* allocator->mem_is_span = gst_shm_sink_allocator_mem_is_span; */
+  /* allocator->mem_type = GST_GL_MEMORY_ALLOCATOR_NAME; *1/ */
+
+  GST_OBJECT_FLAG_SET (allocator, GST_ALLOCATOR_FLAG_CUSTOM_ALLOC);
 }
 
 
 static GstMemory *
 gst_dshowvideo_sink_allocator_alloc_locked(GstShmSinkAllocator * self, gsize size,
-	GstAllocationParams * params)
+  GstAllocationParams * params)
 {
 
 
-	GST_LOG_OBJECT(self,
-		"gst_dshowvideo_sink_allocator_alloc_locked");
+  GST_ERROR_OBJECT(self,
+    "gst_dshowvideo_sink_allocator_alloc_locked");
 
     GstMemory *memory = NULL;
 
-	gsize maxsize = size + params->prefix + params->padding;
-	gsize align = params->align;
+  gsize maxsize = size + params->prefix + params->padding;
+  gsize align = params->align;
 
-	/* ensure configured alignment */
-	align |= gst_memory_alignment;
-	/* allocate more to compensate for alignment */
-	maxsize += align;
+  /* ensure configured alignment */
+  align |= gst_memory_alignment;
+  /* allocate more to compensate for alignment */
+  maxsize += align;
 
-	GstDShowSinkMemory *mymem;
-	gsize aoffset, padding;
+  GstDShowSinkMemory *mymem;
+  gsize aoffset, padding;
 
-
-
-	mymem = g_slice_new0(GstDShowSinkMemory);
-	memory = GST_MEMORY_CAST(mymem);
-	mymem->sink = gst_object_ref(self->sink);
+  mymem = g_slice_new0(GstDShowSinkMemory);
+  memory = GST_MEMORY_CAST(mymem);
+  mymem->sink = gst_object_ref(self->sink);
 
 
-	uint64_t i = self->sink->shmem->write_ptr % self->sink->shmem->count;
-	self->sink->shmem->write_ptr++;
-	uint64_t frame_offset = self->sink->shmem->frame_offset + i * self->sink->shmem->frame_size;
-	uint64_t data_offset = self->sink->shmem->frame_data_offset;
+  uint64_t i = self->sink->shmem->write_ptr % self->sink->shmem->count;
+  self->sink->shmem->write_ptr++;
+  uint64_t frame_offset = self->sink->shmem->frame_offset + i * self->sink->shmem->frame_size;
+  uint64_t data_offset = self->sink->shmem->frame_data_offset;
 
-	struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->sink->shmem) + frame_offset));
-	void *data = ((char*)frame) + data_offset;
-	mymem->data = data;
+  struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->sink->shmem) + frame_offset));
+  void *data = ((char*)frame) + data_offset;
+  mymem->data = data;
 
-	/* do alignment */
-	if ((aoffset = ((guintptr)mymem->data & align))) {
-		aoffset = (align + 1) - aoffset;
-		mymem->data += aoffset;
-		maxsize -= aoffset;
-	}
+  /* do alignment */
+  if ((aoffset = ((guintptr)mymem->data & align))) {
+    aoffset = (align + 1) - aoffset;
+    mymem->data += aoffset;
+    maxsize -= aoffset;
+  }
 
-	if (params->prefix && (params->flags & GST_MEMORY_FLAG_ZERO_PREFIXED))
-		memset(mymem->data, 0, params->prefix);
+  if (params->prefix && (params->flags & GST_MEMORY_FLAG_ZERO_PREFIXED))
+    memset(mymem->data, 0, params->prefix);
 
-	padding = maxsize - (params->prefix + size);
-	if (padding && (params->flags & GST_MEMORY_FLAG_ZERO_PADDED))
-		memset(mymem->data + params->prefix + size, 0, padding);
+  padding = maxsize - (params->prefix + size);
+  if (padding && (params->flags & GST_MEMORY_FLAG_ZERO_PADDED))
+    memset(mymem->data + params->prefix + size, 0, padding);
 
-	gst_memory_init(memory, params->flags, g_object_ref(self), NULL,
-		maxsize, align, params->prefix, size);
+  gst_memory_init(memory, params->flags, g_object_ref(self), NULL,
+    maxsize, align, params->prefix, size);
 
-	return memory;
+  return memory;
 }
 
 static GstMemory *
@@ -280,15 +296,24 @@ gst_dshowvideo_sink_allocator_alloc (GstAllocator * allocator, gsize size,
   GST_OBJECT_UNLOCK (self->sink);
 
   if (!memory) {
-	  memory = gst_allocator_alloc(NULL, size, params);
-	  GST_LOG_OBJECT(self,
-		  "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT
-		  "bytes, allocating using standard allocator", size);
+    memory = gst_allocator_alloc(NULL, size, params);
+    GST_LOG_OBJECT(self,
+      "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT
+      "bytes, allocating using standard allocator", size);
   }
 
   return memory;
 }
 
+static GstDShowSinkMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allocator,
+    GstGLVideoAllocationParams * params) {
+
+  GstGLBaseMemoryAllocatorClass *alloc_class;
+  GST_ERROR_OBJECT(allocator, __func__);
+  alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (allocator_parent_class);
+  return alloc_class->alloc(allocator, params);
+
+}
 
 static void
 gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
@@ -297,15 +322,25 @@ gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  allocator_class->alloc = gst_dshowvideo_sink_allocator_alloc;
-  allocator_class->free = gst_shm_sink_allocator_free;
-  object_class->dispose = gst_shm_sink_allocator_dispose;
+  GstGLBaseMemoryAllocatorClass *gl_base;
+  GstGLMemoryAllocatorClass *gl_tex;
+  /* GstAllocatorClass *allocator_class; */
+
+  /* gl_tex = (GstGLMemoryAllocatorClass *) klass; */
+  gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
+  /* allocator_class = (GstAllocatorClass *) klass; */
+
+  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_mem_dshow_alloc;
+
+  /* allocator_class->alloc = gst_dshowvideo_sink_allocator_alloc; */
+  /* allocator_class->free = gst_shm_sink_allocator_free; */
+  /* object_class->dispose = gst_shm_sink_allocator_dispose; */
 }
 
 static GstShmSinkAllocator *
 gst_shm_sink_allocator_new (GstShmSink * sink)
 {
-	//DebugBreak();
+  //DebugBreak();
   GstShmSinkAllocator *self = g_object_new (GST_TYPE_SHM_SINK_ALLOCATOR, NULL);
 
   self->sink = gst_object_ref (sink);
@@ -636,53 +671,78 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
     GstShmSink *self = GST_SHM_SINK (bsink);
     // TODO
-    //GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
-    //     gst_buffer_n_memory (buf),
-    //    gst_buffer_get_size(buf));
+    GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
+        gst_buffer_n_memory (buf),
+        gst_buffer_get_size(buf));
 
-    if (!GST_IS_BUFFER(buf)) {
-        GST_WARNING_OBJECT(self, "NOT A BUFFER???");
-    }
-    GST_OBJECT_LOCK (self);
+    /* if (!GST_IS_BUFFER(buf)) { */
+    /*     GST_WARNING_OBJECT(self, "NOT A BUFFER???"); */
+    /* } */
+    /* GST_OBJECT_LOCK (self); */
 
-    DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
-    if (rc == WAIT_FAILED) {
-        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
-    } else if (rc != WAIT_OBJECT_0) {
-        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
-    }
-    
-    uint64_t i = self->shmem->write_ptr % self->shmem->count;
-    self->shmem->write_ptr++;
+    /* DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE); */
+    /* if (rc == WAIT_FAILED) { */
+    /*     GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError()); */
+    /* } else if (rc != WAIT_OBJECT_0) { */
+    /*     GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc); */
+    /* } */
 
-    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
-    uint64_t data_offset = self->shmem->frame_data_offset;
+    /* uint64_t i = self->shmem->write_ptr % self->shmem->count; */
+    /* self->shmem->write_ptr++; */
 
-    struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset));
-    void *data = ((char*)frame) + data_offset;
+    /* uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size; */
+    /* uint64_t data_offset = self->shmem->frame_data_offset; */
 
-    GstMapInfo map;
-    GstMemory *memory = NULL;
+    /* struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset)); */
+    /* void *data = ((char*)frame) + data_offset; */
 
-    gst_buffer_map(buf, &map, GST_MAP_READ);
-    frame->dts = buf->dts;
-    frame->pts = buf->pts;
-    frame->duration = buf->duration;
-    frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
-//    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
-    gst_buffer_unmap(buf, &map);
-#if 0
-    GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
-        //frame->dts / 1000000,
-        frame->pts / 1000000,
-        i,
-        frame_offset,
-        data_offset,
-        size);
-#endif
-    ReleaseMutex(self->shmem_mutex);
-    GST_OBJECT_UNLOCK (self);
-    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+    /* GstMapInfo map; */
+    /* GstMemory *memory = NULL; */
+
+    /* memory = gst_buffer_peek_memory(buf, 0); */
+
+    /* if (memory->allocator != GST_ALLOCATOR(self->allocator)) { */
+    /*     GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by " */
+    /*         "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator); */
+    /* } */
+
+    /* gst_buffer_map(buf, &map, GST_MAP_READ); */
+    /* frame->dts = buf->dts; */
+    /* frame->pts = buf->pts; */
+    /* frame->duration = buf->duration; */
+    /* frame->discontinuity = GST_BUFFER_IS_DISCONT(buf); */
+    /* GstMapInfo *mem_info; */
+    /* gst_memory_map(memory, &mem_info, GST_MAP_READ); */
+   
+    /* DWORD data_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, */
+    /*     0, mem_info->maxsize, BEBO_SHMEM_NAME); */
+
+
+  /* if (!self->shmem_handle) { */
+    /*   // FIXME should be ERROR */
+    /*   GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError()); */
+    /*   return; */
+  /* } */
+  /* self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size); */
+  /* if (!self->shmem) { */
+    /*   // FIXME should be ERROR */
+    /*   GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError()); */
+    /*   return; */
+  /* } */
+/* //    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size); */
+    /* gst_buffer_unmap(buf, &map); */
+/* #if 1 */
+    /* GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d", */
+    /*     //frame->dts / 1000000, */
+    /*     frame->pts / 1000000, */
+    /*     i, */
+    /*     frame_offset, */
+    /*     data_offset, */
+    /*     0); //size); */
+/* #endif */
+    /* ReleaseMutex(self->shmem_mutex); */
+    /* GST_OBJECT_UNLOCK (self); */
+    /* ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL); */
 
     return GST_FLOW_OK;
 
@@ -859,14 +919,14 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
-  //DebugBreak();
+//  DebugBreak();
 
   if (self->allocator)
   {
-	  //GST_DEBUG_LOG(self, "-------> gst_shm_sink_propose_allocation");
+    //GST_DEBUG_LOG(self, "-------> gst_shm_sink_propose_allocation");
 
-	  gst_query_add_allocation_param(query, GST_ALLOCATOR(self->allocator),
-		  NULL);
+    gst_query_add_allocation_param(query, GST_ALLOCATOR(self->allocator),
+      NULL);
   }
 
 

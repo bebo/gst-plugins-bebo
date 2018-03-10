@@ -22,8 +22,14 @@
 #ifndef __GST_SHM_SINK_H__
 #define __GST_SHM_SINK_H__
 
+
 #include <gst/gst.h>
 #include <gst/base/gstbasesink.h>
+/* #include <gst/gstallocator.h> */
+/* #include <gst/gstmemory.h> */
+/* #include <gst/video/video.h> */
+#define _GST_GL_MEMORY_PBO_H_ // FIXME - no idea why
+#include <gst/gl/gstglmemory.h>
 #include <windows.h>
 
 //#include "shmpipe.h"
@@ -72,26 +78,29 @@ struct _GstShmSinkClass
 
 struct _GstShmSinkAllocator
 {
-	GstAllocator parent;
-
-	GstShmSink *sink;
+  GstGLMemoryAllocator parent;
+  GstShmSink *sink;
 };
 
 typedef struct _GstShmSinkAllocatorClass
 {
-	GstAllocatorClass parent;
+  GstGLMemoryAllocatorClass parent_class;
 }   GstShmSinkAllocatorClass;
 
 typedef struct _GstDShowSinkMemory
 {
-	GstMemory mem;
-	gchar *data;
-	GstShmSink *sink;
-	struct shmem * block;
+  GstGLMemory mem;
+  gchar *data;
+  GstShmSink *sink;
+  struct shmem * block;
 } GstDShowSinkMemory;
 
 GType gst_shm_sink_get_type(void);
 
+#define GST_IS_SHM_SINK_ALLOCATOR(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK_ALLOCATOR))
+#define GST_IS_SHM_SINK_ALLOCATOR_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK_ALLOCATOR))
 
 #define GST_TYPE_SHM_SINK_ALLOCATOR \
   (gst_shm_sink_allocator_get_type())
@@ -101,10 +110,14 @@ GType gst_shm_sink_get_type(void);
 #define GST_SHM_SINK_ALLOCATOR_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK_ALLOCATOR, \
       GstShmSinkAllocatorClass))
-#define GST_IS_SHM_SINK_ALLOCATOR(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK_ALLOCATOR))
-#define GST_IS_SHM_SINK_ALLOCATOR_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK_ALLOCATOR))
+
+/* #define GST_IS_GL_MEMORY_DSHOW_ALLOCATOR(obj)              (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_GL_MEMORY_DSHOW_ALLOCATOR)) */
+/* #define GST_IS_GL_MEMORY_DSHOW_ALLOCATOR_CLASS(klass)      (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_GL_MEMORY_DSHOW_ALLOCATOR)) */
+/* #define GST_GL_MEMORY_DSHOW_ALLOCATOR_GET_CLASS(obj)       (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_GL_MEMORY_DSHOW_ALLOCATOR, GstGLMemoryDSHOWAllocatorClass)) */
+/* #define GST_GL_MEMORY_DSHOW_ALLOCATOR(obj)                 (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_GL_MEMORY_DSHOW_ALLOCATOR, Gst)) */
+/* #define GST_GL_MEMORY_DSHOW_ALLOCATOR_CLASS(klass)         (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_GL_MEMORY_DSHOW_ALLOCATOR, GstShmSinkAllocatorClass)) */
+
+/* #define GST_GL_MEMORY_DSHOW_ALLOCATOR_CAST(obj)            ((GstGLMemoryDSHOWAllocator *)(obj)) */
 
 GType gst_shm_sink_allocator_get_type(void);
 
