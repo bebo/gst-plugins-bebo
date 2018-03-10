@@ -67,7 +67,7 @@ enum
 };
 
 
-#define allocator_parent_class gst_shm_sink_allocator_parent_class
+/* #define allocator_parent_class gst_shm_sink_allocator_parent_class */
 G_DEFINE_TYPE(GstShmSinkAllocator, gst_shm_sink_allocator,
     GST_TYPE_GL_MEMORY_ALLOCATOR);
 
@@ -310,9 +310,16 @@ static GstDShowSinkMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allo
 
   GstGLBaseMemoryAllocatorClass *alloc_class;
   GST_ERROR_OBJECT(allocator, __func__);
-  alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (allocator_parent_class);
+  alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
   return alloc_class->alloc(allocator, params);
 
+}
+
+static gboolean _gl_dshow_tex_create(GstGLMemory * gl_mem, GError ** error) {
+  GstGLBaseMemoryAllocatorClass *alloc_class;
+  GST_ERROR_OBJECT(gl_mem, __func__);
+  alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
+  return alloc_class->create(gl_mem, error);
 }
 
 static void
@@ -331,6 +338,7 @@ gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
   /* allocator_class = (GstAllocatorClass *) klass; */
 
   gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_mem_dshow_alloc;
+  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dshow_tex_create;
 
   /* allocator_class->alloc = gst_dshowvideo_sink_allocator_alloc; */
   /* allocator_class->free = gst_shm_sink_allocator_free; */
@@ -919,7 +927,12 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
-//  DebugBreak();
+  GstCaps *caps;
+  gboolean need_pool;
+  gst_query_parse_allocation (query, &caps, &need_pool);
+  if (need_pool) {
+    DebugBreak();
+  }
 
   if (self->allocator)
   {
