@@ -1,3 +1,4 @@
+// vim: ts=2:sw=2
 /* GStreamer
  * Copyright (C) <2009> Collabora Ltd
  *  @author: Olivier Crete <olivier.crete@collabora.co.uk
@@ -52,7 +53,9 @@ typedef struct _GstShmSinkAllocator GstShmSinkAllocator;
 struct _GstShmSink
 {
   GstBaseSink element;
-
+  GstGLContext *context;
+  GstGLContext *other_context;
+  GstGLDisplay *display;
 
   HANDLE shmem_handle;
   struct shmem *shmem;
@@ -67,7 +70,6 @@ struct _GstShmSink
   GCond cond;
 
   GstShmSinkAllocator *allocator;
-
   GstAllocationParams params;
 };
 

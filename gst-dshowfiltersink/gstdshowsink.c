@@ -1,3 +1,5 @@
+// vim: ts=2:sw=2
+
 /* GStreamer
  * Copyright (C) <2009> Collabora Ltd
  *  @author: Olivier Crete <olivier.crete@collabora.co.uk
@@ -66,6 +68,9 @@ enum
   PROP_BUFFER_TIME
 };
 
+
+#define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
+#define GST_GL_DXGI_ALLOCATOR_NAME "GstDXGIMemory"
 
 /* #define allocator_parent_class gst_shm_sink_allocator_parent_class */
 G_DEFINE_TYPE(GstShmSinkAllocator, gst_shm_sink_allocator,
@@ -305,6 +310,23 @@ gst_dshowvideo_sink_allocator_alloc (GstAllocator * allocator, gsize size,
   return memory;
 }
 
+static void 
+gst_dshowfiltersink_set_context(GstElement *element,
+    GstContext *context) {
+  DebugBreak();
+  GstShmSink *self = GST_SHM_SINK (element);
+
+  gst_gl_handle_set_context(element, context,
+      &self->display, &self->other_context);
+
+  if (self->display) {
+    gst_gl_display_filter_gl_api (self->display, SUPPORTED_GL_APIS);
+  }
+
+  GST_ELEMENT_CLASS(gst_shm_sink_parent_class)->set_context(element, context);
+}
+
+
 static GstDShowSinkMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allocator,
     GstGLVideoAllocationParams * params) {
 
@@ -343,6 +365,7 @@ gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
   /* allocator_class->alloc = gst_dshowvideo_sink_allocator_alloc; */
   /* allocator_class->free = gst_shm_sink_allocator_free; */
   /* object_class->dispose = gst_shm_sink_allocator_dispose; */
+
 }
 
 static GstShmSinkAllocator *
@@ -438,14 +461,14 @@ gst_shm_sink_init (GstShmSink * self)
 
   ReleaseMutex(self->shmem_mutex);
 
-  //gst_allocation_params_init (&self->params);
+  gst_allocation_params_init (&self->params);
 }
 
 static void
 gst_shm_sink_class_init (GstShmSinkClass * klass)
 {
   GObjectClass *gobject_class;
-  GstElementClass *gstelement_class;
+  GstElementClass *gstelement_class = GST_ELEMENT_CLASS(klass);
   GstBaseSinkClass *gstbasesink_class;
 
   gobject_class = (GObjectClass *) klass;
@@ -464,6 +487,9 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock_stop);
   gstbasesink_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
+
+  gstelement_class->set_context = gst_dshowfiltersink_set_context;
+  // FIXME: should we implement gst_element_change_state();
 
 
 
@@ -499,6 +525,7 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
       "Florian P. Nierhaus <fpn@bebo.com>");
 
   GST_DEBUG_CATEGORY_INIT (shmsink_debug, "dshowfiltersink", 0, "DirectShow Filter Sink");
+
 }
 
 static void
@@ -602,17 +629,19 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
 }
 
 
-
 static gboolean
 gst_shm_sink_start (GstBaseSink * bsink)
 {
+  DebugBreak();
   GstShmSink *self = GST_SHM_SINK (bsink);
   GError *err = NULL;
 
   self->stop = FALSE;
 
+  gst_gl_ensure_element_data (GST_ELEMENT (self),
+        (GstGLDisplay **) & self->display,
+        (GstGLContext **) & self->other_context);
   self->allocator = gst_shm_sink_allocator_new(self);
-
 
   return TRUE;
 }
@@ -705,13 +734,13 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     /* void *data = ((char*)frame) + data_offset; */
 
     /* GstMapInfo map; */
-    /* GstMemory *memory = NULL; */
+    GstMemory *memory = NULL;
 
-    /* memory = gst_buffer_peek_memory(buf, 0); */
+    memory = gst_buffer_peek_memory(buf, 0);
 
     /* if (memory->allocator != GST_ALLOCATOR(self->allocator)) { */
-    /*     GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by " */
-    /*         "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator); */
+        GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by "
+            "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
     /* } */
 
     /* gst_buffer_map(buf, &map, GST_MAP_READ); */
@@ -929,19 +958,166 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 
   GstCaps *caps;
   gboolean need_pool;
-  gst_query_parse_allocation (query, &caps, &need_pool);
-  if (need_pool) {
-    DebugBreak();
+  gst_query_parse_allocation(query, &caps, &need_pool);
+
+  GstCapsFeatures *features;
+  features = gst_caps_get_features (caps, 0);
+
+  if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
+      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
 
-  if (self->allocator)
+  // offer our custom allocator
+  GstAllocator *allocator;
+  GstAllocationParams params;
+  gst_allocation_params_init (&params);
+
+  allocator = GST_ALLOCATOR (self->allocator);
+      /* gst_gl_memory_allocator_get_default (upload-> */
+      /*       upload->context)); */
+
+  gst_query_add_allocation_param (query, allocator, &params);
+  gst_object_unref (allocator); // FIXME - really?
+
+  GstBufferPool *pool = NULL;
+  guint n_pools, i;
+  n_pools = gst_query_get_n_allocation_pools (query);
+  for (i = 0; i < n_pools; i++) {
+    gst_query_parse_nth_allocation_pool (query, i, &pool, NULL, NULL, NULL);
+    if (!GST_IS_GL_BUFFER_POOL (pool)) {
+      gst_object_unref (pool);
+      pool = NULL;
+    }
+  }
+
+  GError *error = NULL;
+  if (!pool) {
+
+    GstStructure *config;
+    gsize size;
+    GstVideoInfo info;
+    // FIXME get GL context !!!
+    //
+    //pool = gst_gl_buffer_pool_new (self->context);
+    //
+    if (!gst_video_info_from_caps (&info, caps))
+      goto invalid_caps;
+
+    if (! self->context) {
+      gst_gl_ensure_element_data (GST_ELEMENT (self),
+            (GstGLDisplay **) & self->display,
+            (GstGLContext **) & self->other_context);
+    }
+    GstGLContext *context;
+    if (!self->context) {
+      GST_OBJECT_LOCK (self->display);
+      do {
+        if (self->context) {
+          gst_object_unref (self->context);
+          self->context = NULL;
+        }
+        self->context =
+          gst_gl_display_get_gl_context_for_thread (self->display, NULL);
+        if (!self->context) {
+
+          if (!gst_gl_display_create_context (self->display, self->other_context,
+                &self->context, &error)) {
+            GST_OBJECT_UNLOCK (self->display);
+            goto context_error;
+          }
+        }
+      } while (!gst_gl_display_add_context (self->display, self->context));
+      GST_OBJECT_UNLOCK (self->display);
+    }
+    pool = gst_gl_buffer_pool_new (self->context);
+    config = gst_buffer_pool_get_config (pool);
+
+    size = info.size;
+    gst_buffer_pool_config_set_params (config, caps, size, 0, 0);
+
+    /* FIXME: not sure */
+    gst_buffer_pool_config_add_option (config,
+        GST_BUFFER_POOL_OPTION_GL_SYNC_META);
+
+     gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
+
+    if (!gst_buffer_pool_set_config (pool, config)) {
+      gst_object_unref (pool);
+      goto config_failed;
+    }
+    /* we need at least 2 buffer because we hold on to the last one */
+    gst_query_add_allocation_pool (query, pool, size, 2, 0);
+  }
+
+  if (pool)
+    gst_object_unref (pool);
+
+  return true;
+
+invalid_caps:
   {
-    //GST_DEBUG_LOG(self, "-------> gst_shm_sink_propose_allocation");
-
-    gst_query_add_allocation_param(query, GST_ALLOCATOR(self->allocator),
-      NULL);
+    GST_WARNING_OBJECT (self, "invalid caps specified");
+    return false;
   }
-
-
-  return TRUE;
+config_failed:
+  {
+    GST_WARNING_OBJECT (self, "failed setting config");
+    return false;
+  }
+context_error:
+  {
+    if (error) {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
+          (NULL));
+      g_clear_error (&error);
+    } else {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
+    }
+    if (self->context)
+      gst_object_unref (self->context);
+    self->context = NULL;
+    return FALSE;
+  }
 }
+
+/*   if (need_pool) { */
+/*     DebugBreak(); */
+/*     GstBufferPool *pool; */
+/*     GstVideoInfo info; */
+
+/*     /1* the normal size of a frame *1/ */
+/*     size = info.size; */
+
+/*     GST_DEBUG_OBJECT (self, "create new pool"); */
+
+/*     if (!gst_video_info_from_caps (&info, caps)) */
+/*       goto invalid_caps; */
+
+/*     pool = gst_gl_buffer_pool_new (glimage_sink->context); */
+/*     config = gst_buffer_pool_get_config (pool); */
+/*     gst_buffer_pool_config_set_params (config, caps, size, 0, 0); */
+/*     gst_buffer_pool_config_add_option (config, */
+/*         GST_BUFFER_POOL_OPTION_GL_SYNC_META); */
+
+/*     if (!gst_buffer_pool_set_config (pool, config)) { */
+/*       g_object_unref (pool); */
+/*       goto config_failed; */
+/*     } */
+
+/*     /1* we need at least 2 buffer because we hold on to the last one *1/ */
+/*     gst_query_add_allocation_pool (query, pool, size, 2, 0); */
+/*     g_object_unref (pool); */
+/*   } */
+/*   } */
+
+/*   if (self->allocator) */
+/*   { */
+/*     //GST_DEBUG_LOG(self, "-------> gst_shm_sink_propose_allocation"); */
+
+/*     gst_query_add_allocation_param(query, GST_ALLOCATOR(self->allocator), */
+/*       NULL); */
+/*   } */
+
+
+/*   return TRUE; */
+//}
