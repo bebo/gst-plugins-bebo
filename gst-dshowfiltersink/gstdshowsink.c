@@ -238,7 +238,7 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
 
-  gstelement_class->set_context = gst_dshowfiltersink_set_context;
+  gstelement_class->set_context = GST_DEBUG_FUNCPTR (gst_dshowfiltersink_set_context);
   // FIXME: should we implement gst_element_change_state();
 
   g_object_class_install_property (gobject_class, PROP_WAIT_FOR_CONNECTION,
@@ -701,6 +701,7 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
+  DebugBreak();
   GstShmSink *self = GST_SHM_SINK (sink);
 
   GstCaps *caps;
@@ -755,7 +756,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
             (GstGLDisplay **) & self->display,
             (GstGLContext **) & self->other_context);
     }
-    GstGLContext *context;
     if (!self->context) {
       GST_OBJECT_LOCK (self->display);
       do {

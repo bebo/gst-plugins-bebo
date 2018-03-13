@@ -8,10 +8,10 @@
 #define GST_GL_DXGI_ALLOCATOR_NAME "GstDXGIMemory"
 
 G_DEFINE_TYPE(GstGLDXGIMemoryAllocator, gst_gl_dxgi_memory_allocator,
-    GST_TYPE_GL_DXGI_MEMORY_ALLOCATOR);
+   GST_TYPE_GL_MEMORY_ALLOCATOR);
 
 
-#define parent_class gst_gl_dxgi_memory_allocator_parent_class 
+#define parent_class gst_gl_dxgi_memory_allocator_parent_class
 static void
 gst_gl_dxgi_memory_allocator_dispose (GObject * object)
 {
