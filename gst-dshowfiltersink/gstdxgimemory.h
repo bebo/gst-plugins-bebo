@@ -42,6 +42,7 @@ typedef struct _GstGLDXGIMemoryAllocator
 typedef struct _GstGLDXGIMemoryAllocatorClass
 {
   GstGLMemoryAllocatorClass parent_class;
+  GstGLBaseMemoryAllocatorAllocFunction orig_alloc;
 } GstGLDXGIMemoryAllocatorClass;
 
 GType gst_gl_dxgi_memory_allocator_get_type(void);

@@ -86,7 +86,7 @@ gst_gl_dxgi_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
     gsize * offset)
 {
 
-  //DebugBreak();
+  DebugBreak();
   GstGLDXGIMemory *mymem1 = (GstGLDXGIMemory *) mem1;
   GstGLDXGIMemory *mymem2 = (GstGLDXGIMemory *) mem2;
 
@@ -184,32 +184,47 @@ static GstMemory *
 gst_gl_dxgi_sink_allocator_alloc (GstAllocator * allocator, gsize size,
     GstAllocationParams * params)
 {
-
   GstGLDXGIMemoryAllocator *self = GST_GL_DXGI_MEMORY_ALLOCATOR (allocator);
-  GstMemory *memory = NULL;
+  GST_ERROR_OBJECT(self, "gst_gl_dxgi_sink_allocator_alloc - allocating %d", size);
 
-  GST_OBJECT_LOCK (self->sink);
-  memory = gst_gl_dxgi_allocator_alloc_locked (self, size, params);
-  GST_OBJECT_UNLOCK (self->sink);
+  DebugBreak();
+  return GST_GL_DXGI_MEMORY_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self))->orig_alloc(allocator, size, params);
 
-  if (!memory) {
-    memory = gst_allocator_alloc(NULL, size, params);
-    GST_LOG_OBJECT(self,
-      "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT
-      "bytes, allocating using standard allocator", size);
-  }
+  /* GstMemory *memory = NULL; */
 
-  return memory;
+  /* GST_OBJECT_LOCK (self->sink); */
+  /* memory = gst_gl_dxgi_allocator_alloc_locked (self, size, params); */
+  /* GST_OBJECT_UNLOCK (self->sink); */
+
+  /* if (!memory) { */
+  /*   memory = gst_allocator_alloc(NULL, size, params); */
+  /*   GST_LOG_OBJECT(self, */
+  /*     "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT */
+  /*     "bytes, allocating using standard allocator", size); */
+  /* } */
+
+  /* return memory; */
 }
-static GstGLDXGIMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allocator,
-    GstGLVideoAllocationParams * params) {
-
-  GstGLBaseMemoryAllocatorClass *alloc_class;
-  GST_ERROR_OBJECT(allocator, __func__);
-  alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
-  return alloc_class->alloc(allocator, params);
-
-}
+/* static GstGLDXGIMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allocator,
+ */
+/*     GstGLVideoAllocationParams * params) {
+ */
+/* 
+ */
+/*   GstGLBaseMemoryAllocatorClass *alloc_class;
+ */
+/*   GST_ERROR_OBJECT(allocator, "_gl_mem_dshow_alloc - allocating"); */
+/*   DebugBreak(); */
+/*   GST_ERROR_OBJECT(allocator, __func__);
+ */
+/*   alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
+ */
+/*   return alloc_class->alloc(allocator, params);
+ */
+/* 
+ */
+/* }
+ */
 
 static gboolean _gl_dshow_tex_create(GstGLMemory * gl_mem, GError ** error) {
   GstGLBaseMemoryAllocatorClass *alloc_class;
@@ -222,6 +237,8 @@ static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
 
+  DebugBreak();
+
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
@@ -233,7 +250,11 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
   gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
   /* allocator_class = (GstAllocatorClass *) klass; */
 
-  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_mem_dshow_alloc;
+
+  klass->orig_alloc = gl_base->alloc;
+  /* gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_mem_dshow_alloc;
+ */
+  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) gst_gl_dxgi_sink_allocator_alloc;
   gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dshow_tex_create;
 
   /* allocator_class->alloc = gst_gl_dxgi_sink_allocator_alloc; */
@@ -245,7 +266,6 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 GstGLDXGIMemoryAllocator *
 gst_gl_dxgi_memory_allocator_new (GstBaseSink* sink)
 {
-  //DebugBreak();
   GstGLDXGIMemoryAllocator *self = g_object_new (GST_TYPE_GL_DXGI_MEMORY_ALLOCATOR, NULL);
 
   self->sink = gst_object_ref (sink);
