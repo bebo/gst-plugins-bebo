@@ -115,7 +115,6 @@ static guint signals[LAST_SIGNAL] = { 0 };
 static void 
 gst_dshowfiltersink_set_context(GstElement *element,
     GstContext *context) {
-  DebugBreak();
   GstShmSink *self = GST_SHM_SINK (element);
 
   gst_gl_handle_set_context(element, context,
@@ -379,7 +378,6 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
 static gboolean
 gst_shm_sink_start (GstBaseSink * bsink)
 {
-  DebugBreak();
   GstShmSink *self = GST_SHM_SINK (bsink);
   GError *err = NULL;
 
@@ -701,7 +699,6 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
-  DebugBreak();
   GstShmSink *self = GST_SHM_SINK (sink);
 
   GstCaps *caps;
@@ -828,7 +825,6 @@ context_error:
 }
 
 /*   if (need_pool) { */
-/*     DebugBreak(); */
 /*     GstBufferPool *pool; */
 /*     GstVideoInfo info; */
 
