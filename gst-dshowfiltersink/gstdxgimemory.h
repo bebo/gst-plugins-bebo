@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 typedef struct _GstDXGID3D11Context
 {
   ID3D11Device * d3d11_device;
-  HANDLE gl_handleD3D;
+  HANDLE device_interop_handle;
   PFNWGLDXOPENDEVICENVPROC wglDXOpenDeviceNV;
   PFNWGLDXCLOSEDEVICENVPROC wglDXCloseDeviceNV;
   PFNWGLDXREGISTEROBJECTNVPROC wglDXRegisterObjectNV;
@@ -45,9 +45,13 @@ typedef struct _GstDXGID3D11Context
 typedef struct _GstGLDXGIMemory
 {
   GstGLMemory mem;
+// FIXME test
+  GstGLBuffer          *pbo; 
+  gpointer             _padding[GST_PADDING];
   gchar *data;
   GstBaseSink *sink;
   struct shmem * block;
+  HANDLE interop_handle;
 } GstGLDXGIMemory;
 
 typedef struct _GstGLDXGIMemoryAllocator
@@ -64,3 +68,5 @@ typedef struct _GstGLDXGIMemoryAllocatorClass
 
 GType gst_gl_dxgi_memory_allocator_get_type(void);
 GstGLDXGIMemoryAllocator * gst_gl_dxgi_memory_allocator_new(GstBaseSink* sink);
+
+GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context);

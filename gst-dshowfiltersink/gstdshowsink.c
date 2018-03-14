@@ -755,8 +755,8 @@ static void init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
   init_wgl_functions(gl_context, share_context);
   share_context->d3d11_device = create_device_d3d11();
   g_assert( share_context->d3d11_device != NULL);
-  share_context->gl_handleD3D = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
-  g_assert( share_context->gl_handleD3D != NULL);
+  share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
+  g_assert( share_context->device_interop_handle != NULL);
   g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
   // FIXME: how do we close these???
 
