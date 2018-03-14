@@ -45,13 +45,8 @@ typedef struct _GstDXGID3D11Context
 typedef struct _GstGLDXGIMemory
 {
   GstGLMemory mem;
-// FIXME test
-  GstGLBuffer          *pbo; 
-  gpointer             _padding[GST_PADDING];
-  gchar *data;
-  GstBaseSink *sink;
-  struct shmem * block;
-  HANDLE interop_handle;
+  HANDLE      interop_handle;
+  gpointer    _padding[GST_PADDING];
 } GstGLDXGIMemory;
 
 typedef struct _GstGLDXGIMemoryAllocator

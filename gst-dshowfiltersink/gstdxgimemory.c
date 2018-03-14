@@ -272,8 +272,6 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
 
   DebugBreak();
 
-
-
   D3D11_TEXTURE2D_DESC desc = { 0 };
   desc.Width = width;
   desc.Height = height;
@@ -414,6 +412,10 @@ _gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 static void
 _gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
 {
+  /// FIXME - I should propably first unmap and then unlock...
+  GstGLMemoryAllocatorClass *alloc_class;
+  alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
+  alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
     GST_ERROR("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x",
       gl_mem->mem.tex_id,
@@ -445,10 +447,6 @@ _gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
       }
     }
   }
-  /// FIXME - I should propably first unmap and then unlock...
-  GstGLMemoryAllocatorClass *alloc_class;
-  alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
-  alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
 }
 
 static GstMemory *
@@ -502,20 +500,12 @@ static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
 
-  GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   GstGLBaseMemoryAllocatorClass *gl_base;
   GstGLMemoryAllocatorClass *gl_tex;
-
-  /* GstAllocatorClass *allocator_class; */
-
   gl_tex = (GstGLMemoryAllocatorClass *) klass;
   gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
-  allocator_class = (GstAllocatorClass *) klass;
-
-  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
-  gl_base->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
+  GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
 
   gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) _gl_dxgi_tex_map;
   gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) _gl_dxgi_tex_unmap;
@@ -523,7 +513,10 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 
   /* TODO: */
   /* gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) _gl_mem_destroy; */
+
   gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_dxgi_mem_alloc;
+  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
+  gl_base->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
 
   allocator_class->alloc = _gl_mem_alloc;
 

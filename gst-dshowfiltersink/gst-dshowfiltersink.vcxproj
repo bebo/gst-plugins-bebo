@@ -82,10 +82,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>libgstdshowfiltersink</TargetName>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
+    <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>libgstdshowfiltersink</TargetName>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
+    <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -107,6 +111,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(SolutionDir)baseclasses;$(SolutionDir)third_party\include;$(SolutionDir)third_party\include\gstreamer-1.0;$(SolutionDir)third_party\include\gst;$(SolutionDir)third_party\include\glib-2.0;$(SolutionDir)third_party\lib\glib-2.0\include;$(SolutionDir)third_party\lib\gstreamer-1.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>GST_USE_UNSTABLE_API;WIN32;_WINDOWS;HAVE_CONFIG_H;CMAKE_INTDIR="Debug";libgstdshowvideosink_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <EnablePREfast>true</EnablePREfast>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(SolutionDir)x64\$(Configuration);$(SolutionDir)third_party\lib\gst;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -139,6 +144,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(SolutionDir)baseclasses;$(SolutionDir)third_party\include;$(SolutionDir)third_party\include\gstreamer-1.0;$(SolutionDir)third_party\include\gst;$(SolutionDir)third_party\include\glib-2.0;$(SolutionDir)third_party\lib\glib-2.0\include;$(SolutionDir)third_party\lib\gstreamer-1.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>GST_USE_UNSTABLE_API;WIN32;_WINDOWS;NDEBUG;HAVE_CONFIG_H;CMAKE_INTDIR="Release";libgstdshowvideosink_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <EnablePREfast>true</EnablePREfast>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -151,13 +157,11 @@
     <ClInclude Include="config.h" />
     <ClInclude Include="gstdshowsink.h" />
     <ClInclude Include="gstdxgimemory.h" />
-    <ClInclude Include="shmalloc.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gstdshowfilter.c" />
     <ClCompile Include="gstdshowsink.c" />
     <ClCompile Include="gstdxgimemory.c" />
-    <ClCompile Include="shmalloc.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
