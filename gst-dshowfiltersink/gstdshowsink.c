@@ -864,10 +864,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     GstStructure *config;
     gsize size;
     GstVideoInfo info;
-    // FIXME get GL context !!!
-    //
-    //pool = gst_gl_buffer_pool_new (self->context);
-    //
     if (!gst_video_info_from_caps (&info, caps))
       goto invalid_caps;
 
