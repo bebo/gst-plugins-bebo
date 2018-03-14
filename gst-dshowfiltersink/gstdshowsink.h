@@ -23,10 +23,12 @@
 #ifndef __GST_SHM_SINK_H__
 #define __GST_SHM_SINK_H__
 
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
 
 #include <gst/gst.h>
 #include <gst/base/gstbasesink.h>
-#include <windows.h>
 #include "gstdxgimemory.h"
 
 //#include "shmpipe.h"
