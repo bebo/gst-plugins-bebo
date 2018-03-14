@@ -116,6 +116,7 @@
     <Link>
       <AdditionalLibraryDirectories>$(SolutionDir)x64\$(Configuration);$(SolutionDir)third_party\lib\gst;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>opengl32.lib;D3D11.lib;gstgl-1.0.lib;gstreamer-1.0.lib;gstaudio-1.0.lib;gstvideo-1.0.lib;gstbase-1.0.lib;glib-2.0.lib;gobject-2.0.lib;strmbase.lib;rpcrt4.lib;uuid.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
