@@ -696,6 +696,130 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
   return TRUE;
 }
 
+const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
+{
+  D3D_FEATURE_LEVEL_11_0,
+  D3D_FEATURE_LEVEL_10_1,
+  D3D_FEATURE_LEVEL_10_0,
+  D3D_FEATURE_LEVEL_9_3,
+};
+
+static ID3D11Device* create_device_d3d11() {
+  ID3D11Device *device;
+  ID3D11DeviceContext *context;
+  //IDXGIAdapter *adapter;
+
+  /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
+  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
+
+  HRESULT hr = D3D11CreateDevice(
+      0, //D3DADAPTER_DEFAULT, 
+      D3D_DRIVER_TYPE_HARDWARE,
+      NULL, 
+      D3D11_CREATE_DEVICE_DEBUG | D3D11_CREATE_DEVICE_BGRA_SUPPORT, 
+      d3d_feature_levels,
+      sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
+      D3D11_SDK_VERSION,
+      &device,
+      &level_used, 
+      &context);
+  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+      (unsigned int) level_used, (unsigned int) level_used);
+
+  return device;
+}
+
+static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
+  GST_ERROR("VENDOR : %s", glGetString(GL_VENDOR));
+  share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
+  share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXCloseDeviceNV");
+  share_context->wglDXRegisterObjectNV = (PFNWGLDXREGISTEROBJECTNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
+  share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
+  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC) 
+    gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
+  share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
+  share_context->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
+}
+
+static void init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
+
+  GstShmSink *self = GST_SHM_SINK (sink);
+
+  GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
+  init_wgl_functions(gl_context, share_context);
+  share_context->d3d11_device = create_device_d3d11();
+  g_assert( share_context->d3d11_device != NULL);
+  share_context->gl_handleD3D = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
+  g_assert( share_context->gl_handleD3D != NULL);
+  g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
+  // FIXME: how do we close these???
+
+}
+
+
+static gboolean
+gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
+  GError *error = NULL;
+
+  if (self->context && true) {
+    //FIXME check has dxgi and if not -> remove and add?
+    return TRUE;
+  }
+
+
+  if (! self->context) {
+    gst_gl_ensure_element_data (GST_ELEMENT (self),
+          (GstGLDisplay **) & self->display,
+          (GstGLContext **) & self->other_context);
+  }
+  if (!self->context) {
+    GST_OBJECT_LOCK (self->display);
+    do {
+      if (self->context) {
+        gst_object_unref (self->context);
+        self->context = NULL;
+      }
+      self->context =
+        gst_gl_display_get_gl_context_for_thread (self->display, NULL);
+      if (!self->context) {
+
+        if (!gst_gl_display_create_context (self->display, self->other_context,
+              &self->context, &error)) {
+          GST_OBJECT_UNLOCK (self->display);
+          goto context_error;
+        }
+      }
+    } while (!gst_gl_display_add_context (self->display, self->context));
+    GST_OBJECT_UNLOCK (self->display);
+  }
+  gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc) init_d3d11_context, self);
+  // TODO - wait until it happened?
+
+
+  return TRUE;
+
+context_error:
+  {
+    if (error) {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
+          (NULL));
+      g_clear_error (&error);
+    } else {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
+    }
+    if (self->context)
+      gst_object_unref (self->context);
+    self->context = NULL;
+    return FALSE;
+  }
+}
+
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
@@ -735,7 +859,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     }
   }
 
-  GError *error = NULL;
   if (!pool) {
 
     GstStructure *config;
@@ -748,31 +871,10 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     if (!gst_video_info_from_caps (&info, caps))
       goto invalid_caps;
 
-    if (! self->context) {
-      gst_gl_ensure_element_data (GST_ELEMENT (self),
-            (GstGLDisplay **) & self->display,
-            (GstGLContext **) & self->other_context);
+    if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
+      return FALSE;
     }
-    if (!self->context) {
-      GST_OBJECT_LOCK (self->display);
-      do {
-        if (self->context) {
-          gst_object_unref (self->context);
-          self->context = NULL;
-        }
-        self->context =
-          gst_gl_display_get_gl_context_for_thread (self->display, NULL);
-        if (!self->context) {
 
-          if (!gst_gl_display_create_context (self->display, self->other_context,
-                &self->context, &error)) {
-            GST_OBJECT_UNLOCK (self->display);
-            goto context_error;
-          }
-        }
-      } while (!gst_gl_display_add_context (self->display, self->context));
-      GST_OBJECT_UNLOCK (self->display);
-    }
     pool = gst_gl_buffer_pool_new (self->context);
     config = gst_buffer_pool_get_config (pool);
 
@@ -807,20 +909,6 @@ config_failed:
   {
     GST_WARNING_OBJECT (self, "failed setting config");
     return false;
-  }
-context_error:
-  {
-    if (error) {
-      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
-          (NULL));
-      g_clear_error (&error);
-    } else {
-      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
-    }
-    if (self->context)
-      gst_object_unref (self->context);
-    self->context = NULL;
-    return FALSE;
   }
 }
 

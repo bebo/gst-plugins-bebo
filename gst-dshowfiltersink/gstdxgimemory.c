@@ -1,6 +1,38 @@
 // vim: ts=2:sw=2
+/* #include <D3D11.h> */
+#include <d3d11.h>
+#include <dxgi.h>
+/* #include <d3d11_3.h> */
+
 #include "gstdxgimemory.h"
 
+#define GL_MEM_WIDTH(gl_mem) _get_plane_width (&gl_mem->info, gl_mem->plane)
+#define GL_MEM_HEIGHT(gl_mem) _get_plane_height (&gl_mem->info, gl_mem->plane)
+#define GL_MEM_STRIDE(gl_mem) GST_VIDEO_INFO_PLANE_STRIDE (&gl_mem->info, gl_mem->plane)
+
+static inline guint
+_get_plane_width (GstVideoInfo * info, guint plane)
+{
+  if (GST_VIDEO_INFO_IS_YUV (info))
+    /* For now component width and plane width are the same and the
+     * plane-component mapping matches
+     */
+    return GST_VIDEO_INFO_COMP_WIDTH (info, plane);
+  else                          /* RGB, GRAY */
+    return GST_VIDEO_INFO_WIDTH (info);
+}
+
+static inline guint
+_get_plane_height (GstVideoInfo * info, guint plane)
+{
+  if (GST_VIDEO_INFO_IS_YUV (info))
+    /* For now component width and plane width are the same and the
+     * plane-component mapping matches
+     */
+    return GST_VIDEO_INFO_COMP_HEIGHT (info, plane);
+  else                          /* RGB, GRAY */
+    return GST_VIDEO_INFO_HEIGHT (info);
+}
 
 /********************
  * CUSTOM ALLOCATOR *
@@ -10,8 +42,11 @@
 G_DEFINE_TYPE(GstGLDXGIMemoryAllocator, gst_gl_dxgi_memory_allocator,
    GST_TYPE_GL_MEMORY_ALLOCATOR);
 
+GST_DEBUG_CATEGORY_STATIC (GST_CAT_GL_MEMORY);
+#define GST_CAT_DEFAULT GST_CAT_GL_MEMORY
 
 #define parent_class gst_gl_dxgi_memory_allocator_parent_class
+
 static void
 gst_gl_dxgi_memory_allocator_dispose (GObject * object)
 {
@@ -226,9 +261,123 @@ gst_gl_dxgi_sink_allocator_alloc (GstAllocator * allocator, gsize size,
 /* }
  */
 
+
+static guint
+_new_texture (GstGLContext * context, guint target, guint internal_format,
+    guint format, guint type, guint width, guint height)
+{
+  const GstGLFuncs *gl = context->gl_vtable;
+
+  guint tex_id;
+
+#ifndef G_DISABLE_ASSERT
+  g_assert(target == GL_TEXTURE_2D
+                  || target == GL_TEXTURE_2D_ARRAY
+                  || target == GL_TEXTURE_3D
+                  || target == GL_TEXTURE_CUBE_MAP
+                  || target == GL_TEXTURE_RECTANGLE
+                  || target == GL_RENDERBUFFER);
+#endif
+
+  DebugBreak();
+
+
+
+  D3D11_TEXTURE2D_DESC desc = { 0 };
+  desc.Width = width;
+  desc.Height = height;
+  desc.MipLevels = 1;
+  desc.ArraySize = 1;
+  desc.SampleDesc.Count = 1;
+  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.BindFlags = 0 ;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+
+  if (type == GL_UNSIGNED_BYTE && format == GST_GL_RGBA) {
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+  } else {
+    GST_ERROR("UNKNOWN FORMAT %#010x %#010x", type , format);
+    return NULL;
+  }
+
+  GstDXGID3D11Context *share_context;
+  share_context = g_object_get_data(context, GST_GL_DXGI_D3D11_CONTEXT);
+
+  ID3D11Texture2D *d3d11texture;
+  HRESULT result = share_context->d3d11_device->lpVtbl->CreateTexture2D(share_context->d3d11_device,
+      &desc, NULL, &d3d11texture);
+  g_assert(result == S_OK);
+  gl->GenTextures (1, &tex_id);
+
+  share_context->wglDXRegisterObjectNV(
+      share_context->gl_handleD3D,
+      d3d11texture,
+      tex_id,
+      target,
+      WGL_ACCESS_READ_WRITE_NV);
+
+  /* gl->BindTexture (target, tex_id); */ // TODO: no idea
+  if (target == GL_TEXTURE_2D || target == GL_TEXTURE_RECTANGLE) {
+    /* gl->TexImage2D (target, 0, internal_format, width, height, 0, format, type, */
+    /*     NULL); */
+  }
+
+  gl->TexParameteri (target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl->TexParameteri (target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl->TexParameteri (target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl->TexParameteri (target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  gl->BindTexture (target, 0);
+
+  return tex_id;
+}
+
+static GstMemory *
+_default_gl_dxgi_tex_copy (GstGLMemory * src, gssize offset, gssize size)
+{
+  GST_CAT_ERROR (GST_CAT_GL_MEMORY, "Cannot copy DXGI textures");
+  return NULL;
+}
+
+static gboolean
+_gl_dxgi_tex_create (GstGLMemory * gl_mem, GError ** error)
+{
+  DebugBreak();
+  GstGLContext *context = gl_mem->mem.context;
+  GLenum internal_format;
+  GLenum tex_format;
+  GLenum tex_type;
+
+  tex_format = gl_mem->tex_format;
+  tex_type = GL_UNSIGNED_BYTE;
+  if (gl_mem->tex_format == GST_GL_RGB565) {
+    tex_format = GST_GL_RGB;
+    tex_type = GL_UNSIGNED_SHORT_5_6_5;
+  }
+
+  internal_format =
+      gst_gl_sized_gl_format_from_gl_format_type (context, tex_format,
+      tex_type);
+
+  if (!gl_mem->texture_wrapped) {
+    gl_mem->tex_id =
+        _new_texture (context, gst_gl_texture_target_to_gl (gl_mem->tex_target),
+        internal_format, tex_format, tex_type, gl_mem->tex_width,
+        GL_MEM_HEIGHT (gl_mem));
+
+    GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
+        gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width,
+        GL_MEM_HEIGHT (gl_mem));
+  }
+
+  return TRUE;
+}
+
 static gboolean _gl_dshow_tex_create(GstGLMemory * gl_mem, GError ** error) {
   GstGLBaseMemoryAllocatorClass *alloc_class;
   GST_ERROR_OBJECT(gl_mem, __func__);
+  DebugBreak();
   alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
   return alloc_class->create(gl_mem, error);
 }
@@ -237,8 +386,6 @@ static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
 
-  DebugBreak();
-
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
@@ -246,21 +393,26 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
   GstGLMemoryAllocatorClass *gl_tex;
   /* GstAllocatorClass *allocator_class; */
 
-  /* gl_tex = (GstGLMemoryAllocatorClass *) klass; */
+  gl_tex = (GstGLMemoryAllocatorClass *) klass;
   gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
   /* allocator_class = (GstAllocatorClass *) klass; */
 
 
-  klass->orig_alloc = gl_base->alloc;
+  /* klass->orig_alloc = gl_base->alloc; */
   /* gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_mem_dshow_alloc;
  */
-  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) gst_gl_dxgi_sink_allocator_alloc;
-  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dshow_tex_create;
+  /* gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) gst_gl_dxgi_sink_allocator_alloc; */
+  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
+
+  gl_tex->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
+  gl_base->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
 
   /* allocator_class->alloc = gst_gl_dxgi_sink_allocator_alloc; */
   /* allocator_class->free = gst_gl_dxgi_allocator_free; */
   /* object_class->dispose = gst_gl_dxgi_allocator_dispose; */
 
+  GST_DEBUG_CATEGORY_INIT (GST_CAT_GL_MEMORY, "gldxgitexture", 0,
+        "OpenGL DGXI shared memory");
 }
 
 GstGLDXGIMemoryAllocator *
