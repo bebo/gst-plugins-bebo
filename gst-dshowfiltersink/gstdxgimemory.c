@@ -1,5 +1,6 @@
 // vim: ts=2:sw=2
 /* #include <D3D11.h> */
+#include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
 /* #include <d3d11_3.h> */
@@ -121,7 +122,6 @@ gst_gl_dxgi_memory_allocator_dispose (GObject * object)
 /*     gsize * offset) */
 /* { */
 
-/*   DebugBreak(); */
 /*   GstGLDXGIMemory *mymem1 = (GstGLDXGIMemory *) mem1; */
 /*   GstGLDXGIMemory *mymem2 = (GstGLDXGIMemory *) mem2; */
 
@@ -240,7 +240,6 @@ gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 /*   GstGLBaseMemoryAllocatorClass *alloc_class;
  */
 /*   GST_ERROR_OBJECT(allocator, "_gl_mem_dshow_alloc - allocating"); */
-/*   DebugBreak(); */
 /*   GST_ERROR_OBJECT(allocator, __func__);
  */
 /*   alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
@@ -255,7 +254,7 @@ gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 
 static guint
 _new_texture (GstGLContext * context, guint target, guint internal_format,
-    guint format, guint type, guint width, guint height, HANDLE * interop_handle)
+    guint format, guint type, guint width, guint height, HANDLE * interop_handle, ID3D11Texture2D ** d3d11texture)
 {
   const GstGLFuncs *gl = context->gl_vtable;
 
@@ -269,8 +268,6 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
                   || target == GL_TEXTURE_RECTANGLE
                   || target == GL_RENDERBUFFER);
 #endif
-
-  DebugBreak();
 
   D3D11_TEXTURE2D_DESC desc = { 0 };
   desc.Width = width;
@@ -292,22 +289,40 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
 
   GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
 
-  ID3D11Texture2D *d3d11texture;
   HRESULT result = share_context->d3d11_device->lpVtbl->CreateTexture2D(share_context->d3d11_device,
-      &desc, NULL, &d3d11texture);
+      &desc, NULL, d3d11texture);
   g_assert(result == S_OK);
   gl->GenTextures (1, &tex_id);
 
   *interop_handle = share_context->wglDXRegisterObjectNV(
       share_context->device_interop_handle,
-      d3d11texture,
+      *d3d11texture,
       tex_id,
       target,
       WGL_ACCESS_READ_WRITE_NV);
 
+
   GST_ERROR("wglDXRegisterObjectNV texture_id %#010x interop_id:%#010x",
     tex_id,
     *interop_handle);
+
+  IDXGIResource *dxgi_res;
+  GUID myIID_IDXGIResource = {
+    0x035f3ab4, 0x482e, 0x4e50, { 0xb4, 0x1f, 0x8a, 0x7f, 0x8b, 0xd8, 0x96, 0x0b}};
+  HRESULT hr = (*d3d11texture)->lpVtbl->QueryInterface(*d3d11texture, &myIID_IDXGIResource,
+      (void**)&dxgi_res);
+  if (FAILED(hr)) {
+    GST_ERROR("failed to query IDXGIResource interface %#010x", hr);
+    return 0;
+  }
+  HANDLE handle;
+
+  hr = dxgi_res->lpVtbl->GetSharedHandle(dxgi_res, &handle);
+  dxgi_res->lpVtbl->Release(dxgi_res);
+  if (FAILED(hr)) {
+    GST_ERROR("failed to get shared handle %#010x", hr);
+    return 0;
+  }
 
   gl->BindTexture (target, tex_id);
   if (target == GL_TEXTURE_2D || target == GL_TEXTURE_RECTANGLE) {
@@ -335,7 +350,6 @@ _default_gl_dxgi_tex_copy (GstGLMemory * src, gssize offset, gssize size)
 static gboolean
 _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
 {
-  DebugBreak();
   GstGLMemory * gl_mem = (GstGLMemory *)gl_dxgi_mem;
   GstGLContext *context = gl_mem->mem.context;
   GLenum internal_format;
@@ -357,7 +371,8 @@ _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
     gl_mem->tex_id =
         _new_texture (context, gst_gl_texture_target_to_gl (gl_mem->tex_target),
         internal_format, tex_format, tex_type, gl_mem->tex_width,
-        GL_MEM_HEIGHT (gl_mem), &gl_dxgi_mem->interop_handle);
+        GL_MEM_HEIGHT (gl_mem),
+        &gl_dxgi_mem->interop_handle, &gl_dxgi_mem->d3d11texture);
 
     GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
         gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width,
