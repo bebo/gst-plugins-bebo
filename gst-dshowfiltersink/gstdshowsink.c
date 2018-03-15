@@ -456,6 +456,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
         gst_buffer_n_memory (buf),
         gst_buffer_get_size(buf));
+    gst_buffer_ref (buf);
 
     /* if (!GST_IS_BUFFER(buf)) { */
     /*     GST_WARNING_OBJECT(self, "NOT A BUFFER???"); */
