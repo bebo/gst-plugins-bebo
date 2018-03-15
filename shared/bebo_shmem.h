@@ -20,20 +20,22 @@
 #pragma pack(push)
 #pragma pack(16)
 
-    struct frame_header {
+    struct frame {
         uint64_t dts;
         uint64_t pts;
         uint64_t duration;
+        uint64_t size;
+        HANDLE dxgi_handle;
         uint8_t discontinuity;
+        uint8_t ref_cnt;
+        GstBuffer *_gst_buf_ref;
     };
 
     struct shmem {
         GstVideoInfo video_info;
         uint64_t shmem_size;
         uint64_t frame_offset;
-        uint64_t frame_data_offset;
         uint64_t frame_size;
-        uint64_t buffer_size;
         uint64_t count;
         uint64_t write_ptr; // TODO better name - not really a ptr more like frame count
         uint64_t read_ptr;
