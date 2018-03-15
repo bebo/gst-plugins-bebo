@@ -202,6 +202,7 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
 		&& (SubType2 != GUID_NULL)) {
 
 		if (SubType2 == WMMEDIASUBTYPE_I420) { // 30323449-0000-0010-8000-00AA00389B71 MEDIASUBTYPE_I420 == WMMEDIASUBTYPE_I420
+		  return E_INVALIDARG;
 			if (pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
 												   // 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
 			}
@@ -698,6 +699,7 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 	REFERENCE_TIME fps = PIN_FPS[iPosition / PIN_RESOLUTION_SIZE];
 	LONGLONG fps_n = fps / UNITS;
 
+#ifdef I420_ONLY
 	// the i420 freak-o added just for FME's benefit...
 	//pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
 	pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
@@ -705,6 +707,16 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 	// pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight() * 3) / 2;
 	pvi->bmiHeader.biSizeImage = (width * height * 3) / 2;
 	pmt->SetSubtype(&WMMEDIASUBTYPE_I420);
+#else
+	// the i420 freak-o added just for FME's benefit...
+	//pvi->bmiHeader.biCompression = 0x30323449; // => ASCII "I420" is apparently right here...
+  pvi->bmiHeader.biCompression = BI_RGB;
+	pvi->bmiHeader.biBitCount = 32;
+	// pvi->bmiHeader.biSizeImage = (getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight() * 3) / 2;
+  pvi->bmiHeader.biSizeImage = (width * height * 4);
+	pmt->SetSubtype(&MEDIASUBTYPE_RGB32);
+
+#endif
 
 	// Now adjust some parameters that are the same for all formats
 	pvi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);

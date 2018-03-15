@@ -456,15 +456,21 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
 
     if (frame->_gst_buf_ref != NULL && frame->ref_cnt > 0) {
-       GST_WARNING_OBJECT (self,
-           "gst_buffer_unref(%p) unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
+       GST_ERROR_OBJECT (self,
+           "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
            frame->_gst_buf_ref,
            index,
            frame->dxgi_handle,
            frame->ref_cnt);
-       gst_buffer_unref(frame->_gst_buf_ref);
-       frame->ref_cnt = 0;
-       frame->_gst_buf_ref = NULL;
+
+      self->shmem->write_ptr--;
+       //gst_buffer_unref(frame->_gst_buf_ref);
+       //frame->ref_cnt = 0;
+       //frame->_gst_buf_ref = NULL;
+      ReleaseMutex(self->shmem_mutex);
+      GST_OBJECT_UNLOCK (self);
+      ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+      return GST_FLOW_OK;
     }
 
     /* GstMapInfo map; */
@@ -703,6 +709,7 @@ const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
 };
 
 static ID3D11Device* create_device_d3d11() {
+  // TODO: should I be using ComPtr here?
   ID3D11Device *device;
   ID3D11DeviceContext *context;
   //IDXGIAdapter *adapter;

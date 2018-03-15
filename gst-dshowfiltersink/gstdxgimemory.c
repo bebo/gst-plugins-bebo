@@ -277,7 +277,7 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_DEFAULT;
   desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET ;
-  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  desc.CPUAccessFlags = 0;
   desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
   if (type == GL_UNSIGNED_BYTE && format == GST_GL_RGBA) {
