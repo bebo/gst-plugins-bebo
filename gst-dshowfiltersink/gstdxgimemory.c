@@ -254,7 +254,7 @@ gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 
 static guint
 _new_texture (GstGLContext * context, guint target, guint internal_format,
-    guint format, guint type, guint width, guint height, HANDLE * interop_handle, ID3D11Texture2D ** d3d11texture)
+    guint format, guint type, guint width, guint height, HANDLE * interop_handle, ID3D11Texture2D ** d3d11texture, HANDLE * dxgi_handle)
 {
   const GstGLFuncs *gl = context->gl_vtable;
 
@@ -301,7 +301,6 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
       target,
       WGL_ACCESS_READ_WRITE_NV);
 
-
   GST_ERROR("wglDXRegisterObjectNV texture_id %#010x interop_id:%#010x",
     tex_id,
     *interop_handle);
@@ -315,9 +314,8 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
     GST_ERROR("failed to query IDXGIResource interface %#010x", hr);
     return 0;
   }
-  HANDLE handle;
 
-  hr = dxgi_res->lpVtbl->GetSharedHandle(dxgi_res, &handle);
+  hr = dxgi_res->lpVtbl->GetSharedHandle(dxgi_res, dxgi_handle);
   dxgi_res->lpVtbl->Release(dxgi_res);
   if (FAILED(hr)) {
     GST_ERROR("failed to get shared handle %#010x", hr);
@@ -372,7 +370,9 @@ _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
         _new_texture (context, gst_gl_texture_target_to_gl (gl_mem->tex_target),
         internal_format, tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT (gl_mem),
-        &gl_dxgi_mem->interop_handle, &gl_dxgi_mem->d3d11texture);
+        &gl_dxgi_mem->interop_handle,
+        &gl_dxgi_mem->d3d11texture,
+        &gl_dxgi_mem->dxgi_handle);
 
     GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
         gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width,

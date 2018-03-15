@@ -20,6 +20,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+
 /**
  * SECTION:element-shmsink
  * @title: shmsink
@@ -136,26 +137,8 @@ gst_dshowfiltersink_set_context(GstElement *element,
 #define ALIGN(nr, align) \
  (nr % align == 0) ? nr : align * (nr / align +1)
 
-void get_buffer_size(size_t *buffer_size, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
-    // FIXME  - fix hard coded 720p
-    size_t size = 1382400;   // i420 720p
-    // reading beyond buffer size is a thing for video buffers - so we need to make the backing buffer a bit bigger
-    size += alignment;
-    *buffer_size = ALIGN(size, alignment);
-}
+#define ALIGNMENT 64
 
-void get_frame_size(size_t *frame_size, size_t *frame_data_offset, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
-    // FIXME  - fix hard coded 720p
-
-    size_t buffer_size;
-    get_buffer_size(&buffer_size, format, width, height, alignment);
-    size_t header_size = ALIGN(sizeof(struct frame_header), alignment);
-
-    *frame_size = buffer_size + header_size;
-    *frame_data_offset = header_size;
-}
-
-#define ALIGNMENT 256
 static void
 gst_shm_sink_init (GstShmSink * self)
 {
@@ -170,11 +153,11 @@ gst_shm_sink_init (GstShmSink * self)
 
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
-  int buffer_count = 1;
+
+  int buffer_count = 5;
+
   // FIXME  - fix hard coded 720p
-  size_t frame_data_offset;
-  size_t frame_size;
-  get_frame_size(&frame_size, &frame_data_offset, GST_VIDEO_FORMAT_I420, 1280, 720, ALIGNMENT);
+  size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
   size = ((DWORD) frame_size * buffer_count) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
@@ -201,11 +184,9 @@ gst_shm_sink_init (GstShmSink * self)
 
   self->shmem->frame_offset = header_size;
   self->shmem->frame_size = frame_size;
-  self->shmem->buffer_size = frame_size - header_size;
   self->shmem->count = buffer_count;
   self->shmem->write_ptr = 0;
   self->shmem->read_ptr = 0;
-  self->shmem->frame_data_offset = frame_data_offset;
   self->shmem->shmem_size = size;
 
   ReleaseMutex(self->shmem_mutex);
@@ -452,80 +433,96 @@ static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
     GstShmSink *self = GST_SHM_SINK (bsink);
-    // TODO
-    GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
-        gst_buffer_n_memory (buf),
-        gst_buffer_get_size(buf));
-    gst_buffer_ref (buf);
+    /* GST_WARNING_OBJECT (self, "we need to implement sink_render ! Buffer %p has %d GstMemory size: %d", buf, */
+    /*     gst_buffer_n_memory (buf), */
+    /*     gst_buffer_get_size(buf)); */
 
-    /* if (!GST_IS_BUFFER(buf)) { */
-    /*     GST_WARNING_OBJECT(self, "NOT A BUFFER???"); */
-    /* } */
-    /* GST_OBJECT_LOCK (self); */
+    if (!GST_IS_BUFFER(buf)) {
+        GST_WARNING_OBJECT(self, "NOT A BUFFER???");
+    }
+    GST_OBJECT_LOCK (self);
 
-    /* DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE); */
-    /* if (rc == WAIT_FAILED) { */
-    /*     GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError()); */
-    /* } else if (rc != WAIT_OBJECT_0) { */
-    /*     GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc); */
-    /* } */
+    DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
+    if (rc == WAIT_FAILED) {
+        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+    } else if (rc != WAIT_OBJECT_0) {
+        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
+    }
 
-    /* uint64_t i = self->shmem->write_ptr % self->shmem->count; */
-    /* self->shmem->write_ptr++; */
+    uint64_t index = self->shmem->write_ptr % self->shmem->count;
+    self->shmem->write_ptr++;
 
-    /* uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size; */
-    /* uint64_t data_offset = self->shmem->frame_data_offset; */
+    uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
+    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
 
-    /* struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset)); */
-    /* void *data = ((char*)frame) + data_offset; */
+    if (frame->_gst_buf_ref != NULL && frame->ref_cnt > 0) {
+       GST_WARNING_OBJECT (self,
+           "gst_buffer_unref(%p) unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
+           frame->_gst_buf_ref,
+           index,
+           frame->dxgi_handle,
+           frame->ref_cnt);
+       gst_buffer_unref(frame->_gst_buf_ref);
+       frame->ref_cnt = 0;
+       frame->_gst_buf_ref = NULL;
+    }
 
     /* GstMapInfo map; */
     GstMemory *memory = NULL;
 
     memory = gst_buffer_peek_memory(buf, 0);
 
-    /* if (memory->allocator != GST_ALLOCATOR(self->allocator)) { */
-        GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by "
+    if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
+        GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
             "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
-    /* } */
+    }
 
-    /* gst_buffer_map(buf, &map, GST_MAP_READ); */
-    /* frame->dts = buf->dts; */
-    /* frame->pts = buf->pts; */
-    /* frame->duration = buf->duration; */
-    /* frame->discontinuity = GST_BUFFER_IS_DISCONT(buf); */
+    GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
+
+    // We don't map memory here as we don't want to lock D3D11
+    // TODO: or should we?
+    frame->dts = buf->dts;
+    frame->pts = buf->pts;
+    frame->duration = buf->duration;
+    frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
+    frame->size = gst_buffer_get_size(buf);
+    frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
+
+    frame->_gst_buf_ref = buf;
+    frame->ref_cnt = 1;
+    gst_buffer_ref (buf);
+    GST_WARNING_OBJECT (self, "gst_buffer_ref(%p) new buffer", buf);
+
     /* GstMapInfo *mem_info; */
     /* gst_memory_map(memory, &mem_info, GST_MAP_READ); */
-   
-    /* DWORD data_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, */
-    /*     0, mem_info->maxsize, BEBO_SHMEM_NAME); */
-
-
-  /* if (!self->shmem_handle) { */
-    /*   // FIXME should be ERROR */
-    /*   GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError()); */
-    /*   return; */
-  /* } */
-  /* self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size); */
-  /* if (!self->shmem) { */
-    /*   // FIXME should be ERROR */
-    /*   GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError()); */
-    /*   return; */
-  /* } */
-/* //    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size); */
     /* gst_buffer_unmap(buf, &map); */
-/* #if 1 */
-    /* GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d", */
-    /*     //frame->dts / 1000000, */
-    /*     frame->pts / 1000000, */
-    /*     i, */
-    /*     frame_offset, */
-    /*     data_offset, */
-    /*     0); //size); */
-/* #endif */
-    /* ReleaseMutex(self->shmem_mutex); */
-    /* GST_OBJECT_UNLOCK (self); */
-    /* ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL); */
+
+#if 1
+    GST_WARNING_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p",
+        frame->dxgi_handle,
+        //frame->dts / 1000000,
+        frame->pts / 1000000,
+        index,
+        frame_offset,
+        frame->size,
+        buf); //size);
+#endif
+
+    for (int i=0 ; i < self->shmem->count ; i++) {
+      uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+      struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+      if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
+        GST_DEBUG_OBJECT (self,
+          "gst_buffer_unref(%p) read buffer - index: %d dxgi_handle: %p ref_cnt: %d",
+          frame->_gst_buf_ref, i, frame->dxgi_handle, frame->ref_cnt);
+        gst_buffer_unref(frame->_gst_buf_ref);
+        memset(frame, 0, sizeof(struct frame));
+      }
+    };
+
+    ReleaseMutex(self->shmem_mutex);
+    GST_OBJECT_UNLOCK (self);
+    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
 
     return GST_FLOW_OK;
 

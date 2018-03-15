@@ -45,7 +45,8 @@ typedef struct _GstDXGID3D11Context
 typedef struct _GstGLDXGIMemory
 {
   GstGLMemory mem;
-  HANDLE      interop_handle;
+  HANDLE interop_handle;
+  HANDLE dxgi_handle;
   ID3D11Texture2D * d3d11texture;
   gpointer    _padding[GST_PADDING];
 } GstGLDXGIMemory;
