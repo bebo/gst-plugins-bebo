@@ -28,7 +28,8 @@
         HANDLE dxgi_handle;
         uint8_t discontinuity;
         uint8_t ref_cnt;
-        GstBuffer *_gst_buf_ref;
+        void *_gst_buf_ref;
+        //GstBuffer *_gst_buf_ref;
     };
 
     struct shmem {
