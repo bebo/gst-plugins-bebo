@@ -1,4 +1,5 @@
 /* GStreamer
+ * Copyright (C) <2018> Pigs in Flight, Inc (Bebo)
  * Copyright (C) <2009> Collabora Ltd
  *  @author: Olivier Crete <olivier.crete@collabora.co.uk
  * Copyright (C) <2009> Nokia Inc

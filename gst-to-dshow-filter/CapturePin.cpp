@@ -278,7 +278,15 @@ HRESULT CPushPinDesktop::OpenShmMem()
         return -1;
     }
     uint64_t shmem_size = shmem_->shmem_size;
+    uint64_t version = shmem_->version;
     UnmapViewOfFile(shmem_);
+
+    if (version != SHM_INTERFACE_VERSION) {
+      ReleaseMutex(shmem_mutex_);
+      error("SHM_INTERFACE_VERSION missmatch %d != %d", version, SHM_INTERFACE_VERSION);
+      Sleep(3000);
+      return -1;
+    }
 
     shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
 
@@ -440,39 +448,6 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
         shmem_->read_ptr,
         shmem_->write_ptr,
         shmem_->write_ptr - shmem_->read_ptr);
-#endif
-
-#if 0
-    BYTE *pdata;
-    pSample->GetPointer(&pdata);
-
-    int stride_y = shmem_->video_info.width;
-    int stride_u = (shmem_->video_info.width + 1) / 2;
-    int stride_v = stride_u;
-
-    uint8* pdata_y = pdata;
-    uint8* pdata_u = pdata + (shmem_->video_info.width * shmem_->video_info.height);
-    uint8* pdata_v = pdata_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
-
-    uint8* gst_y = data;
-    uint8* gst_u = data + (shmem_->video_info.width * shmem_->video_info.height);
-    uint8* gst_v = gst_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
-
-    libyuv::I420Copy(
-            gst_y,
-            stride_y,
-            gst_u,
-            stride_u,
-            gst_v,
-            stride_v,
-            pdata_y,
-            stride_y,
-            pdata_u,
-            stride_u,
-            pdata_v,
-            stride_v,
-            shmem_->video_info.width,
-            shmem_->video_info.height);
 #endif
 
     shmem_->read_ptr++;
