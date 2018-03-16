@@ -1,7 +1,7 @@
 ECHO ON
 set errorlevel=
 
-set FILENAME=%JOBNAME%_%TAG%.zip
+set FILENAME=%JOB_NAME%_%TAG%.zip
 
 rmdir /s /q dist
 rmdir /s /q x64
