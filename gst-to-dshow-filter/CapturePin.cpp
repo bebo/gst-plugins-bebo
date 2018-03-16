@@ -205,7 +205,7 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
         hr = Deliver(pSample);
         pSample->Release();
 
-        UnrefDxgiFrame(std::move(dxgi_frame));
+        UnrefDxgiFrame(dxgi_frame.get());
 
         // downstream filter returns S_FALSE if it wants us to
         // stop or an error if it's reporting an error.
@@ -218,11 +218,13 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
       } else if (hr == S_FALSE) {
         // derived class wants us to stop pushing data
         pSample->Release();
+        UnrefDxgiFrame(dxgi_frame.get());
         DeliverEndOfStream();
         return S_OK;
       } else {
         // derived class encountered an error
         pSample->Release();
+        UnrefDxgiFrame(dxgi_frame.get());
         DbgLog((LOG_ERROR, 1, TEXT("Error %08lX from FillBuffer!!!"), hr));
         DeliverEndOfStream();
         m_pFilter->NotifyEvent(EC_ERRORABORT, hr, 0);
@@ -246,7 +248,7 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
   return S_FALSE;
 }
 
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample, DxgiFrame* dxgiFrame)
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
 {
   CheckPointer(pSample, E_POINTER);
 
@@ -707,7 +709,7 @@ HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
   return S_OK;
 }
 
-HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
+HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgiFrame) {
   d3d_context_->Unmap(dxgiFrame->texture.Get(), 0);
 
   if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
@@ -715,7 +717,7 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
     return S_FALSE;
   }
 
-  auto shmFrame = GetShmFrame(dxgiFrame.get());
+  auto shmFrame = GetShmFrame(dxgiFrame);
   // TODO: check it is the same frame!
   shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
 
@@ -725,8 +727,6 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
       dxgiFrame->index,
       shmFrame->ref_cnt);
   ReleaseMutex(shmem_mutex_);
-
-  dxgiFrame.release();
   return S_OK;
 }
 
