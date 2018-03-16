@@ -65,8 +65,8 @@ const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
   D3D_FEATURE_LEVEL_9_3,
 };
 
-HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) {
-
+HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) 
+{
   ComPtr<ID3D11Device> device;
 
   /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
@@ -91,8 +91,6 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) {
 
 HRESULT CPushPinDesktop::InitAllocator(IMemAllocator** ppAllocator)
 {
-#if 1
-  info("JAKE InitAllocator");
   HRESULT hr = S_OK;
 
   IMemAllocator* alloc = new BeboAllocator(
@@ -115,10 +113,6 @@ HRESULT CPushPinDesktop::InitAllocator(IMemAllocator** ppAllocator)
   }
 
   return hr;
-#else
-  return CoCreateInstance(CLSID_MemoryAllocator, 0,
-      CLSCTX_INPROC_SERVER, IID_IMemAllocator, (void**)ppAllocator);
-#endif
 }
 
 // -------------------------------------------------------------------------
@@ -128,7 +122,6 @@ HRESULT CPushPinDesktop::InitAllocator(IMemAllocator** ppAllocator)
 //
 HRESULT CPushPinDesktop::DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppAlloc)
 {
-  info("JAKE DecideAllocator");
   HRESULT hr = NOERROR;
   *ppAlloc = NULL;
 
@@ -177,7 +170,6 @@ HRESULT CPushPinDesktop::DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppA
   }
   return hr;
 }
-
 
 HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 {
@@ -284,7 +276,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
   }
 
   if (gotFrame) {
-
     if (!d3d_context_.Get()) {
       ComPtr<IDXGIFactory2> dxgiFactory;
       HRESULT hr = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, __uuidof(IDXGIFactory2), (void**)(dxgiFactory.GetAddressOf()));
@@ -322,6 +313,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
 
     if (hr != S_OK) {
       error("OpenSharedResource failed %p", hr);
+      // TODO: what to do here
     }
 
     D3D11_TEXTURE2D_DESC desc = { 0 };
@@ -349,13 +341,18 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
     hr = d3d_context_->Map(dxgiFrame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
     if (hr != S_OK) {
       error("d3dcontext->Map failed %p", hr);
+      // TODO: WHAT TO DO?
     }
 
-    ((CMediaSample*)pSample)->SetPointer((BYTE*)cpu_mem.pData, 1280 * 720 * 4);
+    if (cpu_mem.DepthPitch == 0) {
+      // should never happen, but i've seen weird things happened before.
+      error("DepthPitch is 0, should not be possible, but here we are.");
+    }
+
+    ((CMediaSample*)pSample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
   }
 
   pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-
   // Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
   pSample->SetSyncPoint(TRUE);
   pSample->SetDiscontinuity(discontinuity);
@@ -389,9 +386,9 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
   shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
   if (!shmem_) {
-      error("could not map shmem %d", GetLastError());
-      ReleaseMutex(shmem_mutex_);
-      return -1;
+    error("could not map shmem %d", GetLastError());
+    ReleaseMutex(shmem_mutex_);
+    return -1;
   }
   uint64_t shmem_size = shmem_->shmem_size;
   uint64_t version = shmem_->version;
@@ -409,8 +406,8 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
   ReleaseMutex(shmem_mutex_);
   if (!shmem_) {
-      error("could not map shmem %d", GetLastError());
-      return -1;
+    error("could not map shmem %d", GetLastError());
+    return -1;
   }
 
 
@@ -422,7 +419,6 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
 HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity)
 {
-  //CheckPointer(pSample, E_POINTER);
   if (OpenShmMem() != S_OK) {
     return 2;
   }
@@ -446,20 +442,16 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
           shmem_->read_ptr,
           shmem_->write_ptr);
       return 2;
-    }
-    else if (result == WAIT_ABANDONED) {
+    } else if (result == WAIT_ABANDONED) {
       warn("semarphore is abandoned");
       return 2;
-    }
-    else if (result == WAIT_FAILED) {
+    } else if (result == WAIT_FAILED) {
       warn("semaphore wait failed 0x%010x", GetLastError());
       return 2;
-    }
-    else if (result != WAIT_OBJECT_0) {
+    } else if (result != WAIT_OBJECT_0) {
       error("unknown semaphore event 0x%010x", result);
       return 2;
-    }
-    else {
+    } else {
       if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
         continue;
         // FIXME handle all error cases
@@ -528,17 +520,14 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
     if (frame->dts != GST_CLOCK_TIME_NONE) {
       *startFrame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
       have_time = true;
-    }
-    else {
+    } else {
       warn("missing DTS timestamp");
     }
-  }
-  else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
+  } else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
     if (frame->pts != GST_CLOCK_TIME_NONE) {
       *startFrame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
       have_time = true;
-    }
-    else {
+    } else {
       warn("missing PTS timestamp");
     }
   }
@@ -565,7 +554,6 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
 
   *discontinuity = first_buffer || frame->discontinuity ? true : false;
 
-#if 1
   debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
       frame->dxgi_handle,
       frame->pts,
@@ -573,7 +561,6 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
       shmem_->read_ptr,
       shmem_->write_ptr,
       shmem_->write_ptr - shmem_->read_ptr);
-#endif
 
   shmem_->read_ptr++;
   uint64_t read_ptr = shmem_->read_ptr;
@@ -635,7 +622,6 @@ int CPushPinDesktop::getCaptureDesiredFinalHeight() {
 HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
     ALLOCATOR_PROPERTIES *pProperties)
 {
-  //DebugBreak();
   CheckPointer(pAlloc, E_POINTER);
   CheckPointer(pProperties, E_POINTER);
 
