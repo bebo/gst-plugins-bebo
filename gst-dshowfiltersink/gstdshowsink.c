@@ -1,6 +1,7 @@
 // vim: ts=2:sw=2
 
 /* GStreamer
+ * Copyright (C) <2018> Pigs in Flight, Inc (Bebo)
  * Copyright (C) <2009> Collabora Ltd
  *  @author: Olivier Crete <olivier.crete@collabora.co.uk
  * Copyright (C) <2009> Nokia Inc
@@ -21,20 +22,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-/**
- * SECTION:element-shmsink
- * @title: shmsink
- *
- * Send data over shared memory to the matching source.
- *
- * ## Example launch lines
- * |[
- * gst-launch-1.0 -v videotestsrc ! "video/x-raw, format=YUY2, color-matrix=sdtv, \
- * chroma-site=mpeg2, width=(int)320, height=(int)240, framerate=(fraction)30/1" \
- * ! shmsink socket-path=/tmp/blah shm-size=2000000
- * ]| Send video to shm buffers.
- *
- */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -182,6 +169,7 @@ gst_shm_sink_init (GstShmSink * self)
 //      self->shmem->video_info.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&(self->shemem->video_info), i);
 //  }
 
+  self->shmem->version = SHM_INTERFACE_VERSION;
   self->shmem->frame_offset = header_size;
   self->shmem->frame_size = frame_size;
   self->shmem->count = buffer_count;
