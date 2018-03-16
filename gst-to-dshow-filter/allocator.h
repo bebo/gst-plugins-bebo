@@ -26,8 +26,6 @@ protected:
                     REFERENCE_TIME *pEndTime,
                     DWORD dwFlags) override;
 
-  HRESULT SendFrame(void* dxgi_frame);
-
 public:
   /* This goes in the factory template table to create new instances */
   static CUnknown *CreateInstance(LPUNKNOWN, HRESULT*);

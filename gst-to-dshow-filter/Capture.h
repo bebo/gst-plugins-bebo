@@ -151,7 +151,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
     struct frame * GetShmFrame(uint64_t index);
     struct frame * GetShmFrame(DxgiFrame *dxgi_frame);
-    HRESULT UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgi_frame);
+    HRESULT UnrefDxgiFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefBefore(uint64_t i);
 
     // Set the agreed media type and set up the necessary parameters
