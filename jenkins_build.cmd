@@ -8,6 +8,9 @@ rmdir /s /q x64
 rmdir /s /q Release
 del /Q /F %FILENAME%
 
+@REM build servers doesn't have this variable - we probably should be using vswhere
+set VS2017INSTALLDIR=C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional
+
 pushd .
 call "%VS2017INSTALLDIR%\VC\Auxiliary\Build\vcvars64.bat" amd64
 popd
