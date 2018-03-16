@@ -9,12 +9,17 @@
 #define CAPTURE_H
 
 #include <strsafe.h>
+
 #include "CommonTypes.h"
 #include "registry.h"
 #include "../shared/bebo_shmem.h"
 #include "names_and_ids.h"
+#include <d3d11_3.h>
+#include <wrl.h>
+using Microsoft::WRL::ComPtr;
 
 class CPushPinDesktop;
+class DxgiFrame;
 
 // parent
 class CGameCapture : public CSource // public IAMFilterMiscFlags // CSource is CBaseFilter is IBaseFilter is IMediaFilter is IPersist which is IUnknown
@@ -87,19 +92,23 @@ protected:
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();
 
-    REFERENCE_TIME lastFrame_ = 0;
-    int64_t time_offset_dts_ns_ = 0;
-    int64_t time_offset_pts_ns_ = 0;
-    TimeOffsetType time_offset_type_ = TIME_OFFSET_NONE;
+  REFERENCE_TIME lastFrame_ = 0;
+  int64_t time_offset_dts_ns_ = 0;
+  int64_t time_offset_pts_ns_ = 0;
+  TimeOffsetType time_offset_type_ = TIME_OFFSET_NONE;
 
-    uint64_t frame_start_ = 0;
-    uint64_t frame_total_cnt_ = 0;
-    uint64_t frame_sent_cnt_ = 0;
-    uint64_t frame_dropped_cnt_ = 0;
-    uint64_t first_frame_ms_ = 0;
-    long double frame_processing_time_ms_ = 0.0;
+  uint64_t frame_start_ = 0;
+  uint64_t frame_total_cnt_ = 0;
+  uint64_t frame_sent_cnt_ = 0;
+  uint64_t frame_dropped_cnt_ = 0;
+  uint64_t frame_late_cnt_ = 0;
+  uint64_t first_frame_ms_ = 0;
+  long double frame_processing_time_ms_ = 0.0;
 
-    wchar_t out_[1024];
+  ComPtr<ID3D11Device3> d3d_device3_;
+  ComPtr<ID3D11DeviceContext> d3d_context_;
+
+  wchar_t out_[1024];
 
 public:
 	//CSourceStream overrrides
@@ -131,7 +140,11 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBufferFromShMem(IMediaSample *pSample, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
+    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
+    struct frame * GetShmFrame(uint64_t index);
+    struct frame * GetShmFrame(DxgiFrame *dxgi_frame);
+    HRESULT UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgi_frame);
+    HRESULT UnrefBefore(uint64_t i);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
@@ -141,9 +154,9 @@ public:
     HRESULT GetMediaType(int iPosition, CMediaType *pmt);
 
     // IQualityControl
-	// Not implemented because we aren't going in real time.
-	// If the file-writing filter slows the graph down, we just do nothing, which means
-	// wait until we're unblocked. No frames are ever dropped.
+    // Not implemented because we aren't going in real time.
+    // If the file-writing filter slows the graph down, we just do nothing, which means
+    // wait until we're unblocked. No frames are ever dropped.
     STDMETHODIMP Notify(IBaseFilter *pSelf, Quality q)
     {
         return E_FAIL;
@@ -155,6 +168,23 @@ public:
     HRESULT STDMETHODCALLTYPE Set(REFGUID guidPropSet, DWORD dwID, void *pInstanceData, DWORD cbInstanceData, void *pPropData, DWORD cbPropData);
     HRESULT STDMETHODCALLTYPE Get(REFGUID guidPropSet, DWORD dwPropID, void *pInstanceData,DWORD cbInstanceData, void *pPropData, DWORD cbPropData, DWORD *pcbReturned);
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
+
+  private:
+    HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
+
+};
+
+class DxgiFrame {
+
+  public:
+
+    HANDLE dxgi_handle = nullptr;
+    uint64_t nr = 0;
+    uint64_t index = 0;
+
+    DxgiFrame();
+    ~DxgiFrame();
+    void SetFrame(struct frame *frameData, uint64_t i);
 
 };
 

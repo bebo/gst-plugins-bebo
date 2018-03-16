@@ -1,3 +1,4 @@
+// vim: ts=2:sw=2
 /* GStreamer
  * Copyright (C) <2009> Collabora Ltd
  *  @author: Olivier Crete <olivier.crete@collabora.co.uk
@@ -22,9 +23,13 @@
 #ifndef __GST_SHM_SINK_H__
 #define __GST_SHM_SINK_H__
 
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
+
 #include <gst/gst.h>
 #include <gst/base/gstbasesink.h>
-#include <windows.h>
+#include "gstdxgimemory.h"
 
 //#include "shmpipe.h"
 
@@ -41,27 +46,18 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK))
 typedef struct _GstShmSink GstShmSink;
 typedef struct _GstShmSinkClass GstShmSinkClass;
-typedef struct _GstShmSinkAllocator GstShmSinkAllocator;
 
 struct _GstShmSink
 {
   GstBaseSink element;
-
-  gchar *socket_path;
+  GstGLContext *context;
+  GstGLContext *other_context;
+  GstGLDisplay *display;
 
   HANDLE shmem_handle;
   struct shmem *shmem;
   HANDLE shmem_mutex;
   HANDLE shmem_new_data_semaphore;
-
-  guint perms;
-  guint size;
-
-  GList *clients;
-
-  GThread *pollthread;
-  GstPoll *poll;
-  GstPollFD serverpollfd;
 
   gboolean wait_for_connection;
   gboolean stop;
@@ -70,8 +66,7 @@ struct _GstShmSink
 
   GCond cond;
 
-  GstShmSinkAllocator *allocator;
-
+  GstGLDXGIMemoryAllocator *allocator;
   GstAllocationParams params;
 };
 
@@ -80,7 +75,12 @@ struct _GstShmSinkClass
   GstBaseSinkClass parent_class;
 };
 
-GType gst_shm_sink_get_type (void);
+GType gst_shm_sink_get_type(void);
+
+
+
+
+
 
 G_END_DECLS
 #endif /* __GST_SHM_SINK_H__ */

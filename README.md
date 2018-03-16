@@ -35,7 +35,7 @@ regsvr32 gst-to-dshow.dll
 ### Produce some frames from gst
 ```
 set GST_PLUGIN_PATH=.
-gst-launch-1.0 videotestsrc ! "video/x-raw,framerate=30/1,height=720,width=1280" ! videoconvert ! "video/x-raw,format=I420" !  dshowfiltersink
+gst-launch-1.0 videotestsrc ! "video/x-raw,framerate=30/1,height=720,width=1280" ! videoconvert ! "video/x-raw,format=I420" !  glupload ! gldownload ! dshowfiltersink
 ```
 
 ### Show DirectShow sees some frames
