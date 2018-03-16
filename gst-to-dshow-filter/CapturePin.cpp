@@ -199,7 +199,7 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 
       // Virtual function user will override.
       std::unique_ptr<DxgiFrame> dxgi_frame = std::make_unique<DxgiFrame>();
-      hr = FillBufferStart(pSample, dxgi_frame.get());
+      hr = FillBuffer(pSample, dxgi_frame.get());
 
       if (hr == S_OK) {
         hr = Deliver(pSample);
