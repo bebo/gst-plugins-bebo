@@ -281,7 +281,7 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
   if (type == GL_UNSIGNED_BYTE && format == GST_GL_RGBA) {
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
   } else {
     GST_ERROR("UNKNOWN FORMAT %#010x %#010x", type , format);
     return 0;
