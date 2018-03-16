@@ -181,31 +181,31 @@ HRESULT CPushPinDesktop::DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppA
 
 HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 {
-  info("Jake is awesome loo");
   Command com;
 
   OnThreadStartPlay();
 
   do {
     while (!CheckRequest(&com)) {
-      info("Jake is awesome");
-
       IMediaSample *pSample;
 
       HRESULT hr = GetDeliveryBuffer(&pSample, NULL, NULL, 0);
       if (FAILED(hr)) {
         Sleep(1);
-        continue;	// go round again. Perhaps the error will go away
+        continue;  // go round again. Perhaps the error will go away
         // or the allocator is decommited & we will be asked to
         // exit soon.
       }
 
       // Virtual function user will override.
-      hr = FillBuffer(pSample);
+      std::unique_ptr<DxgiFrame> dxgi_frame = std::make_unique<DxgiFrame>();
+      hr = FillBufferStart(pSample, dxgi_frame.get());
 
       if (hr == S_OK) {
         hr = Deliver(pSample);
         pSample->Release();
+
+        UnrefDxgiFrame(std::move(dxgi_frame));
 
         // downstream filter returns S_FALSE if it wants us to
         // stop or an error if it's reporting an error.
@@ -215,14 +215,12 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
           return S_OK;
         }
 
-      }
-      else if (hr == S_FALSE) {
+      } else if (hr == S_FALSE) {
         // derived class wants us to stop pushing data
         pSample->Release();
         DeliverEndOfStream();
         return S_OK;
-      }
-      else {
+      } else {
         // derived class encountered an error
         pSample->Release();
         DbgLog((LOG_ERROR, 1, TEXT("Error %08lX from FillBuffer!!!"), hr));
@@ -248,24 +246,22 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
   return S_FALSE;
 }
 
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample, DxgiFrame* dxgiFrame)
 {
   CheckPointer(pSample, E_POINTER);
-  info("FillBuffer");
 
   REFERENCE_TIME startFrame;
   REFERENCE_TIME endFrame;
   BOOL discontinuity;
 
   boolean gotFrame = false;
-  auto dxgiFrame = std::make_unique<DxgiFrame>();
   while (!gotFrame) {
     if (!active) {
       info("FillBuffer - inactive");
       return S_FALSE;
     }
 
-    int code = FillBufferFromShMem(dxgiFrame.get(), &startFrame, &endFrame, &discontinuity);
+    int code = FillBufferFromShMem(dxgiFrame, &startFrame, &endFrame, &discontinuity);
 
     if (code == S_OK) {
       gotFrame = true;
@@ -311,7 +307,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
     }
 
     ComPtr<ID3D11Texture2D> resource;
-    //ComPtr<ID3D11Resource> resource;
 
     HRESULT hr = d3d_device3_->OpenSharedResource(
         dxgiFrame->dxgi_handle,
@@ -336,68 +331,22 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
     desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
     desc.MiscFlags = 0;
 
-    ComPtr<ID3D11Texture2D> copy_texture;
-    d3d_device3_->CreateTexture2D(&desc, NULL, copy_texture.GetAddressOf());
+    d3d_device3_->CreateTexture2D(&desc, NULL, &dxgiFrame->texture);
 
-    d3d_context_->CopyResource(copy_texture.Get(), resource.Get());
+    d3d_context_->CopyResource(dxgiFrame->texture.Get(), resource.Get());
 
     // FIXME - need to do the map 3 frames behind otherwise we kill cpu/gpu performance
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb205132(v=vs.85).aspx#Performance_Considerations
 
     D3D11_MAPPED_SUBRESOURCE cpu_mem = { 0 };
-    hr = d3d_context_->Map(copy_texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
+    hr = d3d_context_->Map(dxgiFrame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
     if (hr != S_OK) {
       error("d3dcontext->Map failed %p", hr);
     }
 
-    UnrefDxgiFrame(std::move(dxgiFrame));
-    //DXGI_SURFACE_DESC frame_desc = { 0 };
-    //DXGI_MAPPED_RECT map;
-    //surface->GetDesc(&frame_desc);
-    //surface->Map(&map, D3D11_MAP_READ);
-
-    BYTE *pdata;
-    pSample->GetPointer(&pdata);
-
-    debug("SIZE: %d", pSample->GetSize());
-    memcpy(pdata, cpu_mem.pData, pSample->GetSize());
-
-#if 0
-
-    //cpu_mem.RowPitch;
-    int stride_y = shmem_->video_info.width;
-    int stride_u = (shmem_->video_info.width + 1) / 2;
-    int stride_v = stride_u;
-
-    uint8* pdata_y = pdata;
-    uint8* pdata_u = pdata + (shmem_->video_info.width * shmem_->video_info.height);
-    uint8* pdata_v = pdata_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
-
-    uint8* gst_y = (uint8*)cpu_mem.pData;
-    uint8* gst_u = gst_y + (shmem_->video_info.width * shmem_->video_info.height);
-    uint8* gst_v = gst_u + ((shmem_->video_info.width * shmem_->video_info.height) >> 2);
-
-    libyuv::I420Copy(
-        gst_y,
-        stride_y,
-        gst_u,
-        stride_u,
-        gst_v,
-        stride_v,
-        pdata_y,
-        stride_y,
-        pdata_u,
-        stride_u,
-        pdata_v,
-        stride_v,
-        shmem_->video_info.width,
-        shmem_->video_info.height);
-#endif
-
-    //__uuidof(ID3D11Texture2D),
-
-    d3d_context_->Unmap(copy_texture.Get(), 0);
+    ((CMediaSample*)pSample)->SetPointer((BYTE*)cpu_mem.pData, 1280 * 720 * 4);
   }
+
   pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
 
   // Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
@@ -470,181 +419,180 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
   if (OpenShmMem() != S_OK) {
     return 2;
   }
-  
-    if (!shmem_) {
+
+  if (!shmem_) {
+    return 2;
+  }
+
+  if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
+    // FIXME handle all error cases
+  }
+
+  while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
+
+    DWORD result = SignalObjectAndWait(shmem_mutex_,
+        shmem_new_data_semaphore_,
+        200,
+        false);
+    if (result == WAIT_TIMEOUT) {
+      debug("timed out after 200ms read_ptr: %d write_ptr: %d",
+          shmem_->read_ptr,
+          shmem_->write_ptr);
       return 2;
     }
-  
-    if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
-      // FIXME handle all error cases
+    else if (result == WAIT_ABANDONED) {
+      warn("semarphore is abandoned");
+      return 2;
     }
-  
-    while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
-      
-        DWORD result = SignalObjectAndWait(shmem_mutex_,
-            shmem_new_data_semaphore_,
-            200,
-            false);
-        if (result == WAIT_TIMEOUT) {
-          debug("timed out after 200ms read_ptr: %d write_ptr: %d",
-              shmem_->read_ptr,
-              shmem_->write_ptr);
-            return 2;
-        }
-        else if (result == WAIT_ABANDONED) {
-          warn("semarphore is abandoned");
-            return 2;
-        }
-        else if (result == WAIT_FAILED) {
-          warn("semaphore wait failed 0x%010x", GetLastError());
-            return 2;
-        }
-        else if (result != WAIT_OBJECT_0) {
-          error("unknown semaphore event 0x%010x", result);
-            return 2;
-        }
-        else {
-          if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
-            continue;
-              // FIXME handle all error cases
-          }
-        }
+    else if (result == WAIT_FAILED) {
+      warn("semaphore wait failed 0x%010x", GetLastError());
+      return 2;
     }
-  
-    uint64_t start_processing = StartCounter();
-    bool first_buffer = false;
-    if (shmem_->read_ptr == 0) {
-      first_buffer = true;
-        frame_start_ = shmem_->write_ptr - 1;
-        first_frame_ms_ = GetTickCount64();
-        
-        if (shmem_->write_ptr - shmem_->read_ptr > 0) {
-          shmem_->read_ptr = shmem_->write_ptr;
-            info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
-                shmem_->read_ptr, shmem_->write_ptr);
-            UnrefBefore(shmem_->read_ptr);
-        }
+    else if (result != WAIT_OBJECT_0) {
+      error("unknown semaphore event 0x%010x", result);
+      return 2;
     }
-    else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
-      uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
-        info("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
-            shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr - shmem_->read_ptr, read_ptr);
-        //frame_late_cnt_++;
-        shmem_->read_ptr = read_ptr;
-        UnrefBefore(shmem_->read_ptr);
+    else {
+      if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
+        continue;
+        // FIXME handle all error cases
+      }
     }
-  
-    uint64_t i = shmem_->read_ptr % shmem_->count;
-    
-    uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
-    struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
-    dxgi_frame->SetFrame(frame, i);
-    frame->ref_cnt++;
-    
-    CRefTime now;
-    CSourceStream::m_pFilter->StreamTime(now);
-    now = max(0, now); // can be negative before it started and negative will mess us up
+  }
+
+  uint64_t start_processing = StartCounter();
+  bool first_buffer = false;
+  if (shmem_->read_ptr == 0) {
+    first_buffer = true;
+    frame_start_ = shmem_->write_ptr - 1;
+    first_frame_ms_ = GetTickCount64();
+
+    if (shmem_->write_ptr - shmem_->read_ptr > 0) {
+      shmem_->read_ptr = shmem_->write_ptr;
+      info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
+          shmem_->read_ptr, shmem_->write_ptr);
+      UnrefBefore(shmem_->read_ptr);
+    }
+  }
+  else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
+    uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
+    info("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
+        shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr - shmem_->read_ptr, read_ptr);
+    //frame_late_cnt_++;
+    shmem_->read_ptr = read_ptr;
+    UnrefBefore(shmem_->read_ptr);
+  }
+
+  uint64_t i = shmem_->read_ptr % shmem_->count;
+
+  uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
+  struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
+  dxgi_frame->SetFrame(frame, i);
+  frame->ref_cnt++;
+
+  CRefTime now;
+  CSourceStream::m_pFilter->StreamTime(now);
+  now = max(0, now); // can be negative before it started and negative will mess us up
   uint64_t now_in_ns = now * 100;
-    int64_t time_offset_ns;
-    
-    if (first_buffer) {
-      // TODO take start delta/behind into account
-      // we prefer dts because it is monotonic
-      if (frame->dts != GST_CLOCK_TIME_NONE) {
-        time_offset_dts_ns_ = frame->dts - now_in_ns;
-          time_offset_type_ = TIME_OFFSET_DTS;
-          debug("using DTS as refernence delta in ns: %I64d", time_offset_dts_ns_);
-      }
-      if (frame->pts != GST_CLOCK_TIME_NONE) {
-        time_offset_pts_ns_ = frame->pts - now_in_ns;
-          if (time_offset_type_ == TIME_OFFSET_NONE) {
-            time_offset_type_ = TIME_OFFSET_PTS;
-              warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
-          }
-          else {
-            debug("PTS as delta in ns: %I64d", time_offset_pts_ns_);
-          }
-      }
+  int64_t time_offset_ns;
+
+  if (first_buffer) {
+    // TODO take start delta/behind into account
+    // we prefer dts because it is monotonic
+    if (frame->dts != GST_CLOCK_TIME_NONE) {
+      time_offset_dts_ns_ = frame->dts - now_in_ns;
+      time_offset_type_ = TIME_OFFSET_DTS;
+      debug("using DTS as refernence delta in ns: %I64d", time_offset_dts_ns_);
     }
-  
-    bool have_time = false;
-    if (time_offset_type_ == TIME_OFFSET_DTS) {
-      if (frame->dts != GST_CLOCK_TIME_NONE) {
-        *startFrame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
-          have_time = true;
+    if (frame->pts != GST_CLOCK_TIME_NONE) {
+      time_offset_pts_ns_ = frame->pts - now_in_ns;
+      if (time_offset_type_ == TIME_OFFSET_NONE) {
+        time_offset_type_ = TIME_OFFSET_PTS;
+        warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
       }
       else {
-        warn("missing DTS timestamp");
+        debug("PTS as delta in ns: %I64d", time_offset_pts_ns_);
       }
     }
-    else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
-      if (frame->pts != GST_CLOCK_TIME_NONE) {
-        *startFrame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
-          have_time = true;
-      }
-      else {
-        warn("missing PTS timestamp");
-      }
+  }
+
+  bool have_time = false;
+  if (time_offset_type_ == TIME_OFFSET_DTS) {
+    if (frame->dts != GST_CLOCK_TIME_NONE) {
+      *startFrame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
+      have_time = true;
     }
-  
-    uint64_t duration_ns = frame->duration;
-    if (duration_ns == GST_CLOCK_TIME_NONE) {
-      warn("missing duration timestamp");
-        // FIXME: fake duration if we don't get it
+    else {
+      warn("missing DTS timestamp");
     }
-  
-    if (!have_time) {
-      *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns);
+  }
+  else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
+    if (frame->pts != GST_CLOCK_TIME_NONE) {
+      *startFrame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
+      have_time = true;
     }
-  
-    if (lastFrame_ != 0 && lastFrame_ >= *startFrame) {
-      warn("timestamp not monotonic last: %dI64t new: %dI64t", lastFrame_, *startFrame);
-        // fake it
-        *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
+    else {
+      warn("missing PTS timestamp");
     }
-  
-    
-    *endFrame = *startFrame + NS_TO_REFERENCE_TIME(duration_ns);
-    lastFrame_ = *startFrame;
-    
-    *discontinuity = first_buffer || frame->discontinuity ? true : false;
-    
-    
+  }
+
+  uint64_t duration_ns = frame->duration;
+  if (duration_ns == GST_CLOCK_TIME_NONE) {
+    warn("missing duration timestamp");
+    // FIXME: fake duration if we don't get it
+  }
+
+  if (!have_time) {
+    *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns);
+  }
+
+  if (lastFrame_ != 0 && lastFrame_ >= *startFrame) {
+    warn("timestamp not monotonic last: %dI64t new: %dI64t", lastFrame_, *startFrame);
+    // fake it
+    *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
+  }
+
+
+  *endFrame = *startFrame + NS_TO_REFERENCE_TIME(duration_ns);
+  lastFrame_ = *startFrame;
+
+  *discontinuity = first_buffer || frame->discontinuity ? true : false;
+
 #if 1
-    debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
-        frame->dxgi_handle,
-        frame->pts,
-        i,
-        shmem_->read_ptr,
-        shmem_->write_ptr,
-        shmem_->write_ptr - shmem_->read_ptr);
+  debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
+      frame->dxgi_handle,
+      frame->pts,
+      i,
+      shmem_->read_ptr,
+      shmem_->write_ptr,
+      shmem_->write_ptr - shmem_->read_ptr);
 #endif
 
-    shmem_->read_ptr++;
-    uint64_t read_ptr = shmem_->read_ptr;
-    
-    ReleaseMutex(shmem_mutex_);
-    
-    frame_sent_cnt_++;
-    frame_total_cnt_ = read_ptr - frame_start_;
-    frame_dropped_cnt_ = frame_total_cnt_ - frame_sent_cnt_;
-    
-    double avg_fps = 1000.0 * frame_sent_cnt_ / (GetTickCount64() - first_frame_ms_);
-    
-    long double processing_time_ms = GetCounterSinceStartMillis(start_processing);
-    frame_processing_time_ms_ += processing_time_ms;
-    
-    _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
-        frame_total_cnt_,
-        frame_dropped_cnt_,
-        100.0 * frame_dropped_cnt_ / frame_total_cnt_,
-        frame_late_cnt_,
-        avg_fps,
-        GetFps(),
-        frame_processing_time_ms_ / frame_sent_cnt_
-        );
-    
-    return S_OK;
+  shmem_->read_ptr++;
+  uint64_t read_ptr = shmem_->read_ptr;
+
+  ReleaseMutex(shmem_mutex_);
+
+  frame_sent_cnt_++;
+  frame_total_cnt_ = read_ptr - frame_start_;
+  frame_dropped_cnt_ = frame_total_cnt_ - frame_sent_cnt_;
+
+  double avg_fps = 1000.0 * frame_sent_cnt_ / (GetTickCount64() - first_frame_ms_);
+
+  long double processing_time_ms = GetCounterSinceStartMillis(start_processing);
+  frame_processing_time_ms_ += processing_time_ms;
+
+  _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
+      frame_total_cnt_,
+      frame_dropped_cnt_,
+      100.0 * frame_dropped_cnt_ / frame_total_cnt_,
+      frame_late_cnt_,
+      avg_fps,
+      GetFps(),
+      frame_processing_time_ms_ / frame_sent_cnt_
+      );
+
+  return S_OK;
 }
 
 
@@ -760,6 +708,7 @@ HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
 }
 
 HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
+  d3d_context_->Unmap(dxgiFrame->texture.Get(), 0);
 
   if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
     error("didn't get lock");
@@ -769,12 +718,15 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
   auto shmFrame = GetShmFrame(dxgiFrame.get());
   // TODO: check it is the same frame!
   shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
+
   debug("unref dxgi_handle: %p nr: %lld i: %d ref_cnt %d",
       dxgiFrame->dxgi_handle,
       dxgiFrame->nr,
       dxgiFrame->index,
       shmFrame->ref_cnt);
   ReleaseMutex(shmem_mutex_);
+
+  dxgiFrame.release();
   return S_OK;
 }
 

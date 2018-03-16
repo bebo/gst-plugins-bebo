@@ -185,13 +185,12 @@ BeboAllocator::Alloc(void) {
   // to m_lSize bytes.
   for (; m_lAllocated < m_lCount; m_lAllocated++, pNext += lAlignedSize) {
 
-
     pSample = new CMediaSample(
         NAME("Default memory media sample"),
         this,
         &hr,
-        pNext + m_lPrefix,      // GetPointer() value
-        m_lSize);               // not including prefix
+        NULL,
+        0);               // not including prefix
 
     ASSERT(SUCCEEDED(hr));
     if (pSample == NULL) {
