@@ -147,10 +147,11 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
+    HRESULT FillBuffer(IMediaSample *pSample);
     HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame* dxgi_frame);
     HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
     struct frame * GetShmFrame(uint64_t index);
-    struct frame * GetShmFrame(DxgiFrame *dxgi_frame);
+    struct frame * GetShmFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefDxgiFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefBefore(uint64_t i);
 

@@ -248,6 +248,11 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
   return S_FALSE;
 }
 
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample) {
+  error("SHOULD NOT BE CALLED");
+  return E_NOTIMPL;
+}
+
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
 {
   CheckPointer(pSample, E_POINTER);

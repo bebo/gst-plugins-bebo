@@ -1,5 +1,4 @@
 #include "allocator.h"
-#include "logging.h"
 
 CUnknown *BeboAllocator::CreateInstance(__inout_opt LPUNKNOWN pUnk, __inout HRESULT *phr) {
   CUnknown *pUnkRet = new BeboAllocator(NAME("BeboAllocator"), pUnk, phr);
@@ -108,7 +107,6 @@ BeboAllocator::SetProperties(
 // object locked by caller
 HRESULT
 BeboAllocator::Alloc(void) {
-  info("JAKE alloc");
   CAutoLock lck(this);
 
   /* Check he has called SetProperties */
@@ -217,7 +215,6 @@ BeboAllocator::Alloc(void) {
 // calling ReallyFree()
 void
 BeboAllocator::Free(void) {
-  info("JAKE free");
   return;
 }
 
@@ -226,7 +223,6 @@ BeboAllocator::Free(void) {
 // actually free up the memory
 void
 BeboAllocator::ReallyFree(void) {
-  info("JAKE REALLY FREE");
   /* Should never be deleting this unless all buffers are freed */
 
   ASSERT(m_lAllocated == m_lFree.GetCount());
@@ -257,7 +253,6 @@ HRESULT BeboAllocator::GetBuffer(IMediaSample **ppBuffer,
     REFERENCE_TIME *pStartTime,
     REFERENCE_TIME *pEndTime,
     DWORD dwFlags) {
-  info("JAKE GETBUFFER");
   UNREFERENCED_PARAMETER(pStartTime);
   UNREFERENCED_PARAMETER(pEndTime);
   UNREFERENCED_PARAMETER(dwFlags);
