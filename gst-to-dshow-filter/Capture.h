@@ -107,6 +107,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
     ComPtr<ID3D11Device3> d3d_device3_;
     ComPtr<ID3D11DeviceContext> d3d_context_;
+    ComPtr<ID3D11Texture2D> copy_texture_;
 
     wchar_t out_[1024];
 
@@ -146,7 +147,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
-    HRESULT FillBuffer(IMediaSample *pSample);
+    HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame* dxgi_frame);
     HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
     struct frame * GetShmFrame(uint64_t index);
     struct frame * GetShmFrame(DxgiFrame *dxgi_frame);
@@ -183,17 +184,16 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 };
 
 class DxgiFrame {
-
   public:
-
     HANDLE dxgi_handle = nullptr;
     uint64_t nr = 0;
     uint64_t index = 0;
+    ComPtr<ID3D11Texture2D> texture;
 
     DxgiFrame();
     ~DxgiFrame();
-    void SetFrame(struct frame *frameData, uint64_t i);
 
+    void SetFrame(struct frame *frameData, uint64_t i);
 };
 
 #endif

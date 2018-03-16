@@ -11,6 +11,7 @@ protected:
   LPBYTE m_pBuffer;   // combined memory for all buffers
                       // override to free the memory when decommit completes
                       // - we actually do nothing, and save the memory until deletion.
+
   void Free(void);
 
   // called from the destructor (and from Alloc if changing size/count) to
@@ -25,18 +26,19 @@ protected:
                     REFERENCE_TIME *pEndTime,
                     DWORD dwFlags) override;
 
+  HRESULT SendFrame(void* dxgi_frame);
 
 public:
   /* This goes in the factory template table to create new instances */
-  static CUnknown *CreateInstance(__inout_opt LPUNKNOWN, __inout HRESULT *);
+  static CUnknown *CreateInstance(LPUNKNOWN, HRESULT*);
 
   STDMETHODIMP SetProperties(
-    __in ALLOCATOR_PROPERTIES* pRequest,
-    __out ALLOCATOR_PROPERTIES* pActual);
+    ALLOCATOR_PROPERTIES* pRequest,
+    ALLOCATOR_PROPERTIES* pActual);
 
-  BeboAllocator(__in_opt LPCTSTR, __inout_opt LPUNKNOWN, __inout HRESULT *);
+  BeboAllocator(LPCTSTR, LPUNKNOWN, HRESULT*);
 #ifdef UNICODE
-  BeboAllocator(__in_opt LPCSTR, __inout_opt LPUNKNOWN, __inout HRESULT *);
+  BeboAllocator(LPCSTR, LPUNKNOWN, HRESULT*);
 #endif
   ~BeboAllocator();
 };
