@@ -280,6 +280,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
     uint64_t shmem_size = shmem_->shmem_size;
     uint64_t version = shmem_->version;
     UnmapViewOfFile(shmem_);
+    shmem_ = nullptr;
 
     if (version != SHM_INTERFACE_VERSION) {
       ReleaseMutex(shmem_mutex_);
@@ -290,14 +291,15 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
     shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
 
-    shmem_->read_ptr = 0;
-    // TODO read config from shared data!
-
     ReleaseMutex(shmem_mutex_);
     if (!shmem_) {
         error("could not map shmem %d", GetLastError());
         return -1;
     }
+
+
+    // TODO read config from shared data!
+    shmem_->read_ptr = 0;
     info("Opened Shared Memory Buffer");
     return S_OK;
 }
