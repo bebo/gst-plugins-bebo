@@ -1,11 +1,34 @@
+/* GStreamer
+ * Copyright (C) <2018> Pigs in Flight, Inc (Bebo)
+ * @author: Florian Nierhaus <fpn@bebo.com>
+ * Copyright (C) <2009> Nokia Inc
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License along with this library; if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+ * Boston, MA 02110-1301, USA.
+ */
 // vim: ts=2:sw=2
-/* #include <D3D11.h> */
+
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
-/* #include <d3d11_3.h> */
-
 #include "gstdxgimemory.h"
+
+#ifdef NDEBUG
+#undef GST_LOG_OBJECT(...)
+#define GST_LOG_OBJECT(...)
+#endif
 
 #define GL_MEM_WIDTH(gl_mem) _get_plane_width (&gl_mem->info, gl_mem->plane)
 #define GL_MEM_HEIGHT(gl_mem) _get_plane_height (&gl_mem->info, gl_mem->plane)
@@ -43,8 +66,8 @@ _get_plane_height (GstVideoInfo * info, guint plane)
 G_DEFINE_TYPE(GstGLDXGIMemoryAllocator, gst_gl_dxgi_memory_allocator,
    GST_TYPE_GL_MEMORY_ALLOCATOR);
 
-GST_DEBUG_CATEGORY_STATIC (GST_CAT_GL_MEMORY);
-#define GST_CAT_DEFAULT GST_CAT_GL_MEMORY
+GST_DEBUG_CATEGORY_STATIC (GST_CAT_GL_DXGI_MEMORY);
+#define GST_CAT_DEFAULT GST_CAT_GL_DXGI_MEMORY
 
 #define parent_class gst_gl_dxgi_memory_allocator_parent_class
 
@@ -341,7 +364,7 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
 static GstMemory *
 _default_gl_dxgi_tex_copy (GstGLMemory * src, gssize offset, gssize size)
 {
-  GST_CAT_ERROR (GST_CAT_GL_MEMORY, "Cannot copy DXGI textures");
+  GST_CAT_ERROR (GST_CAT_GL_DXGI_MEMORY, "Cannot copy DXGI textures");
   return NULL;
 }
 
@@ -393,7 +416,7 @@ _gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 {
 
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_ERROR("wglDXLockObjectsNV texture_id %#010x interop_id:%#010x",
+    GST_LOG("wglDXLockObjectsNV texture_id %#010x interop_id:%#010x",
       gl_mem->mem.tex_id,
       gl_mem->interop_handle);
     GstGLContext *context = gl_mem->mem.mem.context;
@@ -432,7 +455,7 @@ _gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
   alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
   alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_ERROR("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x",
+    GST_LOG("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x",
       gl_mem->mem.tex_id,
       gl_mem->interop_handle);
     GstGLContext *context = gl_mem->mem.mem.context;
@@ -515,7 +538,6 @@ static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
 
-
   GstGLBaseMemoryAllocatorClass *gl_base;
   GstGLMemoryAllocatorClass *gl_tex;
   gl_tex = (GstGLMemoryAllocatorClass *) klass;
@@ -535,7 +557,7 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 
   allocator_class->alloc = _gl_mem_alloc;
 
-  GST_DEBUG_CATEGORY_INIT (GST_CAT_GL_MEMORY, "gldxgitexture", 0,
+  GST_DEBUG_CATEGORY_INIT (GST_CAT_GL_DXGI_MEMORY, "gldxgitexture", 0,
         "OpenGL DGXI shared memory");
 }
 
