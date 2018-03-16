@@ -1,7 +1,7 @@
 /* GStreamer
  * Copyright (C) <2018> Pigs in Flight, Inc (Bebo)
  * @author: Florian Nierhaus <fpn@bebo.com>
- * Copyright (C) <2009> Nokia Inc
+ * Copyright (C) 2015 Matthew Waters <matthew@centricular.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,8 +17,9 @@
  * License along with this library; if not, write to the
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
+ *
+ * vim: ts=2:sw=2
  */
-// vim: ts=2:sw=2
 
 #include <windows.h>
 #include <d3d11.h>
@@ -26,8 +27,10 @@
 #include "gstdxgimemory.h"
 
 #ifdef NDEBUG
-#undef GST_LOG_OBJECT(...)
+#undef GST_LOG_OBJECT
 #define GST_LOG_OBJECT(...)
+#undef GST_LOG
+#define GST_LOG(...)
 #endif
 
 #define GL_MEM_WIDTH(gl_mem) _get_plane_width (&gl_mem->info, gl_mem->plane)
@@ -72,96 +75,6 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_GL_DXGI_MEMORY);
 #define parent_class gst_gl_dxgi_memory_allocator_parent_class
 
 static void
-gst_gl_dxgi_memory_allocator_dispose (GObject * object)
-{
-  GstGLDXGIMemoryAllocator *self = GST_GL_DXGI_MEMORY_ALLOCATOR (object);
-
-  if (self->sink)
-    gst_object_unref (self->sink);
-  self->sink = NULL;
-
-  G_OBJECT_CLASS (gst_gl_dxgi_memory_allocator_parent_class)->dispose (object);
-}
-
-/* static void */
-/* gst_gl_dxgi_memory_allocator_free (GstAllocator * allocator, GstMemory * mem) */
-/* { */
-/*   GstGLDXGIMemory *mymem = (GstGLDXGIMemory *) mem; */
-
-/*   if (mymem->block) { */
-/*     GST_OBJECT_LOCK (mymem->sink); */
-
-/*     //sp_writer_free_block (mymem->block); */
-/*     GST_OBJECT_UNLOCK (mymem->sink); */
-/*     gst_object_unref (mymem->sink); */
-/*   } */
-/*   gst_object_unref (mem->allocator); */
-
-/*   g_slice_free (GstGLDXGIMemory, mymem); */
-/* } */
-
-/* static gpointer */
-/* gst_gl_dxgi_memory_allocator_mem_map (GstMemory * mem, gsize maxsize, */
-/*     GstMapFlags flags) */
-/* { */
-/*   GstGLDXGIMemory *mymem = (GstGLDXGIMemory *) mem; */
-
-/*   return mymem->data; */
-/* } */
-
-
-
-/* static void */
-/* gst_gl_dxgi_memory_allocator_mem_unmap (GstMemory * mem) */
-/* { */
-/* } */
-
-/* static GstMemory * */
-/* gst_gl_dxgi_allocator_mem_share (GstMemory * mem, gssize offset, gssize size) */
-/* { */
-/*   GstGLDXGIMemory *mymem = (GstGLDXGIMemory *) mem; */
-/*   GstGLDXGIMemory *mysub; */
-/*   GstMemory *parent; */
-
-/*   /1* find the real parent *1/ */
-/*   if ((parent = mem->parent) == NULL) */
-/*     parent = mem; */
-
-/*   if (size == -1) */
-/*     size = mem->size - offset; */
-
-/*   mysub = g_slice_new0 (GstGLDXGIMemory); */
-/*   /1* the shared memory is always readonly *1/ */
-/*   gst_memory_init (GST_MEMORY_CAST (mysub), GST_MINI_OBJECT_FLAGS (parent) | */
-/*       GST_MINI_OBJECT_FLAG_LOCK_READONLY, gst_object_ref (mem->allocator), */
-/*       parent, mem->maxsize, mem->align, mem->offset + offset, size); */
-/*   mysub->data = mymem->data; */
-
-/*   return (GstMemory *) mysub; */
-/* } */
-
-/* static gboolean */
-/* gst_gl_dxgi_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2, */
-/*     gsize * offset) */
-/* { */
-
-/*   GstGLDXGIMemory *mymem1 = (GstGLDXGIMemory *) mem1; */
-/*   GstGLDXGIMemory *mymem2 = (GstGLDXGIMemory *) mem2; */
-
-/*   if (offset) { */
-/*     GstMemory *parent; */
-
-/*     parent = mem1->parent; */
-
-/*     *offset = mem1->offset - parent->offset; */
-/*   } */
-
-/*   /1* and memory is contiguous *1/ */
-/*   return mymem1->data + mem1->offset + mem1->size == */
-/*       mymem2->data + mem2->offset; */
-/* } */
-
-static void
 gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 {
 
@@ -170,110 +83,6 @@ gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 
   GST_OBJECT_FLAG_SET (allocator, GST_ALLOCATOR_FLAG_CUSTOM_ALLOC);
 }
-
-
-/* static GstMemory * */
-/* gst_gl_dxgi_allocator_alloc_locked(GstGLDXGIMemoryAllocator * self, gsize size, */
-/*   GstAllocationParams * params) */
-/* { */
-/*   GST_ERROR_OBJECT(self, */
-/*     "gst_gl_dxgi_allocator_alloc_locked"); */
-
-/* //FIXME */
-/* #if 0 */
-/*     GstMemory *memory = NULL; */
-
-/*   gsize maxsize = size + params->prefix + params->padding; */
-/*   gsize align = params->align; */
-
-/*   /1* ensure configured alignment *1/ */
-/*   align |= gst_memory_alignment; */
-/*   /1* allocate more to compensate for alignment *1/ */
-/*   maxsize += align; */
-
-/*   GstGLDXGIMemory *mymem; */
-/*   gsize aoffset, padding; */
-
-/*   mymem = g_slice_new0(GstGLDXGIMemory); */
-/*   memory = GST_MEMORY_CAST(mymem); */
-/*   mymem->sink = gst_object_ref(self->sink); */
-
-
-/*   uint64_t i = self->sink->shmem->write_ptr % self->sink->shmem->count; */
-/*   self->sink->shmem->write_ptr++; */
-/*   uint64_t frame_offset = self->sink->shmem->frame_offset + i * self->sink->shmem->frame_size; */
-/*   uint64_t data_offset = self->sink->shmem->frame_data_offset; */
-
-/*   struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->sink->shmem) + frame_offset)); */
-/*   void *data = ((char*)frame) + data_offset; */
-/*   mymem->data = data; */
-
-/*   /1* do alignment *1/ */
-/*   if ((aoffset = ((guintptr)mymem->data & align))) { */
-/*     aoffset = (align + 1) - aoffset; */
-/*     mymem->data += aoffset; */
-/*     maxsize -= aoffset; */
-/*   } */
-
-/*   if (params->prefix && (params->flags & GST_MEMORY_FLAG_ZERO_PREFIXED)) */
-/*     memset(mymem->data, 0, params->prefix); */
-
-/*   padding = maxsize - (params->prefix + size); */
-/*   if (padding && (params->flags & GST_MEMORY_FLAG_ZERO_PADDED)) */
-/*     memset(mymem->data + params->prefix + size, 0, padding); */
-
-/*   gst_memory_init(memory, params->flags, g_object_ref(self), NULL, */
-/*     maxsize, align, params->prefix, size); */
-
-/*   return memory; */
-/* #endif */
-/* } */
-
-/* static GstMemory * */
-/* gst_gl_dxgi_sink_allocator_alloc (GstAllocator * allocator, gsize size, */
-/*     GstAllocationParams * params) */
-/* { */
-/*   GstGLDXGIMemoryAllocator *self = GST_GL_DXGI_MEMORY_ALLOCATOR (allocator); */
-/*   GST_ERROR_OBJECT(self, "gst_gl_dxgi_sink_allocator_alloc - allocating %d", size); */
-
-/*   /// FIXME - we can do this better */
-/*   return GST_GL_DXGI_MEMORY_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self))->orig_alloc(allocator, size, params); */
-
-/*   /1* GstMemory *memory = NULL; *1/ */
-
-/*   /1* GST_OBJECT_LOCK (self->sink); *1/ */
-/*   /1* memory = gst_gl_dxgi_allocator_alloc_locked (self, size, params); *1/ */
-/*   /1* GST_OBJECT_UNLOCK (self->sink); *1/ */
-
-/*   /1* if (!memory) { *1/ */
-/*   /1*   memory = gst_allocator_alloc(NULL, size, params); *1/ */
-/*   /1*   GST_LOG_OBJECT(self, *1/ */
-/*   /1*     "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT *1/ */
-/*   /1*     "bytes, allocating using standard allocator", size); *1/ */
-/*   /1* } *1/ */
-
-/*   /1* return memory; *1/ */
-/* } */
-/* static GstGLDXGIMemory * _gl_mem_dshow_alloc (GstGLBaseMemoryAllocator * allocator,
- */
-/*     GstGLVideoAllocationParams * params) {
- */
-/* 
- */
-/*   GstGLBaseMemoryAllocatorClass *alloc_class;
- */
-/*   GST_ERROR_OBJECT(allocator, "_gl_mem_dshow_alloc - allocating"); */
-/*   GST_ERROR_OBJECT(allocator, __func__);
- */
-/*   alloc_class = GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class);
- */
-/*   return alloc_class->alloc(allocator, params);
- */
-/* 
- */
-/* }
- */
-
 
 static guint
 _new_texture (GstGLContext * context, guint target, guint internal_format,
@@ -324,9 +133,6 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
       target,
       WGL_ACCESS_READ_WRITE_NV);
 
-  GST_ERROR("wglDXRegisterObjectNV texture_id %#010x interop_id:%#010x",
-    tex_id,
-    *interop_handle);
 
   IDXGIResource *dxgi_res;
   GUID myIID_IDXGIResource = {
@@ -357,6 +163,12 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   gl->TexParameteri (target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
   gl->BindTexture (target, 0);
+  GST_DEBUG("new dxgi texture texture_id %#010x interop_id: %#010x dxgi_handle: %p %dx%d",
+    tex_id,
+    *interop_handle,
+    *dxgi_handle,
+    width,
+    height);
 
   return tex_id;
 }
@@ -570,4 +382,3 @@ gst_gl_dxgi_memory_allocator_new (GstBaseSink* sink)
 
   return self;
 }
-
