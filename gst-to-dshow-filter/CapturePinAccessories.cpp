@@ -77,9 +77,9 @@ int sprintf_pmt(wchar_t *buffer, size_t count, char *label, const AM_MEDIA_TYPE 
   StringFromGUID2(pmtIn->majortype, major_uuid, 64);
   StringFromGUID2(pmtIn->subtype, sub_uuid, 64);
 
-  // cnt += snprintf(&buffer[cnt], count - cnt, " [%S/%S]",
-  //	major_uuid,
-  //	sub_uuid);
+  // cnt += snprintf(&buffer[cnt], count - cnt, L" [%s/%s]",
+  //  major_uuid,
+  //  sub_uuid);
 
   if (pmtIn->formattype == FORMAT_VideoInfo) {
 
@@ -529,7 +529,6 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 HRESULT CPushPinDesktop::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport)
 {
   info("QuerySupported");
-  //DebugBreak();
   if (guidPropSet != AMPROPSETID_Pin) return E_PROP_SET_UNSUPPORTED;
   if (dwPropID != AMPROPERTY_PIN_CATEGORY) return E_PROP_ID_UNSUPPORTED;
   // We support getting this property, but not setting it.
@@ -653,7 +652,6 @@ enum FourCC { FOURCC_NONE = 0, FOURCC_I420 = 100, FOURCC_YUY2 = 101, FOURCC_RGB3
 
 HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDIA_TYPE basically == CMediaType
 {
-  //DebugBreak();
   CheckPointer(pmt, E_POINTER);
   CAutoLock cAutoLock(m_pFilter->pStateLock());
 
@@ -717,7 +715,6 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
   pvi->bmiHeader.biBitCount = 32;
   pvi->bmiHeader.biSizeImage = (width * height * 4);
   pmt->SetSubtype(&MEDIASUBTYPE_ARGB32);
-
 #endif
 
   // Now adjust some parameters that are the same for all formats
