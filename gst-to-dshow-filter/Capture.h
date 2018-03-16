@@ -19,6 +19,7 @@
 using Microsoft::WRL::ComPtr;
 
 class CPushPinDesktop;
+class DxgiFrame;
 
 // parent
 class CGameCapture : public CSource // public IAMFilterMiscFlags // CSource is CBaseFilter is IBaseFilter is IMediaFilter is IPersist which is IUnknown
@@ -139,7 +140,11 @@ public:
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBufferFromShMem(HANDLE *dxgi_handle, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
+    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
+    struct frame * GetShmFrame(uint64_t index);
+    struct frame * GetShmFrame(DxgiFrame *dxgi_frame);
+    HRESULT UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgi_frame);
+    HRESULT UnrefBefore(uint64_t i);
 
     // Set the agreed media type and set up the necessary parameters
     HRESULT SetMediaType(const CMediaType *pMediaType);
@@ -166,6 +171,20 @@ public:
 
   private:
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
+
+};
+
+class DxgiFrame {
+
+  public:
+
+    HANDLE dxgi_handle = nullptr;
+    uint64_t nr = 0;
+    uint64_t index = 0;
+
+    DxgiFrame();
+    ~DxgiFrame();
+    void SetFrame(struct frame *frameData, uint64_t i);
 
 };
 

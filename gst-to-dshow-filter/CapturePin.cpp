@@ -89,6 +89,7 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) {
   return S_OK;
 }
 
+
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
 {
 	CheckPointer(pSample, E_POINTER);
@@ -98,15 +99,14 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
     BOOL discontinuity;
 
 	boolean gotFrame = false;
-  HANDLE dxgi_handle = NULL;
+  auto dxgiFrame = std::make_unique<DxgiFrame>();
 	while (!gotFrame) {
 		if (!active) {
 			info("FillBuffer - inactive");
 			return S_FALSE;
 		}
 
-		int code = FillBufferFromShMem(&dxgi_handle, &startFrame, &endFrame, &discontinuity);
-
+		int code = FillBufferFromShMem(dxgiFrame.get(), &startFrame, &endFrame, &discontinuity);
 
 		if (code == S_OK) {
 			gotFrame = true;
@@ -128,7 +128,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
       HRESULT hr = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, __uuidof(IDXGIFactory2), (void**)(dxgiFactory.GetAddressOf()));
 
       LUID luid;
-      dxgiFactory->GetSharedResourceAdapterLuid(dxgi_handle, &luid);
+      dxgiFactory->GetSharedResourceAdapterLuid(dxgiFrame->dxgi_handle, &luid);
 
       UINT index = 0;
       IDXGIAdapter* adapter = NULL;
@@ -155,7 +155,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
     //ComPtr<ID3D11Resource> resource;
 
     HRESULT hr = d3d_device3_->OpenSharedResource(
-      dxgi_handle,
+      dxgiFrame->dxgi_handle,
       __uuidof(ID3D11Texture2D),
       (void**)resource.GetAddressOf());
     if (hr != S_OK) {
@@ -189,6 +189,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample *pSample)
     if (hr != S_OK) {
       error("d3dcontext->Map failed %p", hr);
     }
+
+    UnrefDxgiFrame(std::move(dxgiFrame));
     //DXGI_SURFACE_DESC frame_desc = { 0 };
     //DXGI_MAPPED_RECT map;
     //surface->GetDesc(&frame_desc);
@@ -293,7 +295,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
 }
 
 
-HRESULT CPushPinDesktop::FillBufferFromShMem(HANDLE * dxgi_handle, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity)
+HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity)
 {
 	//CheckPointer(pSample, E_POINTER);
     if (OpenShmMem() != S_OK) {
@@ -336,7 +338,6 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(HANDLE * dxgi_handle, REFERENCE_TIM
         }
     }
 
-
 	uint64_t start_processing = StartCounter();
     bool first_buffer = false;
     if (shmem_->read_ptr == 0) {
@@ -344,26 +345,27 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(HANDLE * dxgi_handle, REFERENCE_TIM
         frame_start_ = shmem_->write_ptr - 1;
         first_frame_ms_ = GetTickCount64();
 
-        if (shmem_->write_ptr - shmem_->read_ptr > 1) {
-
-            shmem_->read_ptr = shmem_->write_ptr - 1;
-            debug("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
+        if (shmem_->write_ptr - shmem_->read_ptr > 0) {
+            shmem_->read_ptr = shmem_->write_ptr;
+            info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
                 shmem_->read_ptr, shmem_->write_ptr);
+            UnrefBefore(shmem_->read_ptr);
         }
     } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
         uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
-        debug("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
+        info("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr-shmem_->read_ptr, read_ptr);
+        //frame_late_cnt_++;
         shmem_->read_ptr = read_ptr;
-        frame_late_cnt_++;
+        UnrefBefore(shmem_->read_ptr);
     } 
 
     uint64_t i = shmem_->read_ptr % shmem_->count;
 
     uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
     struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
+    dxgi_frame->SetFrame(frame, i);
     frame->ref_cnt++;
-    *dxgi_handle = frame->dxgi_handle;
 
     CRefTime now;
     CSourceStream::m_pFilter->StreamTime(now);
@@ -431,7 +433,7 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(HANDLE * dxgi_handle, REFERENCE_TIM
 
 
 #if 1
-    debug("dxgi_handle: %p pts: %lld i: %d size: %d read_ptr: %d write_ptr: %d behind: %d",
+    debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
         frame->dxgi_handle,
         frame->pts,
         i,
@@ -589,3 +591,56 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
 
 	return NOERROR;
 } // DecideBufferSize
+
+struct frame * CPushPinDesktop::GetShmFrame(uint64_t i) {
+    uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
+    return (struct frame*) (((char*)shmem_) + frame_offset);
+
+}
+struct frame * CPushPinDesktop::GetShmFrame(DxgiFrame *dxgiFrame) {
+  return GetShmFrame(dxgiFrame->index);
+}
+
+HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
+  //expect to hold mutex!
+  for (int i = 0; i < shmem_->count; i++) {
+    auto shmFrame = GetShmFrame(i);
+    if (shmFrame->ref_cnt < 2 && shmFrame->nr < before) {
+      info("unfref %d < %d", shmFrame->nr, before);
+      shmFrame->ref_cnt = 0;
+    }
+  }
+  return S_OK;
+}
+
+HRESULT CPushPinDesktop::UnrefDxgiFrame(std::unique_ptr<DxgiFrame> dxgiFrame) {
+
+  if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
+    error("didn't get lock");
+    return S_FALSE;
+  }
+
+  auto shmFrame = GetShmFrame(dxgiFrame.get());
+  // TODO: check it is the same frame!
+  shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
+  debug("unref dxgi_handle: %p nr: %lld i: %d ref_cnt %d",
+    dxgiFrame->dxgi_handle,
+    dxgiFrame->nr,
+    dxgiFrame->index,
+    shmFrame->ref_cnt);
+  ReleaseMutex(shmem_mutex_);
+  return S_OK;
+}
+
+DxgiFrame::DxgiFrame() {
+}
+
+DxgiFrame::~DxgiFrame() {
+}
+
+
+void DxgiFrame::SetFrame(struct frame *shmemFrame, uint64_t i) {
+  nr = shmemFrame->nr;
+  index = i;
+  dxgi_handle = shmemFrame->dxgi_handle;
+}
