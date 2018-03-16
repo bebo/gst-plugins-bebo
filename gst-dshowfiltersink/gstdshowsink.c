@@ -40,7 +40,7 @@
 #include "../shared/bebo_shmem.h"
 
 #ifdef NDEBUG
-#undef GST_LOG_OBJECT(...)
+#undef GST_LOG_OBJECT
 #define GST_LOG_OBJECT(...)
 #endif
 
@@ -366,7 +366,8 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GstShmSink *self = GST_SHM_SINK (bsink);
 
     if (!GST_IS_BUFFER(buf)) {
-        GST_WARNING_OBJECT(self, "NOT A BUFFER???");
+        GST_ERROR_OBJECT(self, "NOT A BUFFER???");
+        return GST_FLOW_ERROR;
     }
     GST_OBJECT_LOCK (self);
 
@@ -404,9 +405,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     }
 
     /* GstMapInfo map; */
-    GstMemory *memory = NULL;
-
-    memory = gst_buffer_peek_memory(buf, 0);
+    GstMemory *memory = gst_buffer_peek_memory(buf, 0);
 
     if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
         GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
@@ -429,7 +428,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->ref_cnt = 1;
     gst_buffer_ref (buf);
 
-    GST_DEBUG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p",
+    GST_LOG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p",
         frame->dxgi_handle,
         //frame->dts / 1000000,
         frame->pts / 1000000,
@@ -542,14 +541,15 @@ static ID3D11Device* create_device_d3d11() {
       &device,
       &level_used, 
       &context);
-  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
 
   return device;
 }
 
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_ERROR("VENDOR : %s", glGetString(GL_VENDOR));
+  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
+  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
   share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
   share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
@@ -578,9 +578,7 @@ static void init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
   g_assert( share_context->device_interop_handle != NULL);
   g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
   // FIXME: how do we close these???
-
 }
-
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
