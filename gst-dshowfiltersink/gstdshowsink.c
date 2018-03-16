@@ -449,28 +449,30 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
         GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
     }
 
-    uint64_t index = self->shmem->write_ptr % self->shmem->count;
     self->shmem->write_ptr++;
+    uint64_t index = self->shmem->write_ptr % self->shmem->count;
 
     uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
     struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
 
-    if (frame->_gst_buf_ref != NULL && frame->ref_cnt > 0) {
-       GST_ERROR_OBJECT (self,
-           "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
-           frame->_gst_buf_ref,
-           index,
-           frame->dxgi_handle,
-           frame->ref_cnt);
+    if (frame->_gst_buf_ref != NULL) {
+      if (frame->ref_cnt > 0) {
+        GST_ERROR_OBJECT(self,
+          "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
+          frame->_gst_buf_ref,
+          index,
+          frame->dxgi_handle,
+          frame->ref_cnt);
 
-      self->shmem->write_ptr--;
-       //gst_buffer_unref(frame->_gst_buf_ref);
-       //frame->ref_cnt = 0;
-       //frame->_gst_buf_ref = NULL;
-      ReleaseMutex(self->shmem_mutex);
-      GST_OBJECT_UNLOCK (self);
-      ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-      return GST_FLOW_OK;
+        self->shmem->write_ptr--;
+        ReleaseMutex(self->shmem_mutex);
+        GST_OBJECT_UNLOCK(self);
+        ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+        return GST_FLOW_OK;
+      }
+      gst_buffer_unref(frame->_gst_buf_ref);
+      frame->ref_cnt = 0;
+      frame->_gst_buf_ref = NULL;
     }
 
     /* GstMapInfo map; */
@@ -493,6 +495,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
     frame->size = gst_buffer_get_size(buf);
     frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
+    frame->nr = self->shmem->write_ptr;
 
     frame->_gst_buf_ref = buf;
     frame->ref_cnt = 1;
