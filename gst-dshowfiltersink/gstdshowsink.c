@@ -524,24 +524,31 @@ const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
 static ID3D11Device* create_device_d3d11() {
   // TODO: should I be using ComPtr here?
   ID3D11Device *device;
-  ID3D11DeviceContext *context;
-  //IDXGIAdapter *adapter;
+  // ID3D11DeviceContext *context;
+  // IDXGIAdapter *adapter;
 
   /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
   D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
 
+  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+#if _DEBUG
+  flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
   HRESULT hr = D3D11CreateDevice(
-      0, //D3DADAPTER_DEFAULT, 
+      NULL, 
       D3D_DRIVER_TYPE_HARDWARE,
       NULL, 
-      D3D11_CREATE_DEVICE_DEBUG | D3D11_CREATE_DEVICE_BGRA_SUPPORT, 
+      flags, 
       d3d_feature_levels,
       sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
       D3D11_SDK_VERSION,
       &device,
       &level_used, 
-      &context);
-  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+      NULL);
+
+  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
 
   return device;
