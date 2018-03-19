@@ -713,7 +713,9 @@ HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
 }
 
 HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgiFrame) {
-  d3d_context_->Unmap(dxgiFrame->texture.Get(), 0);
+  if (dxgiFrame->texture.Get()) {
+    d3d_context_->Unmap(dxgiFrame->texture.Get(), 0);
+  }
 
   if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
     error("didn't get lock");
