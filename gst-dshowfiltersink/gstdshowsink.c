@@ -532,7 +532,7 @@ static ID3D11Device* create_device_d3d11() {
 
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 
-#if _DEBUG
+#ifdef _DEBUG
   flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
