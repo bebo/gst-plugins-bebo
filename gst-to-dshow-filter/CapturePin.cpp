@@ -1,19 +1,10 @@
-#include <streams.h>
+#include "Capture.h"
 
 #include <tchar.h>
-#include "Capture.h"
-#include "names_and_ids.h"
-#include "DibHelper.h"
 #include <wmsdkidl.h>
-#include "Logging.h"
-#include "CommonTypes.h"
-#include "d3d11.h"
-#include "d3d11_3.h"
-#include <dxgi.h>
-#include <Psapi.h>
-#include "libyuv/convert.h"
-#include "windows.h"  
 #include "allocator.h"
+#include "DibHelper.h"
+#include "Logging.h"
 
 #ifndef MIN
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
@@ -27,6 +18,14 @@ int show_performance = 1;
 int show_performance = 0;
 #endif
 
+const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
+{
+  D3D_FEATURE_LEVEL_11_0,
+  D3D_FEATURE_LEVEL_10_1,
+  D3D_FEATURE_LEVEL_10_0,
+  D3D_FEATURE_LEVEL_9_3,
+};
+
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
@@ -38,6 +37,9 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
   // now read some custom settings...
   WarmupCounter();
+
+  // TODO: we should do it when we get it from shmem
+  InitializeDXGI();
 }
 
 CPushPinDesktop::~CPushPinDesktop()
@@ -49,49 +51,11 @@ HRESULT CPushPinDesktop::Inactive(void) {
   active = false;
   info("STATS: %s", out_);
   return CSourceStream::Inactive();
-};
+}
 
 HRESULT CPushPinDesktop::Active(void) {
   active = true;
   return CSourceStream::Active();
-};
-
-
-const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
-{
-  D3D_FEATURE_LEVEL_11_0,
-  D3D_FEATURE_LEVEL_10_1,
-  D3D_FEATURE_LEVEL_10_0,
-  D3D_FEATURE_LEVEL_9_3,
-};
-
-HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) 
-{
-  ComPtr<ID3D11Device> device;
-
-  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
-
-  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-
-#ifdef _DEBUG
-  flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-  HRESULT hr = D3D11CreateDevice(
-      adapter,
-      D3D_DRIVER_TYPE_UNKNOWN,
-      NULL,
-      flags,
-      d3d_feature_levels,
-      sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
-      D3D11_SDK_VERSION,
-      &device,
-      &level_used,
-      &d3d_context_);
-  info("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
-      (unsigned int)level_used, (unsigned int)level_used);
-  device.As(&d3d_device3_);
-  return S_OK;
 }
 
 HRESULT CPushPinDesktop::InitAllocator(IMemAllocator** ppAllocator)
@@ -176,6 +140,145 @@ HRESULT CPushPinDesktop::DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppA
   return hr;
 }
 
+//
+// DecideBufferSize
+//
+// This will always be called after the format has been sucessfully
+// negotiated (this is negotiatebuffersize). So we have a look at m_mt to see what size image we agreed.
+// Then we can ask for buffers of the correct size to contain them.
+//
+HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
+    ALLOCATOR_PROPERTIES *pProperties)
+{
+  CheckPointer(pAlloc, E_POINTER);
+  CheckPointer(pProperties, E_POINTER);
+
+  CAutoLock cAutoLock(m_pFilter->pStateLock());
+  HRESULT hr = NOERROR;
+
+  VIDEOINFO *pvi = (VIDEOINFO *)m_mt.Format();
+  BITMAPINFOHEADER header = pvi->bmiHeader;
+
+  ASSERT_RETURN(header.biPlanes == 1); // sanity check
+  // ASSERT_RAISE(header.biCompression == 0); // meaning "none" sanity check, unless we are allowing for BI_BITFIELDS [?] so leave commented out for now
+  // now try to avoid this crash [XP, VLC 1.1.11]: vlc -vvv dshow:// :dshow-vdev="bebo-game-capture" :dshow-adev --sout  "#transcode{venc=theora,vcodec=theo,vb=512,scale=0.7,acodec=vorb,ab=128,channels=2,samplerate=44100,audio-sync}:standard{access=file,mux=ogg,dst=test.ogv}" with 10x10 or 1000x1000
+  // LODO check if biClrUsed is passed in right for 16 bit [I'd guess it is...]
+  // pProperties->cbBuffer = pvi->bmiHeader.biSizeImage; // too small. Apparently *way* too small.
+
+  int bytesPerLine;
+  // there may be a windows method that would do this for us...GetBitmapSize(&header); but might be too small for VLC? LODO try it :)
+  // some pasted code...
+  int bytesPerPixel = 32 / 8; // we convert from a 32 bit to i420, so need more space in this case
+
+  bytesPerLine = header.biWidth * bytesPerPixel;
+  /* round up to a dword boundary for stride */
+  if (bytesPerLine & 0x0003)
+  {
+    bytesPerLine |= 0x0003;
+    ++bytesPerLine;
+  }
+
+  ASSERT_RETURN(header.biHeight > 0); // sanity check
+  ASSERT_RETURN(header.biWidth > 0); // sanity check
+  // NB that we are adding in space for a final "pixel array" (http://en.wikipedia.org/wiki/BMP_file_format#DIB_Header_.28Bitmap_Information_Header.29) even though we typically don't need it, this seems to fix the segfaults
+  // maybe somehow down the line some VLC thing thinks it might be there...weirder than weird.. LODO debug it LOL.
+  int bitmapSize = 14 + header.biSize + (long)(bytesPerLine)*(header.biHeight) + bytesPerLine*header.biHeight;
+  //pProperties->cbBuffer = header.biHeight * header.biWidth * 3 / 2; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
+  pProperties->cbBuffer = header.biHeight * header.biWidth * bytesPerPixel; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
+
+  pProperties->cBuffers = 1; // 2 here doesn't seem to help the crashes...
+
+  // Ask the allocator to reserve us some sample memory. NOTE: the function
+  // can succeed (return NOERROR) but still not have allocated the
+  // memory that we requested, so we must check we got whatever we wanted.
+  ALLOCATOR_PROPERTIES Actual;
+  hr = pAlloc->SetProperties(pProperties, &Actual);
+  if (FAILED(hr))
+  {
+    return hr;
+  }
+
+  // Is this allocator unsuitable?
+  if (Actual.cbBuffer < pProperties->cbBuffer)
+  {
+    return E_FAIL;
+  }
+
+  return NOERROR;
+} // DecideBufferSize
+
+HRESULT CPushPinDesktop::InitializeDXGI() {
+  ComPtr<IDXGIFactory2> dxgi_factory;
+  UINT flags = 0;
+
+#ifdef _DEBUG
+  flags |= DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+  HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
+      (void**)(dxgi_factory.GetAddressOf()));
+
+  // TODO: we need to get the right adapter but, we don't have access to dxgi shared handle atm
+  // cuz it's in dxgi_frame
+#if 0
+  LUID luid;
+  dxgiFactory->GetSharedResourceAdapterLuid(dxgi_frame->dxgi_handle, &luid);
+
+  UINT index = 0;
+  IDXGIAdapter* adapter = NULL;
+  while (SUCCEEDED(dxgiFactory->EnumAdapters(index, &adapter)))
+  {
+    DXGI_ADAPTER_DESC desc;
+    adapter->GetDesc(&desc);
+    if (desc.AdapterLuid.LowPart == luid.LowPart && desc.AdapterLuid.HighPart == luid.HighPart) {
+      // Identified a matching adapter.
+      break;
+    }
+    adapter->Release();
+    index++;
+  }
+  adapter->Release();
+#endif
+
+  //TODO handle result
+  hr = CreateDeviceD3D11(NULL);
+  return hr;
+}
+
+HRESULT CPushPinDesktop::CreateStagingTextures(D3D11_TEXTURE2D_DESC desc, 
+    int size) {
+  return 0;
+}
+
+HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) 
+{
+  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3;
+
+  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+#ifdef _DEBUG
+  flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+  D3D_DRIVER_TYPE driver_type = (adapter == NULL) ? D3D_DRIVER_TYPE_HARDWARE :
+    D3D_DRIVER_TYPE_UNKNOWN;
+
+  HRESULT hr = D3D11CreateDevice(
+      adapter,
+      driver_type,
+      NULL,
+      flags,
+      kD3DFeatureLevels,
+      sizeof(kD3DFeatureLevels) / sizeof(D3D_FEATURE_LEVEL),
+      D3D11_SDK_VERSION,
+      &d3d_device_,
+      &level_used,
+      &d3d_context_);
+  info("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+      (unsigned int)level_used, (unsigned int)level_used);
+  return S_OK;
+}
+
 HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 {
   Command com;
@@ -246,11 +349,26 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 }
 
 HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample) {
-  error("SHOULD NOT BE CALLED");
+  error("FillBuffer SHOULD NOT BE CALLED");
   return E_NOTIMPL;
 }
 
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
+D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTexture(D3D11_TEXTURE2D_DESC share_desc) {
+  D3D11_TEXTURE2D_DESC desc = { 0 };
+  desc.Format = share_desc.Format;
+  desc.Width = share_desc.Width;
+  desc.Height = share_desc.Height;
+  desc.MipLevels = 1;
+  desc.ArraySize = 1;
+  desc.SampleDesc.Count = 1;
+  desc.Usage = D3D11_USAGE_STAGING;
+  desc.BindFlags = 0;
+  desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
+  desc.MiscFlags = 0;
+  return desc;
+}
+
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgi_frame)
 {
   CheckPointer(pSample, E_POINTER);
 
@@ -265,7 +383,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
       return S_FALSE;
     }
 
-    int code = FillBufferFromShMem(dxgiFrame, &startFrame, &endFrame, &discontinuity);
+    int code = FillBufferFromShMem(dxgi_frame, &startFrame, &endFrame, &discontinuity);
 
     if (code == S_OK) {
       gotFrame = true;
@@ -281,79 +399,38 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
   }
 
   if (gotFrame) {
-    if (!d3d_context_.Get()) {
-      ComPtr<IDXGIFactory2> dxgiFactory;
-      UINT flags = 0;
+    ComPtr<ID3D11Texture2D> shared_texture;
 
-#ifdef _DEBUG
-      flags |= DXGI_CREATE_FACTORY_DEBUG;
-#endif
-
-      HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
-          (void**)(dxgiFactory.GetAddressOf()));
-
-      LUID luid;
-      dxgiFactory->GetSharedResourceAdapterLuid(dxgiFrame->dxgi_handle, &luid);
-
-      UINT index = 0;
-      IDXGIAdapter* adapter = NULL;
-      while (SUCCEEDED(dxgiFactory->EnumAdapters(index, &adapter)))
-      {
-        DXGI_ADAPTER_DESC desc;
-        adapter->GetDesc(&desc);
-        if (desc.AdapterLuid.LowPart == luid.LowPart && desc.AdapterLuid.HighPart == luid.HighPart) {
-          // Identified a matching adapter.
-          break;
-        }
-        adapter->Release();
-        adapter = NULL;
-        index++;
-      }
-      // At this point, if pAdapter is non-null, you identified an adapter that 
-      // can open the shared resource.
-
-      //TODO check result:
-      CreateDeviceD3D11(adapter);
-    }
-
-    ComPtr<ID3D11Texture2D> resource;
-
-    HRESULT hr = d3d_device3_->OpenSharedResource(
-        dxgiFrame->dxgi_handle,
+    HRESULT hr = d3d_device_->OpenSharedResource(
+        dxgi_frame->dxgi_handle,
         __uuidof(ID3D11Texture2D),
-        (void**)resource.GetAddressOf());
+        (void**)shared_texture.GetAddressOf());
 
     if (hr != S_OK) {
+      // TODO: error handling, what to do here
       error("OpenSharedResource failed %p", hr);
-      // TODO: what to do here
     }
-
-    D3D11_TEXTURE2D_DESC desc = { 0 };
-    D3D11_TEXTURE2D_DESC share_desc = { 0 };
-    resource->GetDesc(&share_desc);
-    desc.Format = share_desc.Format;
-    desc.Width = share_desc.Width;
-    desc.Height = share_desc.Height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_STAGING;
-    desc.BindFlags = 0;
-    desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
-    desc.MiscFlags = 0;
-
-    d3d_device3_->CreateTexture2D(&desc, NULL, &dxgiFrame->texture);
-
-    d3d_context_->CopyResource(dxgiFrame->texture.Get(), resource.Get());
 
     // FIXME - need to do the map 3 frames behind otherwise we kill cpu/gpu performance
     // https://msdn.microsoft.com/en-us/library/windows/desktop/bb205132(v=vs.85).aspx#Performance_Considerations
 
+    // TODO: create staging textures? ideally we'd already have 
+    // created it when we open shmem
+    D3D11_TEXTURE2D_DESC share_desc;
+    shared_texture->GetDesc(&share_desc);
+
+    D3D11_TEXTURE2D_DESC desc = ConvertToStagingTexture(share_desc);
+    d3d_device_->CreateTexture2D(&desc, NULL, &dxgi_frame->texture);
+
+    // step 1: get next available staging dxgi frame texture, then copy into it
+    d3d_context_->CopyResource(dxgi_frame->texture.Get(), shared_texture.Get());
+
+
     D3D11_MAPPED_SUBRESOURCE cpu_mem = { 0 };
-    hr = d3d_context_->Map(dxgiFrame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
+    hr = d3d_context_->Map(dxgi_frame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
     if (hr != S_OK) {
       error("d3dcontext->Map failed %p", hr);
-      // TODO: WHAT TO DO?
+      // TODO: error handling, WHAT TO DO?
     }
 
     if (cpu_mem.DepthPitch == 0) {
@@ -624,80 +701,13 @@ int CPushPinDesktop::getCaptureDesiredFinalHeight() {
   return m_iCaptureConfigHeight; // defaults to full/config static
 }
 
-//
-// DecideBufferSize
-//
-// This will always be called after the format has been sucessfully
-// negotiated (this is negotiatebuffersize). So we have a look at m_mt to see what size image we agreed.
-// Then we can ask for buffers of the correct size to contain them.
-//
-HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
-    ALLOCATOR_PROPERTIES *pProperties)
-{
-  CheckPointer(pAlloc, E_POINTER);
-  CheckPointer(pProperties, E_POINTER);
-
-  CAutoLock cAutoLock(m_pFilter->pStateLock());
-  HRESULT hr = NOERROR;
-
-  VIDEOINFO *pvi = (VIDEOINFO *)m_mt.Format();
-  BITMAPINFOHEADER header = pvi->bmiHeader;
-
-  ASSERT_RETURN(header.biPlanes == 1); // sanity check
-  // ASSERT_RAISE(header.biCompression == 0); // meaning "none" sanity check, unless we are allowing for BI_BITFIELDS [?] so leave commented out for now
-  // now try to avoid this crash [XP, VLC 1.1.11]: vlc -vvv dshow:// :dshow-vdev="bebo-game-capture" :dshow-adev --sout  "#transcode{venc=theora,vcodec=theo,vb=512,scale=0.7,acodec=vorb,ab=128,channels=2,samplerate=44100,audio-sync}:standard{access=file,mux=ogg,dst=test.ogv}" with 10x10 or 1000x1000
-  // LODO check if biClrUsed is passed in right for 16 bit [I'd guess it is...]
-  // pProperties->cbBuffer = pvi->bmiHeader.biSizeImage; // too small. Apparently *way* too small.
-
-  int bytesPerLine;
-  // there may be a windows method that would do this for us...GetBitmapSize(&header); but might be too small for VLC? LODO try it :)
-  // some pasted code...
-  int bytesPerPixel = 32 / 8; // we convert from a 32 bit to i420, so need more space in this case
-
-  bytesPerLine = header.biWidth * bytesPerPixel;
-  /* round up to a dword boundary for stride */
-  if (bytesPerLine & 0x0003)
-  {
-    bytesPerLine |= 0x0003;
-    ++bytesPerLine;
-  }
-
-  ASSERT_RETURN(header.biHeight > 0); // sanity check
-  ASSERT_RETURN(header.biWidth > 0); // sanity check
-  // NB that we are adding in space for a final "pixel array" (http://en.wikipedia.org/wiki/BMP_file_format#DIB_Header_.28Bitmap_Information_Header.29) even though we typically don't need it, this seems to fix the segfaults
-  // maybe somehow down the line some VLC thing thinks it might be there...weirder than weird.. LODO debug it LOL.
-  int bitmapSize = 14 + header.biSize + (long)(bytesPerLine)*(header.biHeight) + bytesPerLine*header.biHeight;
-  //pProperties->cbBuffer = header.biHeight * header.biWidth * 3 / 2; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
-  pProperties->cbBuffer = header.biHeight * header.biWidth * bytesPerPixel; // necessary to prevent an "out of memory" error for FMLE. Yikes. Oh wow yikes.
-
-  pProperties->cBuffers = 1; // 2 here doesn't seem to help the crashes...
-
-  // Ask the allocator to reserve us some sample memory. NOTE: the function
-  // can succeed (return NOERROR) but still not have allocated the
-  // memory that we requested, so we must check we got whatever we wanted.
-  ALLOCATOR_PROPERTIES Actual;
-  hr = pAlloc->SetProperties(pProperties, &Actual);
-  if (FAILED(hr))
-  {
-    return hr;
-  }
-
-  // Is this allocator unsuitable?
-  if (Actual.cbBuffer < pProperties->cbBuffer)
-  {
-    return E_FAIL;
-  }
-
-  return NOERROR;
-} // DecideBufferSize
-
 struct frame * CPushPinDesktop::GetShmFrame(uint64_t i) {
   uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
   return (struct frame*) (((char*)shmem_) + frame_offset);
-
 }
-struct frame * CPushPinDesktop::GetShmFrame(DxgiFrame *dxgiFrame) {
-  return GetShmFrame(dxgiFrame->index);
+
+struct frame * CPushPinDesktop::GetShmFrame(DxgiFrame *dxgi_frame) {
+  return GetShmFrame(dxgi_frame->index);
 }
 
 HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
@@ -712,9 +722,9 @@ HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
   return S_OK;
 }
 
-HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgiFrame) {
-  if (dxgiFrame->texture.Get()) {
-    d3d_context_->Unmap(dxgiFrame->texture.Get(), 0);
+HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
+  if (dxgi_frame->texture.Get()) {
+    d3d_context_->Unmap(dxgi_frame->texture.Get(), 0);
   }
 
   if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
@@ -722,14 +732,14 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgiFrame) {
     return S_FALSE;
   }
 
-  auto shmFrame = GetShmFrame(dxgiFrame);
+  auto shmFrame = GetShmFrame(dxgi_frame);
   // TODO: check it is the same frame!
   shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
 
   debug("unref dxgi_handle: %p nr: %lld i: %d ref_cnt %d",
-      dxgiFrame->dxgi_handle,
-      dxgiFrame->nr,
-      dxgiFrame->index,
+      dxgi_frame->dxgi_handle,
+      dxgi_frame->nr,
+      dxgi_frame->index,
       shmFrame->ref_cnt);
   ReleaseMutex(shmem_mutex_);
   return S_OK;

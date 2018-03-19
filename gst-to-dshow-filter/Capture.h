@@ -8,18 +8,23 @@
 #ifndef CAPTURE_H
 #define CAPTURE_H
 
+#include <windows.h>
+#include <streams.h>
 #include <strsafe.h>
-
-#include "CommonTypes.h"
-#include "registry.h"
-#include "../shared/bebo_shmem.h"
-#include "names_and_ids.h"
+#include <d3d11.h>
 #include <d3d11_3.h>
+#include <dxgi.h>
+
+#include "../shared/bebo_shmem.h"
+#include "registry.h"
+#include "names_and_ids.h"
 #include <wrl.h>
+
 using Microsoft::WRL::ComPtr;
 
 class CPushPinDesktop;
 class DxgiFrame;
+
 
 // parent
 class CGameCapture : public CSource // public IAMFilterMiscFlags // CSource is CBaseFilter is IBaseFilter is IMediaFilter is IPersist which is IUnknown
@@ -73,7 +78,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     REFERENCE_TIME m_rtFrameLength = UNITS / 30 ; // also used to get the fps
 
     int getNegotiatedFinalWidth();
-    int getNegotiatedFinalHeight();                   
+    int getNegotiatedFinalHeight();
 
     HANDLE shmem_handle_;
     struct shmem *shmem_ = nullptr;
@@ -87,10 +92,6 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
     bool m_bFormatAlreadySet = false;
     volatile bool active = false;
-    float GetFps();
-
-    int getCaptureDesiredFinalWidth();
-    int getCaptureDesiredFinalHeight();
 
     REFERENCE_TIME lastFrame_ = 0;
     int64_t time_offset_dts_ns_ = 0;
@@ -105,16 +106,20 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     uint64_t first_frame_ms_ = 0;
     long double frame_processing_time_ms_ = 0.0;
 
-    ComPtr<ID3D11Device3> d3d_device3_;
+    ComPtr<ID3D11Device> d3d_device_;
     ComPtr<ID3D11DeviceContext> d3d_context_;
-    ComPtr<ID3D11Texture2D> copy_texture_;
 
     wchar_t out_[1024];
 
-    HRESULT DoBufferProcessingLoop(void) override;
-
+    virtual HRESULT DoBufferProcessingLoop(void) override;
     virtual HRESULT InitAllocator(IMemAllocator** ppAllocator) override;
     virtual HRESULT DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppAlloc) override;
+
+    float GetFps();
+    int getCaptureDesiredFinalWidth();
+    int getCaptureDesiredFinalHeight();
+
+
     // STDMETHODIMP SuggestAllocatorProperties(const ALLOCATOR_PROPERTIES* pprop) override;
     // STDMETHODIMP GetAllocatorProperties(ALLOCATOR_PROPERTIES* pprop) override;
 
@@ -181,6 +186,10 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
   private:
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
+    HRESULT InitializeDXGI();
+    HRESULT CreateStagingTextures(D3D11_TEXTURE2D_DESC desc, int size);
+    D3D11_TEXTURE2D_DESC ConvertToStagingTexture(D3D11_TEXTURE2D_DESC share_desc);
+
 
 };
 
@@ -189,12 +198,16 @@ class DxgiFrame {
     HANDLE dxgi_handle = nullptr;
     uint64_t nr = 0;
     uint64_t index = 0;
+    uint64_t texture_timestamp = 0;
     ComPtr<ID3D11Texture2D> texture;
 
     DxgiFrame();
     ~DxgiFrame();
 
     void SetFrame(struct frame *frameData, uint64_t i);
+};
+
+class DxgiFramePool {
 };
 
 #endif
