@@ -69,14 +69,19 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter)
 {
   ComPtr<ID3D11Device> device;
 
-  /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
   D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
+
+  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+#ifdef _DEBUG
+  flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
 
   HRESULT hr = D3D11CreateDevice(
       adapter,
       D3D_DRIVER_TYPE_UNKNOWN,
       NULL,
-      D3D11_CREATE_DEVICE_DEBUG | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+      flags,
       d3d_feature_levels,
       sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
       D3D11_SDK_VERSION,
@@ -278,7 +283,14 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgiFrame)
   if (gotFrame) {
     if (!d3d_context_.Get()) {
       ComPtr<IDXGIFactory2> dxgiFactory;
-      HRESULT hr = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, __uuidof(IDXGIFactory2), (void**)(dxgiFactory.GetAddressOf()));
+      UINT flags = 0;
+
+#ifdef _DEBUG
+      flags |= DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+      HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
+          (void**)(dxgiFactory.GetAddressOf()));
 
       LUID luid;
       dxgiFactory->GetSharedResourceAdapterLuid(dxgiFrame->dxgi_handle, &luid);
