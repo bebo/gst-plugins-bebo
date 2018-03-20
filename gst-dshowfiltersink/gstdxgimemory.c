@@ -33,9 +33,8 @@
 #define GST_LOG(...)
 #endif
 
-#define GL_MEM_WIDTH(gl_mem) _get_plane_width (&gl_mem->info, gl_mem->plane)
 #define GL_MEM_HEIGHT(gl_mem) _get_plane_height (&gl_mem->info, gl_mem->plane)
-#define GL_MEM_STRIDE(gl_mem) GST_VIDEO_INFO_PLANE_STRIDE (&gl_mem->info, gl_mem->plane)
+#define GL_DXGI_MEM_HEIGHT(gl_mem) _get_plane_height (&gl_mem->mem.info, gl_mem->mem.plane)
 
 static inline guint
 _get_plane_width (GstVideoInfo * info, guint plane)
@@ -173,12 +172,12 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   return tex_id;
 }
 
-static GstMemory *
-_default_gl_dxgi_tex_copy (GstGLMemory * src, gssize offset, gssize size)
-{
-  GST_CAT_ERROR (GST_CAT_GL_DXGI_MEMORY, "Cannot copy DXGI textures");
-  return NULL;
-}
+/* static GstMemory * */
+/* _default_gl_dxgi_tex_copy (GstGLMemory * src, gssize offset, gssize size) */
+/* { */
+/*   GST_CAT_ERROR (GST_CAT_GL_DXGI_MEMORY, "Cannot copy DXGI textures"); */
+/*   return NULL; */
+/* } */
 
 static gboolean
 _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
@@ -346,6 +345,68 @@ _gl_dxgi_mem_alloc (GstGLBaseMemoryAllocator * allocator,
   return mem;
 }
 
+static GstMemory *
+_gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
+{
+  GstAllocationParams params = { 0, GST_MEMORY_CAST (src)->align, 0, 0 };
+  GstGLBaseMemoryAllocator *base_mem_allocator;
+  GstAllocator *allocator;
+  GstGLDXGIMemory *dest = NULL;
+
+  allocator = GST_MEMORY_CAST (src)->allocator;
+  base_mem_allocator = (GstGLBaseMemoryAllocator *) allocator;
+
+  if (src->mem.tex_target == GST_GL_TEXTURE_TARGET_EXTERNAL_OES) {
+    GST_CAT_ERROR (GST_CAT_GL_DXGI_MEMORY, "Cannot copy External OES textures");
+    return NULL;
+  }
+
+  /* If not doing a full copy, then copy to sysmem, the 2D represention of the
+   * texture would become wrong */
+  if (offset > 0 || size < GST_MEMORY_CAST (src)->size) {
+    return base_mem_allocator->fallback_mem_copy (GST_MEMORY_CAST (src), offset,
+        size);
+  }
+
+  dest = (GstMemory *) g_new0 (GstGLDXGIMemory, 1);
+
+  gst_gl_memory_init (GST_GL_MEMORY_CAST (dest), allocator, NULL,
+      src->mem.mem.context, src->mem.tex_target, src->mem.tex_format, &params,
+      &src->mem.info, src->mem.plane, &src->mem.valign, NULL, NULL);
+
+  if (!GST_MEMORY_FLAG_IS_SET (src, GST_GL_BASE_MEMORY_TRANSFER_NEED_UPLOAD)) {
+    GstMapInfo dinfo;
+
+    if (!gst_memory_map (GST_MEMORY_CAST (dest), &dinfo,
+            GST_MAP_WRITE | GST_MAP_GL)) {
+      GST_CAT_WARNING (GST_CAT_GL_DXGI_MEMORY,
+          "Failed not map destination for writing");
+      gst_memory_unref (GST_MEMORY_CAST (dest));
+      return NULL;
+    }
+
+    if (!gst_gl_memory_copy_into ((GstGLMemory *) src,
+            ((GstGLMemory *) dest)->tex_id, src->mem.tex_target,
+            src->mem.tex_format, src->mem.tex_width, GL_DXGI_MEM_HEIGHT (src))) {
+      GST_CAT_WARNING (GST_CAT_GL_DXGI_MEMORY, "Could not copy GL Memory");
+      gst_memory_unmap (GST_MEMORY_CAST (dest), &dinfo);
+      goto memcpy;
+    }
+
+    gst_memory_unmap (GST_MEMORY_CAST (dest), &dinfo);
+  } else {
+  memcpy:
+    if (!gst_gl_base_memory_memcpy ((GstGLBaseMemory *) src,
+            (GstGLBaseMemory *) dest, offset, size)) {
+      GST_CAT_WARNING (GST_CAT_GL_DXGI_MEMORY, "Could not copy GL Memory");
+      gst_memory_unref (GST_MEMORY_CAST (dest));
+      return NULL;
+    }
+  }
+
+  return dest;
+}
+
 static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
@@ -356,16 +417,16 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
   gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
 
-  gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) _gl_dxgi_tex_map;
-  gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) _gl_dxgi_tex_unmap;
-  gl_tex->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
 
   /* TODO: */
   /* gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) _gl_mem_destroy; */
 
   gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_dxgi_mem_alloc;
   gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
-  gl_base->copy = (GstGLBaseMemoryAllocatorCopyFunction) _default_gl_dxgi_tex_copy;
+
+  gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) _gl_dxgi_tex_map;
+  gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) _gl_dxgi_tex_unmap;
+  gl_tex->copy = (GstGLBaseMemoryAllocatorCopyFunction) _gl_dxgi_text_copy;
 
   allocator_class->alloc = _gl_mem_alloc;
 
