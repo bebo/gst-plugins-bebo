@@ -791,6 +791,9 @@ HRESULT CPushPinDesktop::UnrefBefore(uint64_t before) {
 }
 
 HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
+  if (dxgi_frame == NULL) {
+    return S_OK;
+  }
   if (dxgi_frame->texture.Get()) {
     d3d_context_->Unmap(dxgi_frame->texture.Get(), 0);
   }
