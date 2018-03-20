@@ -11,6 +11,7 @@
 #endif
 
 #define NS_TO_REFERENCE_TIME(t) (t)/100
+#define DELAY_FRAMES_COUNT 3
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -29,7 +30,8 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
-  m_pParent(pFilter)
+  m_pParent(pFilter),
+  m_rtFrameLength(UNITS / 60)
 {
   info("CPushPinDesktop");
 
@@ -245,11 +247,6 @@ HRESULT CPushPinDesktop::InitializeDXGI() {
   return hr;
 }
 
-HRESULT CPushPinDesktop::CreateStagingTextures(D3D11_TEXTURE2D_DESC desc, 
-    int size) {
-  return 0;
-}
-
 HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter) 
 {
   D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3;
@@ -287,9 +284,9 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 
   do {
     while (!CheckRequest(&com)) {
-      IMediaSample *pSample;
+      IMediaSample *media_sample;
 
-      HRESULT hr = GetDeliveryBuffer(&pSample, NULL, NULL, 0);
+      HRESULT hr = GetDeliveryBuffer(&media_sample, NULL, NULL, 0);
       if (FAILED(hr)) {
         Sleep(1);
         continue;  // go round again. Perhaps the error will go away
@@ -298,14 +295,14 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
       }
 
       // Virtual function user will override.
-      std::unique_ptr<DxgiFrame> dxgi_frame = std::make_unique<DxgiFrame>();
-      hr = FillBuffer(pSample, dxgi_frame.get());
+      DxgiFrame* dxgi_frame = NULL;
+      hr = FillBuffer(media_sample, &dxgi_frame);
 
       if (hr == S_OK) {
-        hr = Deliver(pSample);
-        pSample->Release();
+        hr = Deliver(media_sample);
+        media_sample->Release();
 
-        UnrefDxgiFrame(dxgi_frame.get());
+        UnrefDxgiFrame(dxgi_frame);
 
         // downstream filter returns S_FALSE if it wants us to
         // stop or an error if it's reporting an error.
@@ -317,14 +314,14 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 
       } else if (hr == S_FALSE) {
         // derived class wants us to stop pushing data
-        pSample->Release();
-        UnrefDxgiFrame(dxgi_frame.get());
+        media_sample->Release();
+        UnrefDxgiFrame(dxgi_frame);
         DeliverEndOfStream();
         return S_OK;
       } else {
         // derived class encountered an error
-        pSample->Release();
-        UnrefDxgiFrame(dxgi_frame.get());
+        media_sample->Release();
+        UnrefDxgiFrame(dxgi_frame);
         DbgLog((LOG_ERROR, 1, TEXT("Error %08lX from FillBuffer!!!"), hr));
         DeliverEndOfStream();
         m_pFilter->NotifyEvent(EC_ERRORABORT, hr, 0);
@@ -348,7 +345,7 @@ HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
   return S_FALSE;
 }
 
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample) {
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample) {
   error("FillBuffer SHOULD NOT BE CALLED");
   return E_NOTIMPL;
 }
@@ -368,87 +365,155 @@ D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTexture(D3D11_TEXTURE2D_DE
   return desc;
 }
 
-HRESULT CPushPinDesktop::FillBuffer(IMediaSample* pSample, DxgiFrame* dxgi_frame)
+HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_dxgi_frame)
 {
-  CheckPointer(pSample, E_POINTER);
+  CheckPointer(media_sample, E_POINTER);
 
-  REFERENCE_TIME startFrame;
-  REFERENCE_TIME endFrame;
-  BOOL discontinuity;
+  REFERENCE_TIME start_frame;
+  REFERENCE_TIME end_frame;
+  bool discontinuity;
+  bool got_frame = false;
+  DWORD wait_time = INFINITE;
 
-  boolean gotFrame = false;
-  while (!gotFrame) {
+  while (!got_frame) {
     if (!active) {
       info("FillBuffer - inactive");
       return S_FALSE;
     }
 
-    int code = FillBufferFromShMem(dxgi_frame, &startFrame, &endFrame, &discontinuity);
+    DxgiFrame* dxgi_frame = new DxgiFrame();
+
+    int code = FillBufferFromShMem(dxgi_frame, &start_frame, &end_frame, 
+        &discontinuity, wait_time);
 
     if (code == S_OK) {
-      gotFrame = true;
+      got_frame = true;
     } else if (code == 2) { // not initialized yet
-      gotFrame = false;
+      got_frame = false;
       continue;
-    } else if (code == 3) { // black frame
-      gotFrame = false;
-      continue;
+    } else if (code == 3) { // failed to hold lock, timeout
+      got_frame = false;
     } else {
-      gotFrame = false;
+      got_frame = false;
+      continue;
     }
+
+    if (got_frame) {
+      dxgi_frame->start_time = start_frame;
+      dxgi_frame->end_time = end_frame;
+      dxgi_frame->texture_timestamp = last_frame_;
+
+      CopyTextureToStagingQueue(dxgi_frame);
+    }
+
+    DWORD wait_time_ms = GetReadyFrameFromQueue(&dxgi_frame);
+    if (wait_time_ms != 0) {
+      got_frame = false;
+      wait_time = wait_time_ms;
+      continue;
+    }
+
+    got_frame = true;
+    wait_time = INFINITE;
+
+    PushFrameToMediaSample(dxgi_frame, media_sample);
+    *out_dxgi_frame = dxgi_frame;
   }
 
-  if (gotFrame) {
-    ComPtr<ID3D11Texture2D> shared_texture;
-
-    HRESULT hr = d3d_device_->OpenSharedResource(
-        dxgi_frame->dxgi_handle,
-        __uuidof(ID3D11Texture2D),
-        (void**)shared_texture.GetAddressOf());
-
-    if (hr != S_OK) {
-      // TODO: error handling, what to do here
-      error("OpenSharedResource failed %p", hr);
-    }
-
-    // FIXME - need to do the map 3 frames behind otherwise we kill cpu/gpu performance
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/bb205132(v=vs.85).aspx#Performance_Considerations
-
-    // TODO: create staging textures? ideally we'd already have 
-    // created it when we open shmem
-    D3D11_TEXTURE2D_DESC share_desc;
-    shared_texture->GetDesc(&share_desc);
-
-    D3D11_TEXTURE2D_DESC desc = ConvertToStagingTexture(share_desc);
-    d3d_device_->CreateTexture2D(&desc, NULL, &dxgi_frame->texture);
-
-    // step 1: get next available staging dxgi frame texture, then copy into it
-    d3d_context_->CopyResource(dxgi_frame->texture.Get(), shared_texture.Get());
-
-
-    D3D11_MAPPED_SUBRESOURCE cpu_mem = { 0 };
-    hr = d3d_context_->Map(dxgi_frame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
-    if (hr != S_OK) {
-      error("d3dcontext->Map failed %p", hr);
-      // TODO: error handling, WHAT TO DO?
-    }
-
-    if (cpu_mem.DepthPitch == 0) {
-      // should never happen, but i've seen weird things happened before.
-      error("DepthPitch is 0, should not be possible, but here we are.");
-    }
-
-    ((CMediaSample*)pSample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
-  }
-
-  pSample->SetTime((REFERENCE_TIME *)&startFrame, (REFERENCE_TIME *)&endFrame);
-  // Set TRUE on every sample for uncompressed frames http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
-  pSample->SetSyncPoint(TRUE);
-  pSample->SetDiscontinuity(discontinuity);
+  // Set TRUE on every sample for uncompressed frames 
+  // http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
+  media_sample->SetSyncPoint(TRUE);
+  media_sample->SetDiscontinuity(discontinuity);
+  media_sample->SetTime(&(*out_dxgi_frame)->start_time, &(*out_dxgi_frame)->end_time);
 
   return S_OK;
 }
 
+DWORD CPushPinDesktop::GetReadyFrameFromQueue(DxgiFrame** out_frame) {
+  DxgiFrame* frame = dxgi_frame_queue_.front();
+
+  int64_t age = last_frame_ - frame->texture_timestamp;
+
+  if (last_frame_ > 0 &&
+      age >= (DELAY_FRAMES_COUNT * m_rtFrameLength)) {
+    debug("%S expired texture age: %llu, now: %llu, frame ts: %llu, frame length delay: %llu, size: %d", 
+        __func__,
+        last_frame_ - frame->texture_timestamp,
+        last_frame_, frame->texture_timestamp, 
+        (DELAY_FRAMES_COUNT * m_rtFrameLength),
+        dxgi_frame_queue_.size());
+    *out_frame = frame;
+    dxgi_frame_queue_.pop();
+    return 0;
+  }
+
+  uint64_t wait_time_ms = (DELAY_FRAMES_COUNT * m_rtFrameLength) / 100000L;
+  debug("%S WAIT age: %llu, last_frame_: %llu, frame ts: %llu, size: %d, frame length delay: %llu, wait_time_ms: %llu", 
+      __func__,
+      last_frame_ - frame->texture_timestamp,
+      last_frame_, frame->texture_timestamp, 
+      dxgi_frame_queue_.size(),
+      (DELAY_FRAMES_COUNT * m_rtFrameLength),
+      wait_time_ms);
+  return (DWORD) wait_time_ms;
+}
+
+HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
+  ComPtr<ID3D11Texture2D> shared_texture;
+
+  HRESULT hr = d3d_device_->OpenSharedResource(
+      frame->dxgi_handle,
+      __uuidof(ID3D11Texture2D),
+      (void**)shared_texture.GetAddressOf());
+
+  if (hr != S_OK) {
+    // TODO: error handling, what to do here
+    error("OpenSharedResource failed %p", hr);
+  }
+
+  D3D11_TEXTURE2D_DESC desc = { 0 };
+  D3D11_TEXTURE2D_DESC share_desc = { 0 };
+
+  shared_texture->GetDesc(&share_desc);
+
+  desc.Format = share_desc.Format;
+  desc.Width = share_desc.Width;
+  desc.Height = share_desc.Height;
+  desc.MipLevels = 1;
+  desc.ArraySize = 1;
+  desc.SampleDesc.Count = 1;
+  desc.Usage = D3D11_USAGE_STAGING;
+  desc.BindFlags = 0;
+  desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
+  desc.MiscFlags = 0;
+
+  d3d_device_->CreateTexture2D(&desc, NULL, &frame->texture);
+
+  d3d_context_->CopyResource(frame->texture.Get(), shared_texture.Get());
+
+  dxgi_frame_queue_.emplace(frame);
+  return hr;
+}
+
+HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample) {
+  D3D11_MAPPED_SUBRESOURCE cpu_mem = { 0 };
+
+  // Unmap happens after we deliver the buffer
+  HRESULT hr = d3d_context_->Map(frame->texture.Get(), 0, D3D11_MAP_READ, 0, &cpu_mem);
+  if (hr != S_OK) {
+    // TODO: error handling, WHAT TO DO?
+    error("d3dcontext->Map failed %p", hr);
+  }
+
+  if (cpu_mem.DepthPitch == 0) {
+    // should never happen, but i've seen weird things happened before.
+    error("DepthPitch is 0, should not be possible, but here we are.");
+  }
+
+  frame->texture_mapped_to_memory = true;
+  ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
+  return S_OK;
+}
 
 HRESULT CPushPinDesktop::OpenShmMem()
 {
@@ -506,8 +571,8 @@ HRESULT CPushPinDesktop::OpenShmMem()
   return S_OK;
 }
 
-HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity)
-{
+HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TIME *start_frame, 
+    REFERENCE_TIME *end_frame, bool *discontinuity, DWORD wait_time_ms) {
   if (OpenShmMem() != S_OK) {
     return 2;
   }
@@ -516,16 +581,20 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
     return 2;
   }
 
-  if (WaitForSingleObject(shmem_mutex_, INFINITE) == WAIT_OBJECT_0) {
-    // FIXME handle all error cases
+  DWORD result = WaitForSingleObject(shmem_mutex_, wait_time_ms);
+  debug("wait for shmem_mutex_ result: %d", result);
+  // FIXME handle all error cases
+  if (result == WAIT_TIMEOUT) {
+    ReleaseMutex(shmem_mutex_);
+    return 3;
   }
 
   while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
-
     DWORD result = SignalObjectAndWait(shmem_mutex_,
         shmem_new_data_semaphore_,
         200,
         false);
+
     if (result == WAIT_TIMEOUT) {
       debug("timed out after 200ms read_ptr: %d write_ptr: %d",
           shmem_->read_ptr,
@@ -597,8 +666,7 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
       if (time_offset_type_ == TIME_OFFSET_NONE) {
         time_offset_type_ = TIME_OFFSET_PTS;
         warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
-      }
-      else {
+      } else {
         debug("PTS as delta in ns: %I64d", time_offset_pts_ns_);
       }
     }
@@ -607,14 +675,14 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
   bool have_time = false;
   if (time_offset_type_ == TIME_OFFSET_DTS) {
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      *startFrame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
+      *start_frame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
       have_time = true;
     } else {
       warn("missing DTS timestamp");
     }
   } else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
     if (frame->pts != GST_CLOCK_TIME_NONE) {
-      *startFrame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
+      *start_frame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
       have_time = true;
     } else {
       warn("missing PTS timestamp");
@@ -628,18 +696,18 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TI
   }
 
   if (!have_time) {
-    *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns);
+    *start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns);
   }
 
-  if (lastFrame_ != 0 && lastFrame_ >= *startFrame) {
-    warn("timestamp not monotonic last: %dI64t new: %dI64t", lastFrame_, *startFrame);
+  if (last_frame_ != 0 && last_frame_ >= *start_frame) {
+    warn("timestamp not monotonic last: %dI64t new: %dI64t", last_frame_, *start_frame);
     // fake it
-    *startFrame = lastFrame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
+    *start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
   }
 
 
-  *endFrame = *startFrame + NS_TO_REFERENCE_TIME(duration_ns);
-  lastFrame_ = *startFrame;
+  *end_frame = *start_frame + NS_TO_REFERENCE_TIME(duration_ns);
+  last_frame_ = *start_frame;
 
   *discontinuity = first_buffer || frame->discontinuity ? true : false;
 
@@ -742,18 +810,23 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
       dxgi_frame->index,
       shmFrame->ref_cnt);
   ReleaseMutex(shmem_mutex_);
+  delete dxgi_frame;
   return S_OK;
 }
 
-DxgiFrame::DxgiFrame() {
+DxgiFrame::DxgiFrame() 
+  : dxgi_handle(NULL), nr(0), index(0), 
+    texture_mapped_to_memory(false), 
+    start_time(0L),
+    end_time(0L),
+    texture_timestamp(0L) {
 }
 
 DxgiFrame::~DxgiFrame() {
 }
 
-
-void DxgiFrame::SetFrame(struct frame *shmemFrame, uint64_t i) {
-  nr = shmemFrame->nr;
+void DxgiFrame::SetFrame(struct frame *shmem_frame, uint64_t i) {
   index = i;
-  dxgi_handle = shmemFrame->dxgi_handle;
+  nr = shmem_frame->nr;
+  dxgi_handle = shmem_frame->dxgi_handle;
 }

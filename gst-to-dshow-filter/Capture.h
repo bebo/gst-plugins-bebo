@@ -8,6 +8,7 @@
 #ifndef CAPTURE_H
 #define CAPTURE_H
 
+#include <queue>
 #include <windows.h>
 #include <streams.h>
 #include <strsafe.h>
@@ -75,7 +76,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
   protected:
     RegKey registry;
 
-    REFERENCE_TIME m_rtFrameLength = UNITS / 30 ; // also used to get the fps
+    REFERENCE_TIME m_rtFrameLength; // also used to get the fps
 
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();
@@ -93,7 +94,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     bool m_bFormatAlreadySet = false;
     volatile bool active = false;
 
-    REFERENCE_TIME lastFrame_ = 0;
+    REFERENCE_TIME last_frame_ = 0;
     int64_t time_offset_dts_ns_ = 0;
     int64_t time_offset_pts_ns_ = 0;
     TimeOffsetType time_offset_type_ = TIME_OFFSET_NONE;
@@ -153,8 +154,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     // Override the version that offers exactly one media type
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
-    HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame* dxgi_frame);
-    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, BOOL *discontinuity);
+    HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame** out_dxgi_frame);
+    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, bool *discontinuity, DWORD wait_time_ms);
     struct frame * GetShmFrame(uint64_t index);
     struct frame * GetShmFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefDxgiFrame(DxgiFrame* dxgi_frame);
@@ -185,29 +186,41 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
 
   private:
+    std::queue<DxgiFrame*> dxgi_frame_queue_;
+
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
     HRESULT InitializeDXGI();
-    HRESULT CreateStagingTextures(D3D11_TEXTURE2D_DESC desc, int size);
+
     D3D11_TEXTURE2D_DESC ConvertToStagingTexture(D3D11_TEXTURE2D_DESC share_desc);
 
+    HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
+    HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);
+    DWORD GetReadyFrameFromQueue(DxgiFrame** out_frame);
 
+    // QueueFrameFromShm
+    // WrapAndCopy
+    // IsHeadTextureReady - if frame.head() is ready? check time
+      // WaitUntilSomethingReady (shm, timeout), if timeout -> map, if new frame -> schedule
+    // CopyToCpu
+    // Ship it!
 };
 
 class DxgiFrame {
   public:
-    HANDLE dxgi_handle = nullptr;
-    uint64_t nr = 0;
-    uint64_t index = 0;
-    uint64_t texture_timestamp = 0;
+    HANDLE dxgi_handle;
+    uint64_t nr;
+    uint64_t index;
+    bool texture_mapped_to_memory;
+    REFERENCE_TIME start_time;
+    REFERENCE_TIME end_time;
+    REFERENCE_TIME texture_timestamp;
     ComPtr<ID3D11Texture2D> texture;
+
 
     DxgiFrame();
     ~DxgiFrame();
 
     void SetFrame(struct frame *frameData, uint64_t i);
-};
-
-class DxgiFramePool {
 };
 
 #endif
