@@ -210,10 +210,11 @@ class DxgiFrame {
     HANDLE dxgi_handle;
     uint64_t nr;
     uint64_t index;
+    uint64_t frame_length;
     bool texture_mapped_to_memory;
     REFERENCE_TIME start_time;
     REFERENCE_TIME end_time;
-    REFERENCE_TIME texture_timestamp;
+    uint64_t sent_gpu_time;
     ComPtr<ID3D11Texture2D> texture;
 
 
