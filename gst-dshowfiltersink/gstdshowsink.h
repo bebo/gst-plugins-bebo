@@ -62,6 +62,7 @@ struct _GstShmSink
   gboolean wait_for_connection;
   gboolean stop;
   gboolean unlock;
+  GstClockTime first_render_time;
   GstClockTimeDiff buffer_time;
 
   GCond cond;

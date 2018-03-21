@@ -130,6 +130,7 @@ gst_dshowfiltersink_set_context(GstElement *element,
 static void
 gst_shm_sink_init (GstShmSink * self)
 {
+  self->first_render_time = 0;
   g_cond_init (&self->cond);
   //self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
@@ -364,6 +365,7 @@ static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
     GstShmSink *self = GST_SHM_SINK (bsink);
+    GST_LOG_OBJECT(self, "gst_shm_sink_render");
 
     if (!GST_IS_BUFFER(buf)) {
         GST_ERROR_OBJECT(self, "NOT A BUFFER???");
@@ -371,11 +373,51 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     }
     GST_OBJECT_LOCK (self);
 
-    DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
+    /* GST_OBJECT_LOCK (self); */
+    GstClock *clock = GST_ELEMENT_CLOCK (self);
+    if (clock != NULL) {
+        gst_object_ref (clock);
+    }
+
+    GstClockTime running_time = 0;
+    GstClockTime latency = 0;
+    if (clock != NULL) {
+
+      /* The time according to the current clock */
+      GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
+      running_time = gst_clock_get_time(clock) - base_time;
+      latency = running_time - buf->pts;
+
+      /* GST_DEBUG_OBJECT (self, */
+      /*   "pts %" GST_TIME_FORMAT ", running_time %" GST_TIME_FORMAT ", base_time %" GST_TIME_FORMAT ", latency %" GST_TIME_FORMAT, */
+      /*   GST_TIME_ARGS (buf->pts), GST_TIME_ARGS(running_time), GST_TIME_ARGS (base_time), GST_TIME_ARGS(latency)); */
+
+      gst_object_unref (clock);
+      clock = NULL;
+    }
+    // we get bombarded with "old" frames at the beginning - drop them for now
+    if (self->first_render_time == 0) {
+        self->first_render_time  = running_time;
+    }
+    if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
+        GST_OBJECT_UNLOCK (self);
+        GST_DEBUG_OBJECT(self, "dropping early frame");
+        return GST_FLOW_OK;
+    }
+
+    DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
+
     if (rc == WAIT_FAILED) {
         GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+    } else if (rc == WAIT_TIMEOUT) {
+        // FIXME: TODO log dropped frames
+        GST_DEBUG_OBJECT(self, "MUTEX TIMED OUT dropping frame");
+        GST_OBJECT_UNLOCK (self);
+        return GST_FLOW_OK;
     } else if (rc != WAIT_OBJECT_0) {
         GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
+        GST_OBJECT_UNLOCK (self);
+        return GST_FLOW_OK;
     }
 
     self->shmem->write_ptr++;
@@ -412,10 +454,12 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
             "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
     }
 
+
     GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
 
     // We don't map memory here as we don't want to lock D3D11
     // TODO: or should we?
+    frame->latency = latency;
     frame->dts = buf->dts;
     frame->pts = buf->pts;
     frame->duration = buf->duration;
@@ -428,14 +472,16 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->ref_cnt = 1;
     gst_buffer_ref (buf);
 
-    GST_LOG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p",
+    GST_LOG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
         frame->dxgi_handle,
         //frame->dts / 1000000,
         frame->pts / 1000000,
         index,
         frame_offset,
         frame->size,
-        buf); //size);
+        buf,
+        frame->latency / 1000000
+        ); //size);
 
     for (int i=0 ; i < self->shmem->count ; i++) {
       uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;

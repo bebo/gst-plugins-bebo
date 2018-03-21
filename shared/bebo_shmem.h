@@ -13,7 +13,7 @@
 /*
  * ATTENTION - MAKE SURE YOU INCREASE THE SHM_INTERFACE_VERSION WHEN YOU CHANGE THE SHM STRUCTS BELOW !
  */
-#define SHM_INTERFACE_VERSION 1521217260
+#define SHM_INTERFACE_VERSION 1521597836
 
 /*
  * Will use a ring buffer for frames, and will trigger semaphore when new items are in the buffer
@@ -29,6 +29,7 @@
     uint64_t nr;
     uint64_t dts;
     uint64_t pts;
+    uint64_t latency;
     uint64_t duration;
     uint64_t size;
     HANDLE dxgi_handle;
