@@ -26,6 +26,7 @@
 #include <dxgi.h>
 #include "gstdxgimemory.h"
 
+#undef NDEBUG
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
 #define GST_LOG_OBJECT(...)
@@ -182,6 +183,7 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
 static gboolean
 _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
 {
+  GST_INFO("_gl_dxgi_tex_create");
   GstGLMemory * gl_mem = (GstGLMemory *)gl_dxgi_mem;
   GstGLContext *context = gl_mem->mem.context;
   GLenum internal_format;
@@ -208,9 +210,12 @@ _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
         &gl_dxgi_mem->d3d11texture,
         &gl_dxgi_mem->dxgi_handle);
 
-    GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
+    GST_INFO("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
         gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT (gl_mem));
+    /* GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u", */
+    /*     gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width, */
+    /*     GL_MEM_HEIGHT (gl_mem)); */
   }
 
   return TRUE;
@@ -312,6 +317,7 @@ static GstGLDXGIMemory *
 _gl_dxgi_mem_alloc (GstGLBaseMemoryAllocator * allocator,
     GstGLVideoAllocationParams * params)
 {
+  GST_LOG("_gl_dxgi_mem_alloc");
   GstGLDXGIMemory *mem;
   guint alloc_flags;
 

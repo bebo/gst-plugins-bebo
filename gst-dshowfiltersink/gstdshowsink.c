@@ -694,6 +694,7 @@ static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
+  GST_ERROR("gst_shm_sink_propose_allocation");
 
   GstCaps *caps;
   gboolean need_pool;
@@ -723,6 +724,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   n_pools = gst_query_get_n_allocation_pools (query);
   for (i = 0; i < n_pools; i++) {
     gst_query_parse_nth_allocation_pool (query, i, &pool, NULL, NULL, NULL);
+    // FIXME: @rowan
     if (!GST_IS_GL_BUFFER_POOL (pool)) {
       gst_object_unref (pool);
       pool = NULL;
@@ -758,7 +760,10 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
       goto config_failed;
     }
     /* we need at least 2 buffer because we hold on to the last one */
-    gst_query_add_allocation_pool (query, pool, size, 2, 0);
+    // FIXME: @rowan WTF 20? shouldn't this be dynamic?
+    gst_query_add_allocation_pool (query, pool, size, 20, 0);
+    GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query",
+            pool);
   }
 
   if (pool)
