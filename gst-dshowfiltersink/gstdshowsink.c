@@ -143,7 +143,7 @@ gst_shm_sink_init (GstShmSink * self)
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
 
-  int buffer_count = 10;
+  int buffer_count = 20;
 
   // FIXME  - fix hard coded 720p
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
@@ -365,7 +365,7 @@ static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
     GstShmSink *self = GST_SHM_SINK (bsink);
-    GST_LOG_OBJECT(self, "gst_shm_sink_render");
+    GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
 
     if (!GST_IS_BUFFER(buf)) {
         GST_ERROR_OBJECT(self, "NOT A BUFFER???");
@@ -428,7 +428,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
     if (frame->_gst_buf_ref != NULL) {
       if (frame->ref_cnt > 0) {
-        GST_LOG_OBJECT(self,
+        GST_DEBUG_OBJECT(self,
           "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
           frame->_gst_buf_ref,
           index,
@@ -472,7 +472,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->ref_cnt = 1;
     gst_buffer_ref (buf);
 
-    GST_LOG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+    GST_DEBUG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
         frame->dxgi_handle,
         //frame->dts / 1000000,
         frame->pts / 1000000,

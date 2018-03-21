@@ -11,7 +11,7 @@
 #endif
 
 #define NS_TO_REFERENCE_TIME(t) (t)/100
-#define GPU_WAIT_FRAME_COUNT 1
+#define GPU_WAIT_FRAME_COUNT 3
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -373,7 +373,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   REFERENCE_TIME end_frame;
   bool discontinuity;
   bool got_frame = false;
-  DWORD wait_time = INFINITE;
+  DWORD wait_time = 1;
 
   while (!got_frame) {
     if (!active) {
@@ -383,77 +383,78 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 
     DxgiFrame* dxgi_frame = new DxgiFrame();
 
-    int code = FillBufferFromShMem(dxgi_frame, &start_frame, &end_frame, 
-        &discontinuity, wait_time);
+    // TODO CANT WAIT 202ms if you have frames in the queue
+    int code = FillBufferFromShMem(dxgi_frame, wait_time);
 
     if (code == S_OK) {
       got_frame = true;
     } else if (code == 2) { // not initialized yet
       got_frame = false;
       continue;
-    } else if (code == 3) { // failed to hold lock, timeout
+    } else if (code == 3) { // no new frame, but timeout
       got_frame = false;
+      // clean up 
     } else {
       got_frame = false;
       continue;
     }
 
     if (got_frame) {
-      dxgi_frame->start_time = start_frame;
-      dxgi_frame->end_time = end_frame;
       CopyTextureToStagingQueue(dxgi_frame);
     }
 
     DWORD wait_time_ms = GetReadyFrameFromQueue(&dxgi_frame);
-    if (wait_time_ms != 0) {
+    if (wait_time_ms == 0) {
+      PushFrameToMediaSample(dxgi_frame, media_sample);
+      *out_dxgi_frame = dxgi_frame;
+      break;
+    } else {
       got_frame = false;
       wait_time = wait_time_ms;
-      continue;
     }
-
-    got_frame = true;
-    wait_time = INFINITE;
-
-    PushFrameToMediaSample(dxgi_frame, media_sample);
-    *out_dxgi_frame = dxgi_frame;
   }
 
   // Set TRUE on every sample for uncompressed frames 
   // http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
   media_sample->SetSyncPoint(TRUE);
-  media_sample->SetDiscontinuity(discontinuity);
+  media_sample->SetDiscontinuity((*out_dxgi_frame)->discontinuity);
   media_sample->SetTime(&(*out_dxgi_frame)->start_time, &(*out_dxgi_frame)->end_time);
 
   return S_OK;
 }
 
 DWORD CPushPinDesktop::GetReadyFrameFromQueue(DxgiFrame** out_frame) {
+  if (dxgi_frame_queue_.size() == 0) {
+    return 201;
+  }
+
   DxgiFrame* frame = dxgi_frame_queue_.front();
 
-  uint64_t now = GetTickCount64();
-  uint64_t age = now - frame->sent_gpu_time + 1;
-  uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L) - 1;
+  uint64_t age = GetCounterSinceStartMillis(frame->sent_gpu_time);
+  uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L);
 
-  if (now >= (frame->sent_gpu_time + wait_from_gpu_duration_ms)) {
-    debug("%S EXPIRED texture age: %llu, now: %llu, frame ts: %llu, wait frame length: %llu, size: %d", 
+  if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
+    debug("%S EXPIRED texture age: %llu, frame ts: %llu, wait frame length: %llu, size: %d, nr: %llu", 
         __func__,
         age,
-        now, frame->sent_gpu_time, 
+        frame->sent_gpu_time, 
         wait_from_gpu_duration_ms,
-        dxgi_frame_queue_.size());
+        dxgi_frame_queue_.size(),
+        frame->nr);
     *out_frame = frame;
     dxgi_frame_queue_.pop();
     return 0;
   }
 
   uint64_t wait_time_ms = max(1, wait_from_gpu_duration_ms - age);
-  debug("%S WAIT age: %llu, now: %llu, frame ts: %llu, size: %d, wait frame length : %llu, wait_time_ms: %llu", 
+  debug("%S WAIT age: %llu, frame ts: %llu, size: %d, wait frame length : %llu, wait_time_ms: %llu, nr: %llu", 
       __func__,
       age,
-      now, frame->sent_gpu_time, 
+      frame->sent_gpu_time,
       dxgi_frame_queue_.size(),
       wait_from_gpu_duration_ms,
-      wait_time_ms);
+      wait_time_ms,
+      frame->nr);
   return (DWORD) wait_time_ms;
 }
 
@@ -488,11 +489,15 @@ HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
 
   d3d_device_->CreateTexture2D(&desc, NULL, &frame->texture);
 
-  frame->sent_gpu_time = GetTickCount64();
+  frame->sent_gpu_time = StartCounter();
+  debug("%S QUEUE GPU texture before size: %d, nr: %llu", 
+      __func__,
+      dxgi_frame_queue_.size(),
+      frame->nr);
 
   d3d_context_->CopyResource(frame->texture.Get(), shared_texture.Get());
 
-  dxgi_frame_queue_.emplace(frame);
+  dxgi_frame_queue_.push(frame);
   return hr;
 }
 
@@ -572,8 +577,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
   return S_OK;
 }
 
-HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TIME *start_frame, 
-    REFERENCE_TIME *end_frame, bool *discontinuity, DWORD wait_time_ms) {
+HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, DWORD wait_time_ms) {
   if (OpenShmMem() != S_OK) {
     return 2;
   }
@@ -582,25 +586,26 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TI
     return 2;
   }
 
-  DWORD result = WaitForSingleObject(shmem_mutex_, wait_time_ms);
-  debug("wait for shmem_mutex_ result: %d", result);
-  // FIXME handle all error cases
-  if (result == WAIT_TIMEOUT) {
-    ReleaseMutex(shmem_mutex_);
-    return 3;
-  }
+  REFERENCE_TIME start_frame;
+  REFERENCE_TIME end_frame; 
+  bool discontinuity;
 
+#if 1
+  DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
+
+  // FIXME handle all error cases
   while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
     DWORD result = SignalObjectAndWait(shmem_mutex_,
         shmem_new_data_semaphore_,
-        200,
+        wait_time_ms,
         false);
 
     if (result == WAIT_TIMEOUT) {
-      debug("timed out after 200ms read_ptr: %d write_ptr: %d",
+      debug("timed out after %dms read_ptr: %d write_ptr: %d",
+          wait_time_ms,
           shmem_->read_ptr,
           shmem_->write_ptr);
-      return 2;
+      return 3;
     } else if (result == WAIT_ABANDONED) {
       warn("semarphore is abandoned");
       return 2;
@@ -617,9 +622,49 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TI
       }
     }
   }
+#else
+  DWORD result = 0;
+
+  while ((result = WaitForSingleObject(shmem_mutex_, INFINITE)) == WAIT_OBJECT_0) {
+    bool wait_for_semaphore = (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr);
+    ReleaseMutex(shmem_mutex_);
+
+    if (!wait_for_semaphore) {
+      break;
+    }
+
+    DWORD semaphore_result = WaitForSingleObject(shmem_new_data_semaphore_, 200);
+
+    if (semaphore_result == WAIT_TIMEOUT) {
+      debug("timed out after 200ms read_ptr: %d write_ptr: %d",
+          0 /*shmem_->read_ptr*/,
+          0 /*shmem_->write_ptr*/);
+      return 2;
+    } else if (semaphore_result == WAIT_ABANDONED) {
+      warn("semaphore is abandoned");
+      return 2;
+    } else if (semaphore_result == WAIT_FAILED) {
+      warn("semaphore wait failed 0x%010x", GetLastError());
+      return 2;
+    } else if (semaphore_result != WAIT_OBJECT_0) {
+      error("unknown semaphore event 0x%010x", result);
+      return 2;
+    }
+  }
+
+  if (result != WAIT_OBJECT_0) {
+    error("Failed to acquire shmem_mutex_, result: %d", result);
+    ReleaseMutex(shmem_mutex_);
+    return result == WAIT_TIMEOUT ? 3 : 2;
+  }
+
+  // semaphore signalled, gonna hold the shmem_mutex_
+  WaitForSingleObject(shmem_mutex_, INFINITE);
+#endif
 
   uint64_t start_processing = StartCounter();
   bool first_buffer = false;
+
   if (shmem_->read_ptr == 0) {
     first_buffer = true;
     frame_start_ = shmem_->write_ptr - 1;
@@ -645,7 +690,7 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TI
 
   uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
   struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
-  dxgi_frame->SetFrame(frame, i);
+
   frame->ref_cnt++;
 
   CRefTime now;
@@ -676,14 +721,14 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TI
   bool have_time = false;
   if (time_offset_type_ == TIME_OFFSET_DTS) {
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      *start_frame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
+      start_frame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
       have_time = true;
     } else {
       warn("missing DTS timestamp");
     }
   } else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
     if (frame->pts != GST_CLOCK_TIME_NONE) {
-      *start_frame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
+      start_frame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
       have_time = true;
     } else {
       warn("missing PTS timestamp");
@@ -697,20 +742,22 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, REFERENCE_TI
   }
 
   if (!have_time) {
-    *start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns);
+    start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns);
   }
 
-  if (last_frame_ != 0 && last_frame_ >= *start_frame) {
-    warn("timestamp not monotonic last: %dI64t new: %dI64t", last_frame_, *start_frame);
+  if (last_frame_ != 0 && last_frame_ >= start_frame) {
+    warn("timestamp not monotonic last: %dI64t new: %dI64t", last_frame_, start_frame);
     // fake it
-    *start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
+    start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
   }
 
 
-  *end_frame = *start_frame + NS_TO_REFERENCE_TIME(duration_ns);
-  last_frame_ = *start_frame;
+  end_frame = start_frame + NS_TO_REFERENCE_TIME(duration_ns);
+  last_frame_ = start_frame;
 
-  *discontinuity = first_buffer || frame->discontinuity ? true : false;
+  discontinuity = first_buffer || frame->discontinuity ? true : false;
+
+  dxgi_frame->SetFrame(frame, i, start_frame, end_frame, discontinuity);
 
   debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
       frame->dxgi_handle,
@@ -821,6 +868,7 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
 DxgiFrame::DxgiFrame() 
   : dxgi_handle(NULL), nr(0), index(0), 
     texture_mapped_to_memory(false), 
+    discontinuity(false),
     start_time(0L),
     end_time(0L),
     sent_gpu_time(0L) {
@@ -829,9 +877,13 @@ DxgiFrame::DxgiFrame()
 DxgiFrame::~DxgiFrame() {
 }
 
-void DxgiFrame::SetFrame(struct frame *shmem_frame, uint64_t i) {
+void DxgiFrame::SetFrame(struct frame *shmem_frame, uint64_t i,
+    REFERENCE_TIME start_t, REFERENCE_TIME end_t, bool discont) {
   index = i;
   nr = shmem_frame->nr;
+  start_time = start_t;
+  end_time = end_t;
+  discontinuity = discont;
   frame_length = NS_TO_REFERENCE_TIME(shmem_frame->duration);
   dxgi_handle = shmem_frame->dxgi_handle;
 }
