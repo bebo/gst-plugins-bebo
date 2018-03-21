@@ -155,7 +155,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
     HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame** out_dxgi_frame);
-    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, REFERENCE_TIME *startFrame, REFERENCE_TIME *endFrame, bool *discontinuity, DWORD wait_time_ms);
+    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, DWORD wait_time_ms);
     struct frame * GetShmFrame(uint64_t index);
     struct frame * GetShmFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefDxgiFrame(DxgiFrame* dxgi_frame);
@@ -212,6 +212,7 @@ class DxgiFrame {
     uint64_t index;
     uint64_t frame_length;
     bool texture_mapped_to_memory;
+    bool discontinuity;
     REFERENCE_TIME start_time;
     REFERENCE_TIME end_time;
     uint64_t sent_gpu_time;
@@ -221,7 +222,8 @@ class DxgiFrame {
     DxgiFrame();
     ~DxgiFrame();
 
-    void SetFrame(struct frame *frameData, uint64_t i);
+    void SetFrame(struct frame *frameData, uint64_t i, 
+        REFERENCE_TIME start_time, REFERENCE_TIME end_time, bool discontinuity);
 };
 
 #endif
