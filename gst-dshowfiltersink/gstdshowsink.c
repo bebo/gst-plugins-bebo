@@ -143,7 +143,7 @@ gst_shm_sink_init (GstShmSink * self)
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
 
-  int buffer_count = 5;
+  int buffer_count = 10;
 
   // FIXME  - fix hard coded 720p
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
