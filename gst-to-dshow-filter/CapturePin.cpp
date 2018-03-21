@@ -697,18 +697,20 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, DWORD wait_t
   CSourceStream::m_pFilter->StreamTime(now);
   now = max(0, now); // can be negative before it started and negative will mess us up
   uint64_t now_in_ns = now * 100;
-  int64_t time_offset_ns;
 
   if (first_buffer) {
+    uint64_t latency_ns = frame->duration * GPU_WAIT_FRAME_COUNT + frame->latency;
+    info("calculated gst_latency: %d + gpu_latency: %d * %d = latency_ms: %d",frame->latency / 1000000, GPU_WAIT_FRAME_COUNT, frame->duration / 1000000, latency_ns / 1000000);
     // TODO take start delta/behind into account
     // we prefer dts because it is monotonic
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      time_offset_dts_ns_ = frame->dts - now_in_ns;
+      time_offset_dts_ns_ = frame->dts - now_in_ns + latency_ns;
       time_offset_type_ = TIME_OFFSET_DTS;
       debug("using DTS as refernence delta in ns: %I64d", time_offset_dts_ns_);
     }
     if (frame->pts != GST_CLOCK_TIME_NONE) {
-      time_offset_pts_ns_ = frame->pts - now_in_ns;
+
+      time_offset_pts_ns_ = frame->pts - now_in_ns + latency_ns;
       if (time_offset_type_ == TIME_OFFSET_NONE) {
         time_offset_type_ = TIME_OFFSET_PTS;
         warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
