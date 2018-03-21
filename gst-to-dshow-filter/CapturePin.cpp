@@ -11,7 +11,7 @@
 #endif
 
 #define NS_TO_REFERENCE_TIME(t) (t)/100
-#define DELAY_FRAMES_COUNT 3
+#define GPU_WAIT_FRAME_COUNT 1
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -401,8 +401,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
     if (got_frame) {
       dxgi_frame->start_time = start_frame;
       dxgi_frame->end_time = end_frame;
-      dxgi_frame->texture_timestamp = last_frame_;
-
       CopyTextureToStagingQueue(dxgi_frame);
     }
 
@@ -432,28 +430,29 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 DWORD CPushPinDesktop::GetReadyFrameFromQueue(DxgiFrame** out_frame) {
   DxgiFrame* frame = dxgi_frame_queue_.front();
 
-  int64_t age = last_frame_ - frame->texture_timestamp;
+  uint64_t now = GetTickCount64();
+  uint64_t age = now - frame->sent_gpu_time + 1;
+  uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L) - 1;
 
-  if (last_frame_ > 0 &&
-      age >= (DELAY_FRAMES_COUNT * m_rtFrameLength)) {
-    debug("%S expired texture age: %llu, now: %llu, frame ts: %llu, frame length delay: %llu, size: %d", 
+  if (now >= (frame->sent_gpu_time + wait_from_gpu_duration_ms)) {
+    debug("%S EXPIRED texture age: %llu, now: %llu, frame ts: %llu, wait frame length: %llu, size: %d", 
         __func__,
-        last_frame_ - frame->texture_timestamp,
-        last_frame_, frame->texture_timestamp, 
-        (DELAY_FRAMES_COUNT * m_rtFrameLength),
+        age,
+        now, frame->sent_gpu_time, 
+        wait_from_gpu_duration_ms,
         dxgi_frame_queue_.size());
     *out_frame = frame;
     dxgi_frame_queue_.pop();
     return 0;
   }
 
-  uint64_t wait_time_ms = (DELAY_FRAMES_COUNT * m_rtFrameLength) / 100000L;
-  debug("%S WAIT age: %llu, last_frame_: %llu, frame ts: %llu, size: %d, frame length delay: %llu, wait_time_ms: %llu", 
+  uint64_t wait_time_ms = max(1, wait_from_gpu_duration_ms - age);
+  debug("%S WAIT age: %llu, now: %llu, frame ts: %llu, size: %d, wait frame length : %llu, wait_time_ms: %llu", 
       __func__,
-      last_frame_ - frame->texture_timestamp,
-      last_frame_, frame->texture_timestamp, 
+      age,
+      now, frame->sent_gpu_time, 
       dxgi_frame_queue_.size(),
-      (DELAY_FRAMES_COUNT * m_rtFrameLength),
+      wait_from_gpu_duration_ms,
       wait_time_ms);
   return (DWORD) wait_time_ms;
 }
@@ -488,6 +487,8 @@ HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
   desc.MiscFlags = 0;
 
   d3d_device_->CreateTexture2D(&desc, NULL, &frame->texture);
+
+  frame->sent_gpu_time = GetTickCount64();
 
   d3d_context_->CopyResource(frame->texture.Get(), shared_texture.Get());
 
@@ -822,7 +823,7 @@ DxgiFrame::DxgiFrame()
     texture_mapped_to_memory(false), 
     start_time(0L),
     end_time(0L),
-    texture_timestamp(0L) {
+    sent_gpu_time(0L) {
 }
 
 DxgiFrame::~DxgiFrame() {
@@ -831,5 +832,6 @@ DxgiFrame::~DxgiFrame() {
 void DxgiFrame::SetFrame(struct frame *shmem_frame, uint64_t i) {
   index = i;
   nr = shmem_frame->nr;
+  frame_length = NS_TO_REFERENCE_TIME(shmem_frame->duration);
   dxgi_handle = shmem_frame->dxgi_handle;
 }
