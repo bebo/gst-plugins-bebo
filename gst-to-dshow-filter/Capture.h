@@ -76,8 +76,6 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
   protected:
     RegKey registry;
 
-    REFERENCE_TIME m_rtFrameLength; // also used to get the fps
-
     int getNegotiatedFinalWidth();
     int getNegotiatedFinalHeight();
 
@@ -116,10 +114,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     virtual HRESULT InitAllocator(IMemAllocator** ppAllocator) override;
     virtual HRESULT DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppAlloc) override;
 
-    float GetFps();
     int getCaptureDesiredFinalWidth();
     int getCaptureDesiredFinalHeight();
-
 
     // STDMETHODIMP SuggestAllocatorProperties(const ALLOCATOR_PROPERTIES* pprop) override;
     // STDMETHODIMP GetAllocatorProperties(ALLOCATOR_PROPERTIES* pprop) override;
@@ -191,7 +187,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
     HRESULT InitializeDXGI();
 
-    D3D11_TEXTURE2D_DESC ConvertToStagingTexture(D3D11_TEXTURE2D_DESC share_desc);
+    D3D11_TEXTURE2D_DESC ConvertToStagingTextureDesc(D3D11_TEXTURE2D_DESC share_desc);
 
     HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
     HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);

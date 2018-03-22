@@ -10,9 +10,11 @@
 #define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
 #endif
 
-#define NS_TO_REFERENCE_TIME(t) (t)/100
-#define GPU_WAIT_FRAME_COUNT    3
-#define DEFAULT_WAIT_FRAME_TIME 200
+#define NS_TO_REFERENCE_TIME(t)    (t)/100
+#define GPU_WAIT_FRAME_COUNT       3
+#define GPU_QUEUE_MAX_FRAME_COUNT  5
+#define DEFAULT_WAIT_FRAME_TIME    200
+#define BOUND_GPU_FRAME_QUEUE
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -31,8 +33,7 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
-  m_pParent(pFilter),
-  m_rtFrameLength(UNITS / 60)
+  m_pParent(pFilter)
 {
   info("CPushPinDesktop");
 
@@ -351,7 +352,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample) {
   return E_NOTIMPL;
 }
 
-D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTexture(D3D11_TEXTURE2D_DESC share_desc) {
+D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTextureDesc(D3D11_TEXTURE2D_DESC share_desc) {
   D3D11_TEXTURE2D_DESC desc = { 0 };
   desc.Format = share_desc.Format;
   desc.Width = share_desc.Width;
@@ -370,9 +371,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 {
   CheckPointer(media_sample, E_POINTER);
 
-  REFERENCE_TIME start_frame;
-  REFERENCE_TIME end_frame;
-  bool discontinuity;
   bool got_frame = false;
 
   while (!got_frame) {
@@ -384,11 +382,9 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
     DxgiFrame* dxgi_frame = NULL; 
 
     int32_t wait_time = GetNewFrameWaitTime();
-    debug("FillBuffer GetNewFrameWaitTime wait_time: %lu", wait_time);
 
     if (wait_time > -1) {
       HRESULT code = GetAndWaitForShmemFrame(&dxgi_frame, wait_time);
-      debug("FillBuffer GetAndWaitForShmemFrame result: %d", code);
 
       if (code == S_OK) {
         got_frame = true;
@@ -432,15 +428,30 @@ int32_t CPushPinDesktop::GetNewFrameWaitTime() {
   }
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
-  uint64_t age = GetCounterSinceStartMillis(frame->sent_gpu_time);
+  uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_gpu_time);
   uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L);
 
   if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
     return -1;
   }
 
-  int32_t wait_time_ms = max(0, wait_from_gpu_duration_ms - age);
-  return wait_time_ms;
+#ifdef BOUND_GPU_FRAME_QUEUE
+  if (dxgi_frame_queue_.size() >= GPU_QUEUE_MAX_FRAME_COUNT) {
+    debug("EXCEEDED frame queue limit, not taking in new frames.");
+    Sleep(15);
+    return -1;
+  }
+#endif
+
+
+  int32_t wait_time_ms = (int32_t) max(0, wait_from_gpu_duration_ms - age);
+  debug("WAITED for front texture. nr: %llu dxgi_handle: %llu new_queue_size: %d age: %lld wait_time_ms: %lld", 
+        frame->nr,
+        frame->dxgi_handle,
+        dxgi_frame_queue_.size(),
+        age,
+        wait_time_ms);
+  return  wait_time_ms;
 }
 
 
@@ -451,28 +462,21 @@ DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
 
-  uint64_t age = GetCounterSinceStartMillis(frame->sent_gpu_time);
+  uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_gpu_time);
   uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L);
 
   if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
-    debug("%S EXPIRED texture age: %llu, frame ts: %llu, wait frame length: %llu, size: %d, nr: %llu", 
-        __func__,
-        age,
-        frame->sent_gpu_time, 
-        wait_from_gpu_duration_ms,
-        dxgi_frame_queue_.size(),
-        frame->nr);
     dxgi_frame_queue_.pop();
+
+    debug("POPPED texture from gpu queue. nr: %llu dxgi_handle: %llu new_queue_size: %d age: %lld", 
+        frame->nr,
+        frame->dxgi_handle,
+        dxgi_frame_queue_.size(),
+        age);
+
     return frame;
   }
 
-  debug("%S WAIT texture age: %llu, frame ts: %llu, wait frame length: %llu, size: %d, nr: %llu", 
-      __func__,
-      age,
-      frame->sent_gpu_time, 
-      wait_from_gpu_duration_ms,
-      dxgi_frame_queue_.size(),
-      frame->nr);
   return NULL;
 }
 
@@ -489,33 +493,24 @@ HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
     error("OpenSharedResource failed %p", hr);
   }
 
-  D3D11_TEXTURE2D_DESC desc = { 0 };
   D3D11_TEXTURE2D_DESC share_desc = { 0 };
-
   shared_texture->GetDesc(&share_desc);
 
-  desc.Format = share_desc.Format;
-  desc.Width = share_desc.Width;
-  desc.Height = share_desc.Height;
-  desc.MipLevels = 1;
-  desc.ArraySize = 1;
-  desc.SampleDesc.Count = 1;
-  desc.Usage = D3D11_USAGE_STAGING;
-  desc.BindFlags = 0;
-  desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
-  desc.MiscFlags = 0;
+  D3D11_TEXTURE2D_DESC desc = ConvertToStagingTextureDesc(share_desc);
 
   d3d_device_->CreateTexture2D(&desc, NULL, &frame->texture);
 
   frame->sent_gpu_time = StartCounter();
-  debug("%S QUEUE GPU texture before size: %d, nr: %llu", 
-      __func__,
-      dxgi_frame_queue_.size(),
-      frame->nr);
 
   d3d_context_->CopyResource(frame->texture.Get(), shared_texture.Get());
 
   dxgi_frame_queue_.push(frame);
+
+  debug("PUSHED texture to gpu queue. nr: %llu dxgi_handle: %llu new_queue_size: %d", 
+      frame->nr,
+      frame->dxgi_handle,
+      dxgi_frame_queue_.size());
+
   return hr;
 }
 
@@ -535,6 +530,10 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
   }
 
   frame->texture_mapped_to_memory = true;
+  debug("SHIPPED to dshow. nr: %llu dxgi_handle: %llu", 
+        frame->nr,
+        frame->dxgi_handle);
+
   ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
   return S_OK;
 }
@@ -603,10 +602,6 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   if (!shmem_) {
     return 2;
   }
-
-  REFERENCE_TIME start_frame;
-  REFERENCE_TIME end_frame; 
-  bool discontinuity;
 
 #if 1
   DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
@@ -737,6 +732,9 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
     }
   }
 
+  REFERENCE_TIME start_frame;
+  REFERENCE_TIME end_frame; 
+  bool discontinuity;
   bool have_time = false;
   if (time_offset_type_ == TIME_OFFSET_DTS) {
     if (frame->dts != GST_CLOCK_TIME_NONE) {
@@ -779,7 +777,9 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   dxgi_frame->SetFrame(frame, i, start_frame, end_frame, discontinuity);
   *out_dxgi_frame = dxgi_frame; 
 
-  debug("dxgi_handle: %llu pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
+
+  debug("GOT frame from shmem. nr: %llu dxgi_handle: %llu pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
+      frame->nr,
       frame->dxgi_handle,
       frame->pts,
       i,
@@ -807,16 +807,12 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
       100.0 * frame_dropped_cnt_ / frame_total_cnt_,
       frame_late_cnt_,
       avg_fps,
-      GetFps(),
+      0.0, // GetFps(),
       frame_processing_time_ms_ / frame_sent_cnt_
       );
 
+
   return S_OK;
-}
-
-
-float CPushPinDesktop::GetFps() {
-  return (float)(UNITS / m_rtFrameLength);
 }
 
 int CPushPinDesktop::getNegotiatedFinalWidth() {
@@ -862,6 +858,7 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
   if (dxgi_frame == NULL) {
     return S_OK;
   }
+
   if (dxgi_frame->texture.Get()) {
     d3d_context_->Unmap(dxgi_frame->texture.Get(), 0);
   }
@@ -872,15 +869,18 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
   }
 
   auto shmFrame = GetShmFrame(dxgi_frame);
+
   // TODO: check it is the same frame!
   shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
 
-  debug("unref dxgi_handle: %p nr: %lld i: %d ref_cnt %d",
-      dxgi_frame->dxgi_handle,
+  debug("RELEASE shmem texture. nr: %lld dxgi_handle: %llu i: %d ref_cnt: %d",
       dxgi_frame->nr,
+      dxgi_frame->dxgi_handle,
       dxgi_frame->index,
       shmFrame->ref_cnt);
+
   ReleaseMutex(shmem_mutex_);
+
   delete dxgi_frame;
   return S_OK;
 }
@@ -895,6 +895,7 @@ DxgiFrame::DxgiFrame()
 }
 
 DxgiFrame::~DxgiFrame() {
+  texture.Reset();
 }
 
 void DxgiFrame::SetFrame(struct frame *shmem_frame, uint64_t i,
