@@ -742,6 +742,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   if (first_buffer) {
     uint64_t latency_ns = frame->duration * GPU_WAIT_FRAME_COUNT + frame->latency;
     info("calculated gst_latency: %d + gpu_latency: %d * %d = latency_ms: %d",frame->latency / 1000000, GPU_WAIT_FRAME_COUNT, frame->duration / 1000000, latency_ns / 1000000);
+    latency_ns = 0; // FIXME 
     // TODO take start delta/behind into account
     // we prefer dts because it is monotonic
     if (frame->dts != GST_CLOCK_TIME_NONE) {
