@@ -155,7 +155,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *pRequest);
     HRESULT FillBuffer(IMediaSample *pSample);
     HRESULT FillBuffer(IMediaSample *pSample, DxgiFrame** out_dxgi_frame);
-    HRESULT FillBufferFromShMem(DxgiFrame *dxgi_frame, DWORD wait_time_ms);
+    HRESULT GetAndWaitForShmemFrame(DxgiFrame** dxgi_frame, DWORD wait_time_ms);
     struct frame * GetShmFrame(uint64_t index);
     struct frame * GetShmFrame(DxgiFrame* dxgi_frame);
     HRESULT UnrefDxgiFrame(DxgiFrame* dxgi_frame);
@@ -195,7 +195,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 
     HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
     HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);
-    DWORD GetReadyFrameFromQueue(DxgiFrame** out_frame);
+    DxgiFrame* GetReadyFrameFromQueue();
+    int32_t GetNewFrameWaitTime();
 
     // QueueFrameFromShm
     // WrapAndCopy
