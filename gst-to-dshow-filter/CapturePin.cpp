@@ -770,7 +770,6 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
     start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
   }
 
-
   end_frame = start_frame + NS_TO_REFERENCE_TIME(duration_ns);
   last_frame_ = start_frame;
 

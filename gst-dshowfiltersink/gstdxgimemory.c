@@ -26,7 +26,6 @@
 #include <dxgi.h>
 #include "gstdxgimemory.h"
 
-#undef NDEBUG
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
 #define GST_LOG_OBJECT(...)
@@ -414,6 +413,43 @@ _gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
 }
 
 static void
+_gl_mem_destroy (GstGLDXGIMemory * gl_mem)
+{
+  GST_INFO("_gl_mem_destroy texture id:%u dimensions:%ux%u",
+        gl_mem->mem.tex_id, gl_mem->mem.tex_width, GL_DXGI_MEM_HEIGHT (gl_mem));
+
+  if (gl_mem->interop_handle) {
+    GstGLContext *context = gl_mem->mem.mem.context;
+    GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
+    BOOL result = share_context->wglDXUnregisterObjectNV(
+            share_context->device_interop_handle,
+            gl_mem->interop_handle);
+    if (result == FALSE) {
+      DWORD error = GetLastError();
+      if (error == ERROR_BUSY) {
+        GST_ERROR("wglDXUnregisterObjectNV FAILED ERROR_BUSY texture_id %#010x interop_id:%#010x",
+          gl_mem->mem.tex_id,
+          gl_mem->interop_handle);
+      } else {
+        GST_ERROR("wglDXUnregisterObjectNV FAILED UNKNOWN ERROR %#010x texture_id %#010x interop_id:%#010x",
+          error,
+          gl_mem->mem.tex_id,
+          gl_mem->interop_handle);
+      }
+    }
+    gl_mem->interop_handle = NULL;
+  }
+  if (gl_mem->d3d11texture) {
+    gl_mem->d3d11texture->lpVtbl->Release(gl_mem->d3d11texture);
+    gl_mem->d3d11texture = NULL;
+    gl_mem->dxgi_handle = NULL;
+  }
+
+  GST_GL_BASE_MEMORY_ALLOCATOR_CLASS (parent_class)->destroy ((GstGLBaseMemory
+          *) gl_mem);
+}
+
+static void
 gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 {
 
@@ -423,12 +459,11 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
   gl_base = (GstGLBaseMemoryAllocatorClass *) klass;
   GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
 
-
   /* TODO: */
-  /* gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) _gl_mem_destroy; */
 
   gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_dxgi_mem_alloc;
   gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
+  gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) _gl_mem_destroy;
 
   gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) _gl_dxgi_tex_map;
   gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) _gl_dxgi_tex_unmap;

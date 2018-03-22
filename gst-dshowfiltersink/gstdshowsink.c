@@ -694,7 +694,7 @@ static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
-  GST_ERROR("gst_shm_sink_propose_allocation");
+  GST_LOG_OBJECT(self, "gst_shm_sink_propose_allocation");
 
   GstCaps *caps;
   gboolean need_pool;
@@ -754,8 +754,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   }
   /* we need at least 2 buffer because we hold on to the last one */
   gst_query_add_allocation_pool (query, pool, info.size, BUFFER_COUNT, 0);
-  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query",
-          pool);
+  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", pool);
   return true;
 
 invalid_caps:
