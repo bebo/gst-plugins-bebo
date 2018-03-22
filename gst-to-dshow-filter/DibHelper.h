@@ -8,6 +8,8 @@
 
 #define HDIB HANDLE	
 
+#include <stdint.h>
+
 /* DIB macros */
 #define IS_WIN30_DIB(lpbi)  ((*(LPDWORD)(lpbi)) == sizeof(BITMAPINFOHEADER))
 #define RECTWIDTH(lpRect)   ((lpRect)->right - (lpRect)->left)
@@ -18,6 +20,7 @@ typedef unsigned __int64 QWORD;
 void WarmupCounter();
 __int64 StartCounter();
 long double GetCounterSinceStartMillis(__int64 start);
+uint64_t GetCounterSinceStartMillisRounded(__int64 start);
 void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd);
 
 #define ASSERT_RAISE(cond) \
