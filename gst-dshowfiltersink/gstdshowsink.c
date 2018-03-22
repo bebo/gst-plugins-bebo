@@ -64,6 +64,7 @@ enum
 
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
+#define BUFFER_COUNT 20
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
@@ -143,11 +144,9 @@ gst_shm_sink_init (GstShmSink * self)
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
 
-  int buffer_count = 20;
-
   // FIXME  - fix hard coded 720p
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
-  size = ((DWORD) frame_size * buffer_count) + header_size;
+  size = ((DWORD) frame_size * BUFFER_COUNT) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
         0, size, BEBO_SHMEM_NAME);
@@ -174,7 +173,7 @@ gst_shm_sink_init (GstShmSink * self)
   self->shmem->version = SHM_INTERFACE_VERSION;
   self->shmem->frame_offset = header_size;
   self->shmem->frame_size = frame_size;
-  self->shmem->count = buffer_count;
+  self->shmem->count = BUFFER_COUNT;
   self->shmem->write_ptr = 0;
   self->shmem->read_ptr = 0;
   self->shmem->shmem_size = size;
@@ -690,6 +689,8 @@ context_error:
   }
 }
 
+GstBufferPool *pool = NULL;
+
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
@@ -717,58 +718,40 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
       /*       upload->context)); */
 
   gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator); // FIXME - really?
+  gst_object_unref (allocator); 
 
-  GstBufferPool *pool = NULL;
-  guint n_pools, i;
-  n_pools = gst_query_get_n_allocation_pools (query);
-  for (i = 0; i < n_pools; i++) {
-    gst_query_parse_nth_allocation_pool (query, i, &pool, NULL, NULL, NULL);
-    // FIXME: @rowan
-    if (!GST_IS_GL_BUFFER_POOL (pool)) {
-      gst_object_unref (pool);
-      pool = NULL;
-    }
+  GstStructure *config;
+  GstVideoInfo info;
+  if (!gst_video_info_from_caps (&info, caps))
+    goto invalid_caps;
+
+  if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
+    return FALSE;
   }
-
-  if (!pool) {
-
-    GstStructure *config;
-    gsize size;
-    GstVideoInfo info;
-    if (!gst_video_info_from_caps (&info, caps))
-      goto invalid_caps;
-
-    if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
-      return FALSE;
-    }
-
-    pool = gst_gl_buffer_pool_new (self->context);
-    config = gst_buffer_pool_get_config (pool);
-
-    size = info.size;
-    gst_buffer_pool_config_set_params (config, caps, size, 0, 0);
-
-    /* FIXME: not sure */
-    gst_buffer_pool_config_add_option (config,
-        GST_BUFFER_POOL_OPTION_GL_SYNC_META);
-
-     gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
-
-    if (!gst_buffer_pool_set_config (pool, config)) {
-      gst_object_unref (pool);
-      goto config_failed;
-    }
-    /* we need at least 2 buffer because we hold on to the last one */
-    // FIXME: @rowan WTF 20? shouldn't this be dynamic?
-    gst_query_add_allocation_pool (query, pool, size, 20, 0);
-    GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query",
-            pool);
+  if (pool) {
+    GST_DEBUG("Reusing buffer pool.");
+    gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
+    return true;
   }
+  GST_DEBUG("Make a new buffer pool.");
+  pool = gst_gl_buffer_pool_new(self->context);
+  gst_object_ref(pool);
 
-  if (pool)
+  config = gst_buffer_pool_get_config (pool);
+  gst_buffer_pool_config_set_params (config, caps, info.size, 0, 0);
+
+  /* FIXME: not sure */
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
+  gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
+
+  if (!gst_buffer_pool_set_config (pool, config)) {
     gst_object_unref (pool);
-
+    goto config_failed;
+  }
+  /* we need at least 2 buffer because we hold on to the last one */
+  gst_query_add_allocation_pool (query, pool, info.size, BUFFER_COUNT, 0);
+  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query",
+          pool);
   return true;
 
 invalid_caps:
