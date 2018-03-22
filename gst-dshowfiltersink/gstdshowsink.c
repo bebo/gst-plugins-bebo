@@ -713,13 +713,9 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   gst_allocation_params_init (&params);
 
   allocator = GST_ALLOCATOR (self->allocator);
-      /* gst_gl_memory_allocator_get_default (upload-> */
-      /*       upload->context)); */
-
   gst_query_add_allocation_param (query, allocator, &params);
   gst_object_unref (allocator); 
 
-  GstStructure *config;
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
@@ -728,18 +724,26 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     return FALSE;
   }
   if (pool) {
-    GST_DEBUG("Reusing buffer pool.");
-    gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
-    return true;
+    GstStructure *cur_pool_config;
+    cur_pool_config = gst_buffer_pool_get_config(pool);
+    gint size;
+    gst_buffer_pool_config_set_params(cur_pool_config, NULL, &size, NULL, NULL);
+    if (size == info.size) {
+      GST_DEBUG("Reusing buffer pool.");
+      gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
+      return true;
+    }
+    else {
+      GST_DEBUG("The pool size doesn't match, unrefing and creating a new one.");
+      gst_object_unref(pool);
+    }
   }
   GST_DEBUG("Make a new buffer pool.");
   pool = gst_gl_buffer_pool_new(self->context);
-  gst_object_ref(pool);
-
+  GstStructure *config;
   config = gst_buffer_pool_get_config (pool);
   gst_buffer_pool_config_set_params (config, caps, info.size, 0, 0);
 
-  /* FIXME: not sure */
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
 
