@@ -428,7 +428,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     if (frame->_gst_buf_ref != NULL) {
       if (frame->ref_cnt > 0) {
         GST_DEBUG_OBJECT(self,
-          "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %p ref_cnt: %d",
+          "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %llu ref_cnt: %d",
           frame->_gst_buf_ref,
           index,
           frame->dxgi_handle,
@@ -466,12 +466,11 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->size = gst_buffer_get_size(buf);
     frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
     frame->nr = self->shmem->write_ptr;
-
     frame->_gst_buf_ref = buf;
     frame->ref_cnt = 1;
     gst_buffer_ref (buf);
 
-    GST_DEBUG_OBJECT(self, "dxgi_handle: %p pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+    GST_DEBUG_OBJECT(self, "dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
         frame->dxgi_handle,
         //frame->dts / 1000000,
         frame->pts / 1000000,

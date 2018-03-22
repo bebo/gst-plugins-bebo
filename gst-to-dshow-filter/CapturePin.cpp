@@ -11,7 +11,8 @@
 #endif
 
 #define NS_TO_REFERENCE_TIME(t) (t)/100
-#define GPU_WAIT_FRAME_COUNT 3
+#define GPU_WAIT_FRAME_COUNT    3
+#define DEFAULT_WAIT_FRAME_TIME 200
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -373,7 +374,6 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   REFERENCE_TIME end_frame;
   bool discontinuity;
   bool got_frame = false;
-  DWORD wait_time = 1;
 
   while (!got_frame) {
     if (!active) {
@@ -381,36 +381,39 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       return S_FALSE;
     }
 
-    DxgiFrame* dxgi_frame = new DxgiFrame();
+    DxgiFrame* dxgi_frame = NULL; 
 
-    // TODO CANT WAIT 202ms if you have frames in the queue
-    int code = FillBufferFromShMem(dxgi_frame, wait_time);
+    int32_t wait_time = GetNewFrameWaitTime();
+    debug("FillBuffer GetNewFrameWaitTime wait_time: %lu", wait_time);
 
-    if (code == S_OK) {
-      got_frame = true;
-    } else if (code == 2) { // not initialized yet
-      got_frame = false;
-      continue;
-    } else if (code == 3) { // no new frame, but timeout
-      got_frame = false;
-      // clean up 
-    } else {
-      got_frame = false;
-      continue;
+    if (wait_time > -1) {
+      HRESULT code = GetAndWaitForShmemFrame(&dxgi_frame, wait_time);
+      debug("FillBuffer GetAndWaitForShmemFrame result: %d", code);
+
+      if (code == S_OK) {
+        got_frame = true;
+      } else if (code == 2) { // not initialized yet
+        got_frame = false;
+        continue;
+      } else if (code == 3) { // no new frame, but timeout
+        got_frame = false;
+        // clean up 
+      } else {
+        got_frame = false;
+        continue;
+      }
     }
 
     if (got_frame) {
       CopyTextureToStagingQueue(dxgi_frame);
     }
 
-    DWORD wait_time_ms = GetReadyFrameFromQueue(&dxgi_frame);
-    if (wait_time_ms == 0) {
+    dxgi_frame = GetReadyFrameFromQueue();
+    got_frame = (dxgi_frame != NULL);
+
+    if (got_frame) {
       PushFrameToMediaSample(dxgi_frame, media_sample);
       *out_dxgi_frame = dxgi_frame;
-      break;
-    } else {
-      got_frame = false;
-      wait_time = wait_time_ms;
     }
   }
 
@@ -423,9 +426,27 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   return S_OK;
 }
 
-DWORD CPushPinDesktop::GetReadyFrameFromQueue(DxgiFrame** out_frame) {
+int32_t CPushPinDesktop::GetNewFrameWaitTime() {
   if (dxgi_frame_queue_.size() == 0) {
-    return 201;
+    return DEFAULT_WAIT_FRAME_TIME;
+  }
+
+  DxgiFrame* frame = dxgi_frame_queue_.front();
+  uint64_t age = GetCounterSinceStartMillis(frame->sent_gpu_time);
+  uint64_t wait_from_gpu_duration_ms = (GPU_WAIT_FRAME_COUNT * frame->frame_length / 10000L);
+
+  if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
+    return -1;
+  }
+
+  int32_t wait_time_ms = max(0, wait_from_gpu_duration_ms - age);
+  return wait_time_ms;
+}
+
+
+DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
+  if (dxgi_frame_queue_.size() == 0) {
+    return NULL;
   }
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
@@ -441,21 +462,18 @@ DWORD CPushPinDesktop::GetReadyFrameFromQueue(DxgiFrame** out_frame) {
         wait_from_gpu_duration_ms,
         dxgi_frame_queue_.size(),
         frame->nr);
-    *out_frame = frame;
     dxgi_frame_queue_.pop();
-    return 0;
+    return frame;
   }
 
-  uint64_t wait_time_ms = max(1, wait_from_gpu_duration_ms - age);
-  debug("%S WAIT age: %llu, frame ts: %llu, size: %d, wait frame length : %llu, wait_time_ms: %llu, nr: %llu", 
+  debug("%S WAIT texture age: %llu, frame ts: %llu, wait frame length: %llu, size: %d, nr: %llu", 
       __func__,
       age,
-      frame->sent_gpu_time,
-      dxgi_frame_queue_.size(),
+      frame->sent_gpu_time, 
       wait_from_gpu_duration_ms,
-      wait_time_ms,
+      dxgi_frame_queue_.size(),
       frame->nr);
-  return (DWORD) wait_time_ms;
+  return NULL;
 }
 
 HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
@@ -577,7 +595,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
   return S_OK;
 }
 
-HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, DWORD wait_time_ms) {
+HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWORD wait_time_ms) {
   if (OpenShmMem() != S_OK) {
     return 2;
   }
@@ -676,8 +694,7 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, DWORD wait_t
           shmem_->read_ptr, shmem_->write_ptr);
       UnrefBefore(shmem_->read_ptr);
     }
-  }
-  else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
+  } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
     uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
     info("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
         shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr - shmem_->read_ptr, read_ptr);
@@ -759,9 +776,11 @@ HRESULT CPushPinDesktop::FillBufferFromShMem(DxgiFrame* dxgi_frame, DWORD wait_t
 
   discontinuity = first_buffer || frame->discontinuity ? true : false;
 
+  DxgiFrame* dxgi_frame = new DxgiFrame();
   dxgi_frame->SetFrame(frame, i, start_frame, end_frame, discontinuity);
+  *out_dxgi_frame = dxgi_frame; 
 
-  debug("dxgi_handle: %p pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
+  debug("dxgi_handle: %llu pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d",
       frame->dxgi_handle,
       frame->pts,
       i,
