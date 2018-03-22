@@ -470,7 +470,8 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->ref_cnt = 1;
     gst_buffer_ref (buf);
 
-    GST_DEBUG_OBJECT(self, "dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+    GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+        frame->nr,
         frame->dxgi_handle,
         //frame->dts / 1000000,
         frame->pts / 1000000,

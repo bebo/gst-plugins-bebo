@@ -103,6 +103,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     uint64_t frame_dropped_cnt_ = 0;
     uint64_t frame_late_cnt_ = 0;
     uint64_t first_frame_ms_ = 0;
+    uint64_t previous_frame_sent_ms_ = 0;
+    uint64_t previous_got_frame_from_shmem_ms_ = 0;
     long double frame_processing_time_ms_ = 0.0;
 
     ComPtr<ID3D11Device> d3d_device_;
@@ -192,7 +194,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
     HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);
     DxgiFrame* GetReadyFrameFromQueue();
-    int32_t GetNewFrameWaitTime();
+    int64_t GetNewFrameWaitTime();
 
     // QueueFrameFromShm
     // WrapAndCopy
@@ -207,9 +209,8 @@ class DxgiFrame {
     HANDLE dxgi_handle;
     uint64_t nr;
     uint64_t index;
-    uint64_t frame_length;
-    bool texture_mapped_to_memory;
     bool discontinuity;
+    REFERENCE_TIME frame_length;
     REFERENCE_TIME start_time;
     REFERENCE_TIME end_time;
     uint64_t sent_gpu_time;
