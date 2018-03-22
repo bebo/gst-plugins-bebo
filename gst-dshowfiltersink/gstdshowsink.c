@@ -727,7 +727,8 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     GstStructure *cur_pool_config;
     cur_pool_config = gst_buffer_pool_get_config(pool);
     gint size;
-    gst_buffer_pool_config_set_params(cur_pool_config, NULL, &size, NULL, NULL);
+    gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
+    GST_DEBUG("Old pool size: %d, info.size: %d", size, info.size);
     if (size == info.size) {
       GST_DEBUG("Reusing buffer pool.");
       gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
