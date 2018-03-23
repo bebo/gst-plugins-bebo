@@ -9,6 +9,7 @@
 #define CAPTURE_H
 
 #include <queue>
+#include <list>
 #include <windows.h>
 #include <streams.h>
 #include <strsafe.h>
@@ -25,6 +26,7 @@ using Microsoft::WRL::ComPtr;
 
 class CPushPinDesktop;
 class DxgiFrame;
+class DxgiFramePool;
 
 
 // parent
@@ -70,7 +72,10 @@ enum TimeOffsetType
 };
 
 // child
-class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKsPropertySet //CSourceStream is ... CBasePin
+class CPushPinDesktop :
+  public CSourceStream,
+  public IAMStreamConfig,
+  public IKsPropertySet
 {
 
   protected:
@@ -103,8 +108,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     uint64_t frame_dropped_cnt_ = 0;
     uint64_t frame_late_cnt_ = 0;
     uint64_t first_frame_ms_ = 0;
-    uint64_t previous_frame_sent_ms_ = 0;
-    uint64_t previous_got_frame_from_shmem_ms_ = 0;
+    uint64_t last_frame_sent_ms_ = 0;
+    uint64_t last_got_frame_from_shmem_ms_ = 0;
     long double frame_processing_time_ms_ = 0.0;
 
     ComPtr<ID3D11Device> d3d_device_;
@@ -171,10 +176,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     // Not implemented because we aren't going in real time.
     // If the file-writing filter slows the graph down, we just do nothing, which means
     // wait until we're unblocked. No frames are ever dropped.
-    STDMETHODIMP Notify(IBaseFilter *pSelf, Quality q)
-    {
-      return E_FAIL;
-    }
+    STDMETHODIMP Notify(IBaseFilter *pSelf, Quality q) { return E_FAIL; }
 
     //////////////////////////////////////////////////////////////////////////
     //  IKsPropertySet
@@ -184,7 +186,8 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
 
   private:
-    std::queue<DxgiFrame*> dxgi_frame_queue_;
+    std::deque<DxgiFrame*> dxgi_frame_queue_;
+    DxgiFramePool* frame_pool_;
 
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
     HRESULT InitializeDXGI();
@@ -195,6 +198,7 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
     HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);
     DxgiFrame* GetReadyFrameFromQueue();
     int64_t GetNewFrameWaitTime();
+    bool ShouldDropNewFrame();
 
     // QueueFrameFromShm
     // WrapAndCopy
@@ -207,21 +211,35 @@ class CPushPinDesktop : public CSourceStream, public IAMStreamConfig, public IKs
 class DxgiFrame {
   public:
     HANDLE dxgi_handle;
+    int map_tries;
     uint64_t nr;
     uint64_t index;
+    uint64_t sent_to_gpu_time;
     bool discontinuity;
+    bool mapped_into_cpu;
     REFERENCE_TIME frame_length;
     REFERENCE_TIME start_time;
     REFERENCE_TIME end_time;
-    uint64_t sent_gpu_time;
     ComPtr<ID3D11Texture2D> texture;
-
 
     DxgiFrame();
     ~DxgiFrame();
-
     void SetFrame(struct frame *frameData, uint64_t i, 
-        REFERENCE_TIME start_time, REFERENCE_TIME end_time, bool discontinuity);
+        REFERENCE_TIME start_time, REFERENCE_TIME end_time, 
+        bool discontinuity);
+};
+
+class DxgiFramePool {
+  public:
+    DxgiFramePool(int size);
+    ~DxgiFramePool();
+
+    DxgiFrame* GetFrame();
+    void ReturnFrame(DxgiFrame* frame);
+  private:
+    std::list<DxgiFrame*> pool_;
+    int max_size_;
+    int created_size_;
 };
 
 #endif
