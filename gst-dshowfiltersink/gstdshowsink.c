@@ -129,46 +129,33 @@ gst_dshowfiltersink_set_context(GstElement *element,
 #define ALIGNMENT 64
 
 static void
-gst_shm_sink_init (GstShmSink * self)
+initialize_shared_memory(GstShmSink * self, uint64_t width, uint64_t height, uint64_t fps)
 {
-  self->first_render_time = 0;
-  g_cond_init (&self->cond);
-  //self->size = DEFAULT_SIZE;
-  self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
-
-  self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
-  // FIXME handle creation error
-  self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
-  // FIXME handle creation error
-
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
+  self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
 
-  // FIXME  - fix hard coded 720p
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
-  size = ((DWORD) frame_size * BUFFER_COUNT) + header_size;
+  size = ((DWORD)frame_size * BUFFER_COUNT) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-        0, size, BEBO_SHMEM_NAME);
+    0, size, BEBO_SHMEM_NAME);
 
   if (!self->shmem_handle) {
-      // FIXME should be ERROR
-      GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
-      return;
+    // FIXME should be ERROR
+    GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
+    return;
   }
   self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (!self->shmem) {
-      // FIXME should be ERROR
-      GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
-      return;
+    // FIXME should be ERROR
+    GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
+    return;
   }
 
-  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, 1280, 720);
-
-//  for (int i = 0; i < GST_VIDEO_MAX_PLANES; ++i) {
-//      self->shmem->video_info.plane_offsets[i] = GST_VIDEO_INFO_PLANE_OFFSET(&(self->shmem->video_info), i);
-//      self->shmem->video_info.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&(self->shemem->video_info), i);
-//  }
+  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, width, height);
+  GstVideoInfo * info = &self->shmem->video_info;
+  info->fps_n = fps;
 
   self->shmem->version = SHM_INTERFACE_VERSION;
   self->shmem->frame_offset = header_size;
@@ -179,6 +166,19 @@ gst_shm_sink_init (GstShmSink * self)
   self->shmem->shmem_size = size;
 
   ReleaseMutex(self->shmem_mutex);
+}
+
+static void
+gst_shm_sink_init (GstShmSink * self)
+{
+  self->first_render_time = 0;
+  g_cond_init (&self->cond);
+  //self->size = DEFAULT_SIZE;
+  self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
+
+  // FIXME handle creation error
+  self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
+  // FIXME handle creation error
 
   gst_allocation_params_init (&self->params);
 }
@@ -365,6 +365,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
     GstShmSink *self = GST_SHM_SINK (bsink);
     GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
+
 
     if (!GST_IS_BUFFER(buf)) {
         GST_ERROR_OBJECT(self, "NOT A BUFFER???");
@@ -689,7 +690,8 @@ context_error:
   }
 }
 
-GstBufferPool *pool = NULL;
+static GstBufferPool *pool = NULL;
+static bool shmem_init = false;
 
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
@@ -700,7 +702,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   GstCaps *caps;
   gboolean need_pool;
   gst_query_parse_allocation(query, &caps, &need_pool);
-
   GstCapsFeatures *features;
   features = gst_caps_get_features (caps, 0);
 
@@ -720,6 +721,13 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
+
+  if (!shmem_init) {
+    //FIXME This should live somewhere else.
+    GST_INFO("Initializating shared mem info to %d x %d at %llu fps", info.width, info.height, info.fps_n);
+    initialize_shared_memory(self, info.width, info.height, info.fps_n);
+    shmem_init = true;
+  }
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;
