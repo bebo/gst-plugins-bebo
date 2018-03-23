@@ -11,6 +11,7 @@
 #endif
 
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
+#define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
 // FOR 60FPS, to fix stuttering issues, increase WAIT_FRAME to ~20
 #define GPU_WAIT_FRAME_COUNT              3
@@ -634,7 +635,6 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
     return 2;
   }
 
-#if 1
   DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
 
   // FIXME handle all error cases
@@ -666,48 +666,9 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
       }
     }
   }
-#else
-  DWORD result = 0;
-
-  while ((result = WaitForSingleObject(shmem_mutex_, INFINITE)) == WAIT_OBJECT_0) {
-    bool wait_for_semaphore = (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr);
-    ReleaseMutex(shmem_mutex_);
-
-    if (!wait_for_semaphore) {
-      break;
-    }
-
-    DWORD semaphore_result = WaitForSingleObject(shmem_new_data_semaphore_, 200);
-
-    if (semaphore_result == WAIT_TIMEOUT) {
-      debug("timed out after 200ms read_ptr: %d write_ptr: %d",
-          0 /*shmem_->read_ptr*/,
-          0 /*shmem_->write_ptr*/);
-      return 2;
-    } else if (semaphore_result == WAIT_ABANDONED) {
-      warn("semaphore is abandoned");
-      return 2;
-    } else if (semaphore_result == WAIT_FAILED) {
-      warn("semaphore wait failed 0x%010x", GetLastError());
-      return 2;
-    } else if (semaphore_result != WAIT_OBJECT_0) {
-      error("unknown semaphore event 0x%010x", result);
-      return 2;
-    }
-  }
-
-  if (result != WAIT_OBJECT_0) {
-    error("Failed to acquire shmem_mutex_, result: %d", result);
-    ReleaseMutex(shmem_mutex_);
-    return result == WAIT_TIMEOUT ? 3 : 2;
-  }
-
-  // semaphore signalled, gonna hold the shmem_mutex_
-  WaitForSingleObject(shmem_mutex_, INFINITE);
-#endif
   bool first_buffer = false;
 
-  if (shmem_->read_ptr == 0) {
+  if (shmem_->read_ptr == 0 ) {
     first_buffer = true;
     frame_start_ = shmem_->write_ptr - 1;
     first_frame_ms_ = GetTickCount64();
@@ -737,50 +698,58 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   CRefTime now;
   CSourceStream::m_pFilter->StreamTime(now);
   now = max(0, now); // can be negative before it started and negative will mess us up
-  uint64_t now_in_ns = now * 100;
+  int64_t now_in_ns = now * 100;
 
   if (first_buffer) {
     uint64_t latency_ns = frame->duration * GPU_WAIT_FRAME_COUNT + frame->latency;
-    info("calculated gst_latency: %d + gpu_latency: %d * %d = latency_ms: %d",frame->latency / 1000000, GPU_WAIT_FRAME_COUNT, frame->duration / 1000000, latency_ns / 1000000);
-    latency_ns = 0; // FIXME 
+    info("calculated gst_latency: %llu + gpu_latency: %d * %d = latency_ms: %d",
+      NS2MS(frame->latency), GPU_WAIT_FRAME_COUNT, NS2MS(frame->duration), NS2MS(latency_ns));
+    latency_ns = 7 + frame->latency;
     // TODO take start delta/behind into account
     // we prefer dts because it is monotonic
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      time_offset_dts_ns_ = frame->dts - now_in_ns + latency_ns;
+      int64_t dts = frame->dts;
+      time_offset_dts_ns_ = dts - now_in_ns + latency_ns;
       time_offset_type_ = TIME_OFFSET_DTS;
-      debug("using DTS as refernence delta in ns: %I64d", time_offset_dts_ns_);
+      debug("using DTS as refernence delta in ns: %lld", time_offset_dts_ns_);
     }
     if (frame->pts != GST_CLOCK_TIME_NONE) {
-
+      int64_t pts = frame->pts;
       time_offset_pts_ns_ = frame->pts - now_in_ns + latency_ns;
       if (time_offset_type_ == TIME_OFFSET_NONE) {
         time_offset_type_ = TIME_OFFSET_PTS;
-        warn("using PTS as reference delta in ns: %I64d", time_offset_pts_ns_);
+        warn("using PTS as reference delta in ns: %lld", time_offset_pts_ns_);
       } else {
-        debug("PTS as delta in ns: %I64d", time_offset_pts_ns_);
+        debug("PTS as delta in ns: %lld", time_offset_pts_ns_);
       }
     }
   }
-
   REFERENCE_TIME start_frame;
   REFERENCE_TIME end_frame; 
   bool discontinuity;
   bool have_time = false;
   if (time_offset_type_ == TIME_OFFSET_DTS) {
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      start_frame = NS_TO_REFERENCE_TIME(frame->dts - time_offset_dts_ns_);
+      int64_t dts = frame->pts;
+      start_frame = NS_TO_REFERENCE_TIME(dts - time_offset_dts_ns_);
       have_time = true;
     } else {
       warn("missing DTS timestamp");
     }
   } else if (time_offset_type_ == TIME_OFFSET_PTS || !have_time) {
     if (frame->pts != GST_CLOCK_TIME_NONE) {
-      start_frame = NS_TO_REFERENCE_TIME(frame->pts - time_offset_pts_ns_);
+      int64_t pts = frame->pts;
+      start_frame = NS_TO_REFERENCE_TIME(pts - time_offset_pts_ns_);
       have_time = true;
     } else {
       warn("missing PTS timestamp");
     }
   }
+  warn("MS nr: %llu pts:%llu - offset: %lld = start_frame: %lld",
+    frame->nr,
+    NS2MS(frame->pts),
+    NS2MS(time_offset_pts_ns_),
+    REFERENCE_TIME_TO_MS(start_frame));
 
   uint64_t duration_ns = frame->duration;
   if (duration_ns == GST_CLOCK_TIME_NONE) {
@@ -793,10 +762,13 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   }
 
   if (last_frame_ != 0 && last_frame_ >= start_frame) {
-    warn("timestamp not monotonic last: %dI64t new: %dI64t", last_frame_, start_frame);
+    warn("timestamp not monotonic now %lld nr: %llu last: %lld new: %lld",
+      NS2MS(now_in_ns), frame->nr, REFERENCE_TIME_TO_MS(last_frame_), REFERENCE_TIME_TO_MS(start_frame));
     // fake it
     start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
   }
+  debug("timestamp log now %lld nr: %llu last: %lld new: %lld",
+    NS2MS(now_in_ns), frame->nr, REFERENCE_TIME_TO_MS(last_frame_), REFERENCE_TIME_TO_MS(start_frame));
 
   end_frame = start_frame + NS_TO_REFERENCE_TIME(duration_ns);
   last_frame_ = start_frame;
@@ -810,7 +782,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   uint64_t got_frame_diff_ms = previous_got_frame_from_shmem_ms_ == 0 ? 0 : 
     GetCounterSinceStartMillisRounded(previous_got_frame_from_shmem_ms_);
 
-  debug("GOT frame from shmem. nr: %llu dxgi_handle: %llu pts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d got_frame_diff: %llu",
+  debug("GOT frame from shmem. nr: %llu dxgi_handle: %llu pts: %llu i: %llu read_ptr: %llu write_ptr: %llu behind: %llu got_frame_diff: %llu",
       frame->nr,
       frame->dxgi_handle,
       frame->pts,
