@@ -13,9 +13,8 @@
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
-#define GPU_WAIT_FRAME_COUNT              20
-#define GPU_QUEUE_MAX_FRAME_COUNT         25
-#define QUEUE_FULL_SLEEP_TIME_DENOMINATOR 2   // numerator is frame->duration (frame length)
+#define GPU_WAIT_FRAME_COUNT              2
+#define GPU_QUEUE_MAX_FRAME_COUNT         4
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 #define DROP_FRAME_WHEN_QUEUE_FULL
 #define WAIT_FOR_GPU_MAP
@@ -536,8 +535,10 @@ HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
       (void**)shared_texture.GetAddressOf());
 
   if (hr != S_OK) {
-    // TODO: error handling, what to do here
-    error("OpenSharedResource failed %p", hr);
+      debug("DROP frame cause failed to open shared handle. nr: %llu dxgi_handle: %llu", 
+          frame->nr, frame->dxgi_handle);
+    UnrefDxgiFrame(frame);
+    return hr;
   }
 
   // only create a texture if there's no texture already
@@ -803,7 +804,8 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
       warn("missing PTS timestamp");
     }
   }
-  warn("MS nr: %llu pts:%llu - offset: %lld = start_frame: %lld",
+
+  debug("MS nr: %llu pts:%llu - offset: %lld = start_frame: %lld",
     frame->nr,
     NS2MS(frame->pts),
     NS2MS(time_offset_pts_ns_),
@@ -845,7 +847,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   uint64_t got_frame_diff_ms = last_got_frame_from_shmem_ms_ == 0 ? 0 : 
     GetCounterSinceStartMillisRounded(last_got_frame_from_shmem_ms_);
 
-  debug("GOT frame from shmem. nr: %llu dxgi_handle: %llu pts: %lld dts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d got_frame_diff: %llu",
+  debug("GOT frame from shmem. nr: %llu dxgi_handle: %llu pts: %lld dts: %lld i: %d read_ptr: %d write_ptr: %d behind: %d latency: %llu got_frame_diff: %llu",
       frame->nr,
       frame->dxgi_handle,
       frame->pts,
@@ -854,6 +856,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
       shmem_->read_ptr,
       shmem_->write_ptr,
       shmem_->write_ptr - shmem_->read_ptr,
+      frame->latency,
       got_frame_diff_ms);
 
   last_got_frame_from_shmem_ms_ = StartCounter();
