@@ -13,9 +13,8 @@
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
-// FOR 60FPS, to fix stuttering issues, increase WAIT_FRAME to ~20
-#define GPU_WAIT_FRAME_COUNT              3
-#define GPU_QUEUE_MAX_FRAME_COUNT         6
+#define GPU_WAIT_FRAME_COUNT              20
+#define GPU_QUEUE_MAX_FRAME_COUNT         25
 #define QUEUE_FULL_SLEEP_TIME_DENOMINATOR 2   // numerator is frame->duration (frame length)
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 #define DROP_FRAME_WHEN_QUEUE_FULL
