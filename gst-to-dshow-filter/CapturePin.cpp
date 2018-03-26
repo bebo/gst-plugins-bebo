@@ -13,12 +13,10 @@
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
-#define GPU_WAIT_FRAME_COUNT              2
-#define GPU_QUEUE_MAX_FRAME_COUNT         4
+#define GPU_WAIT_FRAME_COUNT              3
+#define GPU_QUEUE_MAX_FRAME_COUNT         3
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
-#define DROP_FRAME_WHEN_QUEUE_FULL
 #define WAIT_FOR_GPU_MAP
-#define DROP_FRAME_WHEN_FAIL_TO_GPU_MAP
 #undef  FILL_GPU_QUEUE_BEFORE_FULL
 
 #ifdef _DEBUG 
@@ -410,14 +408,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       }
     } 
 
-#ifdef DROP_FRAME_WHEN_QUEUE_FULL
     if (got_frame && ShouldDropNewFrame()) {
       debug("DROP frame from shmem, queue is filled. nr: %llu dxgi_handle: %llu wait_time: %lu", 
           dxgi_frame->nr, dxgi_frame->dxgi_handle, wait_time);
       UnrefDxgiFrame(dxgi_frame);
       got_frame = false;
     }
-#endif
 
     if (got_frame) {
       CopyTextureToStagingQueue(dxgi_frame);
@@ -436,6 +432,35 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       *out_dxgi_frame = dxgi_frame;
     }
   }
+
+  DxgiFrame* out_frame = *out_dxgi_frame;
+
+  // wait if necessary to ensure we dont send frames every 1ms
+  uint64_t frame_sent_diff_ms = (last_frame_sent_ms_ == 0) ? 0 :
+    GetCounterSinceStartMillisRounded(last_frame_sent_ms_);
+  uint64_t frame_length_ms = REFERENCE_TIME_TO_MS(out_frame->frame_length);
+  uint64_t wait_time_ms = 0;
+
+  if (last_frame_sent_ms_ != 0 && 
+      frame_sent_diff_ms < frame_length_ms) {
+    wait_time_ms = frame_length_ms - frame_sent_diff_ms;
+    Sleep((DWORD) wait_time_ms);
+  }
+
+  debug("DELIVER to dshow. nr: %llu dxgi_handle: %llu start_time: %lld end_time: %lld delta_time: %lld map_time: %llu wait_time: %llu frame_sent_diff: %lld", 
+      out_frame->nr,
+      out_frame->dxgi_handle,
+      out_frame->start_time,
+      out_frame->end_time,
+      out_frame->end_time - out_frame->start_time,
+      last_map_took_time_ms_,
+      wait_time_ms,
+      frame_sent_diff_ms);
+
+  last_frame_sent_ms_ = StartCounter();
+
+
+  // stats
 
   frame_sent_cnt_++;
   frame_dropped_cnt_ = frame_total_cnt_ - frame_sent_cnt_;
@@ -458,8 +483,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   // Set TRUE on every sample for uncompressed frames 
   // http://msdn.microsoft.com/en-us/library/windows/desktop/dd407021%28v=vs.85%29.aspx
   media_sample->SetSyncPoint(TRUE);
-  media_sample->SetDiscontinuity((*out_dxgi_frame)->discontinuity);
-  media_sample->SetTime(&(*out_dxgi_frame)->start_time, &(*out_dxgi_frame)->end_time);
+  media_sample->SetDiscontinuity(out_frame->discontinuity);
+  media_sample->SetTime(&out_frame->start_time, &out_frame->end_time);
 
   return S_OK;
 }
@@ -571,53 +596,36 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
 
   HRESULT hr;
 
-#ifdef WAIT_FOR_GPU_MAP
   // note: Unmap happens after we deliver the buffer, in UnrefDxgiFrame
+#ifdef WAIT_FOR_GPU_MAP
   hr = d3d_context_->Map(frame->texture.Get(), 0,
       D3D11_MAP_READ,  //D3D11_MAP_READ
       0,
       &cpu_mem);
 #else 
+  int64_t max_wait_time = REFERENCE_TIME_TO_MS(frame->frame_length);
   do {
     hr = d3d_context_->Map(frame->texture.Get(), 0, 
         D3D11_MAP_READ,
         D3D11_MAP_FLAG_DO_NOT_WAIT,
-        &cpu_mem); 
+        &cpu_mem);
   } while (hr == DXGI_ERROR_WAS_STILL_DRAWING && 
-           GetCounterSinceStartMillisRounded(now) < 33);
+           GetCounterSinceStartMillisRounded(now) < max_wait_time);
 #endif
 
-  uint64_t map_took_time = GetCounterSinceStartMillisRounded(now);
+  last_map_took_time_ms_ = GetCounterSinceStartMillisRounded(now);
 
-#ifdef DROP_FRAME_WHEN_FAIL_TO_GPU_MAP
   if (hr != S_OK) {
     if (hr != DXGI_ERROR_WAS_STILL_DRAWING) {
       error("MAP failed: 0x%016x", hr);
     }
 
-    debug("DROP frame from failed to map from gpu to cpu. nr: %llu dxgi_handle: %llu map_time: %lu", 
-        frame->nr, frame->dxgi_handle, map_took_time);
+    debug("DROP frame from failed to map from gpu to cpu. nr: %llu dxgi_handle: %llu map_time: %lu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
     UnrefDxgiFrame(frame);
     return hr;
   }
-#endif
-
 
   frame->mapped_into_cpu = true;
-
-  uint64_t frame_sent_diff_ms = last_frame_sent_ms_ == 0 ? 0 :
-    GetCounterSinceStartMillisRounded(last_frame_sent_ms_);
-
-  debug("SHIPPED to dshow. nr: %llu dxgi_handle: %llu start_time: %lld end_time: %lld delta_time: %lld map_time: %llu frame_sent_diff: %lld", 
-        frame->nr,
-        frame->dxgi_handle,
-        frame->start_time,
-        frame->end_time,
-        frame->end_time - frame->start_time,
-        map_took_time,
-        frame_sent_diff_ms);
-
-  last_frame_sent_ms_ = StartCounter();
 
   ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
   return S_OK;
@@ -677,7 +685,7 @@ HRESULT CPushPinDesktop::OpenShmMem()
   }
 
 
-  frame_pool_ = new DxgiFramePool(shmem_count);
+  frame_pool_ = new DxgiFramePool((int)shmem_count);
   info("Opened Shared Memory Buffer");
   return S_OK;
 }

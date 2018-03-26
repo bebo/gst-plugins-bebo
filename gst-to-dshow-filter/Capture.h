@@ -110,6 +110,7 @@ class CPushPinDesktop :
     uint64_t first_frame_ms_ = 0;
     uint64_t last_frame_sent_ms_ = 0;
     uint64_t last_got_frame_from_shmem_ms_ = 0;
+    uint64_t last_map_took_time_ms_ = 0;
     long double frame_processing_time_ms_ = 0.0;
 
     ComPtr<ID3D11Device> d3d_device_;
