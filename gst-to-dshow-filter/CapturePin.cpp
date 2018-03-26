@@ -17,7 +17,7 @@
 #define GPU_QUEUE_MAX_FRAME_COUNT         3
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 #define WAIT_FOR_GPU_MAP
-#undef  FILL_GPU_QUEUE_BEFORE_FULL
+#define FILL_GPU_QUEUE_BEFORE_FULL
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -445,7 +445,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       frame_sent_diff_ms < frame_length_ms) {
     wait_time_ms = frame_length_ms - frame_sent_diff_ms;
     Sleep((DWORD) wait_time_ms);
+
+    // get the new sent_diff_ms
+    frame_sent_diff_ms = (last_frame_sent_ms_ == 0) ? 0 :
+      GetCounterSinceStartMillisRounded(last_frame_sent_ms_);
   }
+
 
   debug("DELIVER to dshow. nr: %llu dxgi_handle: %llu start_time: %lld end_time: %lld delta_time: %lld map_time: %llu wait_time: %llu frame_sent_diff: %lld", 
       out_frame->nr,
