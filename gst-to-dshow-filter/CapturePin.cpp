@@ -361,15 +361,15 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample) {
 
 D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTextureDesc(D3D11_TEXTURE2D_DESC share_desc) {
   D3D11_TEXTURE2D_DESC desc = { 0 };
-  desc.Format = share_desc.Format;
   desc.Width = share_desc.Width;
   desc.Height = share_desc.Height;
+  desc.Format = share_desc.Format;
   desc.MipLevels = 1;
   desc.ArraySize = 1;
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_STAGING;
-  desc.BindFlags = 0;
   desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
+  desc.BindFlags = 0;
   desc.MiscFlags = 0;
   return desc;
 }
@@ -998,6 +998,7 @@ DxgiFrame* DxgiFramePool::GetFrame() {
       return NULL;
     }
     created_size_++;
+    debug("CREATED new dxgi frame in the pool, created: %d, max limit: %d", created_size_, max_size_);
     return new DxgiFrame();
   } else {
     DxgiFrame* frame = pool_.front();
