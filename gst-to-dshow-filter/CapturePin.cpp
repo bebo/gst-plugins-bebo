@@ -14,7 +14,7 @@
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
 #define GPU_WAIT_FRAME_COUNT              3
-#define GPU_QUEUE_MAX_FRAME_COUNT         3
+#define GPU_QUEUE_MAX_FRAME_COUNT         5
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 #define WAIT_FOR_GPU_MAP
 #define FILL_GPU_QUEUE_BEFORE_FULL
@@ -406,7 +406,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
         got_frame = false;
         continue;
       }
-    } 
+    }
 
     if (got_frame && ShouldDropNewFrame()) {
       debug("DROP frame from shmem, queue is filled. nr: %llu dxgi_handle: %llu wait_time: %lu", 
@@ -414,6 +414,15 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       UnrefDxgiFrame(dxgi_frame);
       got_frame = false;
     }
+
+#ifdef FILL_GPU_QUEUE_BEFORE_FULL
+    // prioritize fill buffer to fill up the queue before start consuming from our own queue
+    if (!got_frame &&
+        dxgi_frame_queue_.size() < GPU_QUEUE_MAX_FRAME_COUNT) {
+      HRESULT code = GetAndWaitForShmemFrame(&dxgi_frame, 0);
+      got_frame = (code == S_OK);
+    }
+#endif
 
     if (got_frame) {
       CopyTextureToStagingQueue(dxgi_frame);
@@ -439,34 +448,31 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   uint64_t frame_sent_diff_ms = (last_frame_sent_ms_ == 0) ? 0 :
     GetCounterSinceStartMillisRounded(last_frame_sent_ms_);
   uint64_t frame_length_ms = REFERENCE_TIME_TO_MS(out_frame->frame_length);
-  uint64_t wait_time_ms = 0;
+  uint64_t sleep_time_ms = 0;
 
   if (last_frame_sent_ms_ != 0 && 
       frame_sent_diff_ms < frame_length_ms) {
-    wait_time_ms = frame_length_ms - frame_sent_diff_ms;
-    Sleep((DWORD) wait_time_ms);
+    sleep_time_ms = frame_length_ms - frame_sent_diff_ms;
+    Sleep((DWORD) sleep_time_ms);
 
     // get the new sent_diff_ms
     frame_sent_diff_ms = (last_frame_sent_ms_ == 0) ? 0 :
       GetCounterSinceStartMillisRounded(last_frame_sent_ms_);
   }
 
-
-  debug("DELIVER to dshow. nr: %llu dxgi_handle: %llu start_time: %lld end_time: %lld delta_time: %lld map_time: %llu wait_time: %llu frame_sent_diff: %lld", 
+  debug("DELIVER to dshow. nr: %llu dxgi_handle: %llu start_time: %lld end_time: %lld delta_time: %lld map_time: %llu sleep_time_ms: %llu frame_sent_diff: %lld", 
       out_frame->nr,
       out_frame->dxgi_handle,
       out_frame->start_time,
       out_frame->end_time,
       out_frame->end_time - out_frame->start_time,
       last_map_took_time_ms_,
-      wait_time_ms,
+      sleep_time_ms,
       frame_sent_diff_ms);
 
   last_frame_sent_ms_ = StartCounter();
 
-
   // stats
-
   frame_sent_cnt_++;
   frame_dropped_cnt_ = frame_total_cnt_ - frame_sent_cnt_;
 
@@ -509,13 +515,6 @@ int64_t CPushPinDesktop::GetNewFrameWaitTime() {
   uint64_t wait_from_gpu_duration_ms = REFERENCE_TIME_TO_MS(wait_frame_count * frame->frame_length);
 
   if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
-#ifdef FILL_GPU_QUEUE_BEFORE_FULL
-    // prioritize fill buffer to fill up the queue before start consuming from our own queue
-    if (dxgi_frame_queue_.size() < GPU_QUEUE_MAX_FRAME_COUNT) { 
-      return 0;
-    }
-#endif
-
     return -1; // consume from the queue instead of taking new frames
   }
 
