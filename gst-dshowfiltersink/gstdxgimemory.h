@@ -54,22 +54,11 @@ typedef struct _GstDXGID3D11Context
   ID3D11Device         *d3d11_device;
   ID3D11DeviceContext  *device_context;
   HANDLE                device_interop_handle;
-  GLubyte              *pixels;
-
-  PFNWGLDXOPENDEVICENVPROC        wglDXOpenDeviceNV;
-  PFNWGLDXCLOSEDEVICENVPROC       wglDXCloseDeviceNV;
-  PFNWGLDXREGISTEROBJECTNVPROC    wglDXRegisterObjectNV;
-  PFNWGLDXUNREGISTEROBJECTNVPROC  wglDXUnregisterObjectNV;
-  PFNWGLDXLOCKOBJECTSNVPROC       wglDXLockObjectsNV;
-  PFNWGLDXUNLOCKOBJECTSNVPROC     wglDXUnlockObjectsNV;
-  PFNWGLDXSETRESOURCESHAREHANDLENVPROC wglDXSetResourceShareHandleNV;
 } GstDXGID3D11Context;
 
 typedef struct _GstGLDXGIMemory
 {
   GstGLMemory      mem;
-  HANDLE           interop_handle;
-  ID3D11Texture2D *interop_texture;
   HANDLE           staging_shared_dxgi_handle;
   ID3D11Texture2D *staging_texture;
   gpointer         _padding[GST_PADDING];

@@ -327,26 +327,20 @@ gst_shm_sink_start (GstBaseSink * bsink)
 
 static void
 _copy_texture_resource (GstGLContext * context,
-    GstGLDXGIMemory * gl_dxgi_mem)
+    GstGLDXGIMemory * gl_dxgi_mem,
+    gpointer data)
 {
   GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
   ID3D11DeviceContext *device_context = share_context->device_context;
 
-  if (!gst_gl_memory_read_pixels ((GstGLMemory *) &gl_dxgi_mem->mem,
-            (gpointer) share_context->pixels)) {
-    GST_ERROR("Failed to read pixels");
-    return;
-  }
-
   device_context->lpVtbl->UpdateSubresource(device_context,
     gl_dxgi_mem->staging_texture,
     0, NULL,
-    share_context->pixels,
+    data,
     1280 * 4,
     1280 * 720 * 4);
 
   device_context->lpVtbl->Flush(device_context);
-
 }
 
 static gboolean
@@ -475,30 +469,30 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   GstMapInfo map_info;
 
   if (!gst_memory_map (GST_MEMORY_CAST(gl_dxgi_mem),
-      &map_info, GST_MAP_READ | GST_MAP_GL)) {
+      &map_info, GST_MAP_READ)) {
      GST_ERROR_OBJECT(self, "Failed to map gst dxgi memory");
   }
 
   GST_DEBUG_OBJECT (self, "RENDER. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
       gl_dxgi_mem->mem.tex_id,
       gl_dxgi_mem->staging_shared_dxgi_handle,
-      gl_dxgi_mem->interop_handle);
+      0);
 
-  gst_gl_context_thread_add (self->context,
-      (GstGLContextThreadFunc) _copy_texture_resource,
-      gl_dxgi_mem);
+  _copy_texture_resource(self->context,
+      gl_dxgi_mem,
+      map_info.data);
 
   GST_DEBUG_OBJECT (self, "COPY TEX. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
       gl_dxgi_mem->mem.tex_id,
       gl_dxgi_mem->staging_shared_dxgi_handle,
-      gl_dxgi_mem->interop_handle);
+      0);
 
   gst_memory_unmap (GST_MEMORY_CAST(gl_dxgi_mem), &map_info);
 
   GST_DEBUG_OBJECT (self, "UNMAP. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
       gl_dxgi_mem->mem.tex_id,
       gl_dxgi_mem->staging_shared_dxgi_handle,
-      gl_dxgi_mem->interop_handle);
+      0);
 
 
   frame->latency = latency;
@@ -646,21 +640,6 @@ create_device_d3d11 (ID3D11Device ** device, ID3D11DeviceContext ** context)
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
   GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
   GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
-
-  share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
-  share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXCloseDeviceNV");
-  share_context->wglDXRegisterObjectNV = (PFNWGLDXREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
-  share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
-  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC) 
-    gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
-  share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
-  share_context->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
 }
 
 static void 
@@ -669,17 +648,9 @@ init_d3d11_context (GstGLContext * gl_context, gpointer * sink)
   GstShmSink *self = GST_SHM_SINK (sink);
 
   GstDXGID3D11Context *share_context = g_new (GstDXGID3D11Context, 1);
-  share_context->pixels = g_malloc(1280 * 720 * 4); // TODO jake
-
-  init_wgl_functions (gl_context, share_context);
 
   create_device_d3d11 (&share_context->d3d11_device, &share_context->device_context);
   g_assert (share_context->d3d11_device != NULL);
-
-  share_context->device_interop_handle =
-    share_context->wglDXOpenDeviceNV (share_context->d3d11_device);
-
-  g_assert (share_context->device_interop_handle != NULL);
 
   g_object_set_data (gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
   // FIXME: how do we close these???

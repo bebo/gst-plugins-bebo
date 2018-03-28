@@ -148,12 +148,14 @@ _get_texture_shared_handle (ID3D11Texture2D * texture)
 }
 
 static guint
-_create_gl_texture (const GstGLFuncs * gl, guint target) 
+_create_gl_texture (const GstGLFuncs * gl, guint target, guint internal_format, 
+    guint format, guint type, guint width, guint height) 
 {
   guint tex_id;
   gl->GenTextures (1, &tex_id);
-
   gl->BindTexture (target, tex_id);
+  gl->TexImage2D(target, 0, internal_format, width, height, 0, format, type,
+    NULL);
   gl->TexParameteri (target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   gl->TexParameteri (target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   gl->TexParameteri (target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -165,33 +167,21 @@ _create_gl_texture (const GstGLFuncs * gl, guint target)
 static guint
 _new_texture (GstGLContext * context, guint target, guint internal_format, 
     guint format, guint type, guint width, guint height, 
-    HANDLE * interop_handle, ID3D11Texture2D ** interop_texture, 
     HANDLE * shared_dxgi_handle, ID3D11Texture2D ** staging_texture)
 {
   const GstGLFuncs *gl = context->gl_vtable;
   GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
 
-  guint tex_id = _create_gl_texture(gl, target);
-
-  *interop_texture = _new_d3d11_texture (share_context->d3d11_device, width, height,
-      format, type, /* is_shared */ FALSE);
+  guint tex_id = _create_gl_texture(gl, target, internal_format, 
+    format, type, width, height);
 
   *staging_texture = _new_d3d11_texture (share_context->d3d11_device, width, height,
       format, type, /* is_shared */ TRUE);
 
   *shared_dxgi_handle = _get_texture_shared_handle(*staging_texture);
 
-  // attach gl texture into d3d texture
-  *interop_handle = share_context->wglDXRegisterObjectNV(
-      share_context->device_interop_handle,
-      *interop_texture,
-      tex_id,
-      target,
-      WGL_ACCESS_READ_WRITE_NV);
-
-  GST_DEBUG("new dxgi texture texture_id: %#010x interop_id: %#010x dxgi_handle: %p %dx%d",
+  GST_DEBUG("new dxgi texture texture_id: %#010x dxgi_handle: %p %dx%d",
     tex_id,
-    *interop_handle,
     *shared_dxgi_handle,
     width,
     height);
@@ -225,13 +215,11 @@ _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
         _new_texture (context, gst_gl_texture_target_to_gl (gl_mem->tex_target),
         internal_format, tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT (gl_mem),
-        &gl_dxgi_mem->interop_handle,
-        &gl_dxgi_mem->interop_texture,
         &gl_dxgi_mem->staging_shared_dxgi_handle,
         &gl_dxgi_mem->staging_texture);
 
-    GST_INFO("Generating texture_id: %u interop_id: %#010x format: %u type: %u dimensions: %ux%u",
-        gl_mem->tex_id, gl_dxgi_mem->interop_texture,
+    GST_INFO("Generating texture_id: %u format: %u type: %u dimensions: %ux%u",
+        gl_mem->tex_id, 
         tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT(gl_mem));
   }
@@ -249,42 +237,6 @@ get_dxgi_share_context(GstGLContext * context) {
 static gpointer
 _gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 {
-  if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_INFO("wglDXLockObjectsNV texture_id: %u interop_id: %#010x",
-      gl_mem->mem.tex_id,
-      gl_mem->interop_handle);
-
-    GstGLContext *context = gl_mem->mem.mem.context;
-    GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
-
-    BOOL result = share_context->wglDXLockObjectsNV(
-        share_context->device_interop_handle,
-        1,
-        &gl_mem->interop_handle);
-
-    if (result == FALSE) {
-      DWORD error = GetLastError();
-      if (error == ERROR_BUSY) {
-        GST_ERROR("wglDXLockObjectsNV FAILED ERROR_BUSY texture_id: %#010x interop_id: %#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else if (error == ERROR_INVALID_DATA) {
-        GST_ERROR("wglDXLockObjectsNV FAILED ERROR_INVALID_DATA texture_id: %#010x interop_id: %#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else if (error == ERROR_LOCK_FAILED) {
-        GST_ERROR("wglDXLockObjectsNV FAILED ERROR_LOCK_FAILED texture_id: %#010x interop_id: %#010x",
-            gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else {
-        GST_ERROR("wglDXLockObjectsNV FAILED UNKNOWN ERROR %#010x texture_id: %#010x interop_id: %#010x",
-          error,
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      }
-    }
-  }
-
   GstGLMemoryAllocatorClass *alloc_class;
   alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS(parent_class);
   return alloc_class->map((GstGLBaseMemory *) gl_mem, info, maxsize);
@@ -296,42 +248,6 @@ _gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
   GstGLMemoryAllocatorClass *alloc_class;
   alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
   alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
-
-  if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_INFO("wglDXUnlockObjectsNV texture_id: %#010x interop_id: %#010x",
-      gl_mem->mem.tex_id,
-      gl_mem->interop_handle);
-
-    GstGLContext *context = gl_mem->mem.mem.context;
-    GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
-
-    BOOL result = share_context->wglDXUnlockObjectsNV(
-        share_context->device_interop_handle,
-        1,
-        &gl_mem->interop_handle);
-
-    if (result == FALSE) {
-      DWORD error = GetLastError();
-      if (error == ERROR_NOT_LOCKED) {
-        GST_ERROR("wglDXUnlockObjectsNV FAILED ERROR_NOT_LOCKED texture_id: %#010x interop_id: %#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else if (error == ERROR_INVALID_DATA) {
-        GST_ERROR("wglDXUnlockObjectsNV FAILED ERROR_INVALID_DATA texture_id: %#010x interop_id: %#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else if (error == ERROR_LOCK_FAILED)  {
-        GST_ERROR("wglDXUnlockObjectsNV FAILED ERROR_LOCK_FAILED texture_id: %#010x interop_id: %#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else {
-        GST_ERROR("wglDXUnlockObjectsNV FAILED UNKNOWN ERROR %#010x texture_id: %#010x interop_id: %#010x",
-          error,
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      }
-    }
-  }
 }
 
 static GstMemory *
@@ -405,7 +321,7 @@ _gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
         size);
   }
 
-  dest = (GstMemory *) g_new0 (GstGLDXGIMemory, 1);
+  dest = g_new0 (GstGLDXGIMemory, 1);
 
   gst_gl_memory_init (GST_GL_MEMORY_CAST (dest), allocator, NULL,
       src->mem.mem.context, src->mem.tex_target, src->mem.tex_format, &params,
@@ -441,7 +357,7 @@ _gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
     }
   }
 
-  return dest;
+  return GST_MEMORY_CAST (dest);
 }
 
 static void
@@ -449,33 +365,6 @@ _gl_mem_destroy (GstGLDXGIMemory * gl_mem)
 {
   GST_INFO("_gl_mem_destroy texture id:%u dimensions:%ux%u",
         gl_mem->mem.tex_id, gl_mem->mem.tex_width, GL_DXGI_MEM_HEIGHT (gl_mem));
-
-  if (gl_mem->interop_handle) {
-    GstGLContext *context = gl_mem->mem.mem.context;
-    GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
-    BOOL result = share_context->wglDXUnregisterObjectNV(
-            share_context->device_interop_handle,
-            gl_mem->interop_handle);
-    if (result == FALSE) {
-      DWORD error = GetLastError();
-      if (error == ERROR_BUSY) {
-        GST_ERROR("wglDXUnregisterObjectNV FAILED ERROR_BUSY texture_id %#010x interop_id:%#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else {
-        GST_ERROR("wglDXUnregisterObjectNV FAILED UNKNOWN ERROR %#010x texture_id %#010x interop_id:%#010x",
-          error,
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      }
-    }
-    gl_mem->interop_handle = NULL;
-  }
-
-  if (gl_mem->interop_texture) {
-    gl_mem->interop_texture->lpVtbl->Release(gl_mem->interop_texture);
-    gl_mem->interop_texture = NULL;
-  }
 
   if (gl_mem->staging_texture) {
     gl_mem->staging_texture->lpVtbl->Release(gl_mem->staging_texture);
