@@ -13,7 +13,7 @@
 /*
  * ATTENTION - MAKE SURE YOU INCREASE THE SHM_INTERFACE_VERSION WHEN YOU CHANGE THE SHM STRUCTS BELOW !
  */
-#define SHM_INTERFACE_VERSION 1521597836
+#define SHM_INTERFACE_VERSION 1521597837
 
 /*
  * Will use a ring buffer for frames, and will trigger semaphore when new items are in the buffer
@@ -36,6 +36,8 @@
     uint8_t discontinuity;
     uint8_t ref_cnt;
     void *_gst_buf_ref;
+    bool memory_mapped;
+    void *map_info;
     //GstBuffer *_gst_buf_ref;
   };
 

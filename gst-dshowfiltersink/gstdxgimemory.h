@@ -30,9 +30,8 @@
 #include <GL/glext.h>
 #include <GL/wglext.h>
 
-
-/* #define GST_GL_DXGI_D3D11_DEVICE "gst_gl_dxgi_d3d11_device" */
 #define GST_GL_DXGI_D3D11_CONTEXT "gst_gl_dxgi_d3d11_context"
+/* #define GST_GL_DXGI_D3D11_DEVICE "gst_gl_dxgi_d3d11_device" */
 /* #define GST_GL_DXGI_D3D11_HANDLE "gst_gl_dxgi_d3d11_handle" */
 
 G_BEGIN_DECLS
@@ -52,24 +51,28 @@ G_BEGIN_DECLS
 
 typedef struct _GstDXGID3D11Context
 {
-  ID3D11Device * d3d11_device;
-  HANDLE device_interop_handle;
-  PFNWGLDXOPENDEVICENVPROC wglDXOpenDeviceNV;
-  PFNWGLDXCLOSEDEVICENVPROC wglDXCloseDeviceNV;
-  PFNWGLDXREGISTEROBJECTNVPROC wglDXRegisterObjectNV;
-  PFNWGLDXUNREGISTEROBJECTNVPROC wglDXUnregisterObjectNV;
-  PFNWGLDXLOCKOBJECTSNVPROC wglDXLockObjectsNV;
-  PFNWGLDXUNLOCKOBJECTSNVPROC wglDXUnlockObjectsNV;
+  ID3D11Device         *d3d11_device;
+  ID3D11DeviceContext  *device_context;
+  HANDLE                device_interop_handle;
+  GLubyte              *pixels;
+
+  PFNWGLDXOPENDEVICENVPROC        wglDXOpenDeviceNV;
+  PFNWGLDXCLOSEDEVICENVPROC       wglDXCloseDeviceNV;
+  PFNWGLDXREGISTEROBJECTNVPROC    wglDXRegisterObjectNV;
+  PFNWGLDXUNREGISTEROBJECTNVPROC  wglDXUnregisterObjectNV;
+  PFNWGLDXLOCKOBJECTSNVPROC       wglDXLockObjectsNV;
+  PFNWGLDXUNLOCKOBJECTSNVPROC     wglDXUnlockObjectsNV;
   PFNWGLDXSETRESOURCESHAREHANDLENVPROC wglDXSetResourceShareHandleNV;
 } GstDXGID3D11Context;
 
 typedef struct _GstGLDXGIMemory
 {
-  GstGLMemory mem;
-  HANDLE interop_handle;
-  HANDLE dxgi_handle;
-  ID3D11Texture2D * d3d11texture;
-  gpointer    _padding[GST_PADDING];
+  GstGLMemory      mem;
+  HANDLE           interop_handle;
+  ID3D11Texture2D *interop_texture;
+  HANDLE           staging_shared_dxgi_handle;
+  ID3D11Texture2D *staging_texture;
+  gpointer         _padding[GST_PADDING];
 } GstGLDXGIMemory;
 
 typedef struct _GstGLDXGIMemoryAllocator

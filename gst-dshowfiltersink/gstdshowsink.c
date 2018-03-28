@@ -39,6 +39,7 @@
 #include <string.h>
 #include "../shared/bebo_shmem.h"
 
+
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
 #define GST_LOG_OBJECT(...)
@@ -71,7 +72,7 @@ GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 
 #define GST_GL_SINK_CAPS \
     "video/x-raw(" GST_CAPS_FEATURE_MEMORY_GL_MEMORY "), "              \
-    "format = (string) RGBA, "                                          \
+    "format = (string) BGRA, "                                          \
     "width = " GST_VIDEO_SIZE_RANGE ", "                                \
     "height = " GST_VIDEO_SIZE_RANGE ", "                               \
     "framerate = " GST_VIDEO_FPS_RANGE ", "                             \
@@ -153,7 +154,8 @@ initialize_shared_memory(GstShmSink * self, uint64_t width, uint64_t height, uin
     return;
   }
 
-  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, width, height);
+  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_BGRA, width, height);
+
   GstVideoInfo * info = &self->shmem->video_info;
   info->fps_n = fps;
 
@@ -323,6 +325,29 @@ gst_shm_sink_start (GstBaseSink * bsink)
   return TRUE;
 }
 
+static void
+_copy_texture_resource (GstGLContext * context,
+    GstGLDXGIMemory * gl_dxgi_mem)
+{
+  GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
+  ID3D11DeviceContext *device_context = share_context->device_context;
+
+  if (!gst_gl_memory_read_pixels ((GstGLMemory *) &gl_dxgi_mem->mem,
+            (gpointer) share_context->pixels)) {
+    GST_ERROR("Failed to read pixels");
+    return;
+  }
+
+  device_context->lpVtbl->UpdateSubresource(device_context,
+    gl_dxgi_mem->staging_texture,
+    0, NULL,
+    share_context->pixels,
+    1280 * 4,
+    1280 * 720 * 4);
+
+  device_context->lpVtbl->Flush(device_context);
+
+}
 
 static gboolean
 gst_shm_sink_stop (GstBaseSink * bsink)
@@ -343,19 +368,9 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 {
-//  ShmBuffer *b;
-
-  if (time == GST_CLOCK_TIME_NONE || self->buffer_time == GST_CLOCK_TIME_NONE)
+  if (time == GST_CLOCK_TIME_NONE || 
+      self->buffer_time == GST_CLOCK_TIME_NONE)
     return TRUE;
-
-#if 0
-  b = sp_writer_get_pending_buffers (self->pipe);
-  for (; b != NULL; b = sp_writer_get_next_buffer (b)) {
-    GstBuffer *buf = sp_writer_buf_get_tag (b);
-    if (GST_CLOCK_DIFF (time, GST_BUFFER_PTS (buf)) > self->buffer_time)
-      return FALSE;
-  }
-#endif
 
   return TRUE;
 }
@@ -363,140 +378,172 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
-    GstShmSink *self = GST_SHM_SINK (bsink);
-    GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
+  GstShmSink *self = GST_SHM_SINK (bsink);
+  GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
 
+  if (!GST_IS_BUFFER(buf)) {
+    GST_ERROR_OBJECT(self, "NOT A BUFFER???");
+    return GST_FLOW_ERROR;
+  }
 
-    if (!GST_IS_BUFFER(buf)) {
-        GST_ERROR_OBJECT(self, "NOT A BUFFER???");
-        return GST_FLOW_ERROR;
-    }
-    GST_OBJECT_LOCK (self);
+  GST_OBJECT_LOCK (self);
 
-    /* GST_OBJECT_LOCK (self); */
-    GstClock *clock = GST_ELEMENT_CLOCK (self);
-    if (clock != NULL) {
-        gst_object_ref (clock);
-    }
+  GstClock *clock = GST_ELEMENT_CLOCK (self);
+  if (clock != NULL) {
+    gst_object_ref (clock);
+  }
 
-    GstClockTime running_time = 0;
-    GstClockTime latency = 0;
-    if (clock != NULL) {
+  GstClockTime running_time = 0;
+  GstClockTime latency = 0;
+  if (clock != NULL) {
+    /* The time according to the current clock */
+    GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
+    running_time = gst_clock_get_time(clock) - base_time;
+    latency = running_time - buf->pts;
 
-      /* The time according to the current clock */
-      GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
-      running_time = gst_clock_get_time(clock) - base_time;
-      latency = running_time - buf->pts;
+    /* GST_DEBUG_OBJECT (self, */
+    /*   "pts %" GST_TIME_FORMAT ", running_time %" GST_TIME_FORMAT ", base_time %" GST_TIME_FORMAT ", latency %" GST_TIME_FORMAT, */
+    /*   GST_TIME_ARGS (buf->pts), GST_TIME_ARGS(running_time), GST_TIME_ARGS (base_time), GST_TIME_ARGS(latency)); */
 
-      /* GST_DEBUG_OBJECT (self, */
-      /*   "pts %" GST_TIME_FORMAT ", running_time %" GST_TIME_FORMAT ", base_time %" GST_TIME_FORMAT ", latency %" GST_TIME_FORMAT, */
-      /*   GST_TIME_ARGS (buf->pts), GST_TIME_ARGS(running_time), GST_TIME_ARGS (base_time), GST_TIME_ARGS(latency)); */
+    gst_object_unref (clock);
+    clock = NULL;
+  }
 
-      gst_object_unref (clock);
-      clock = NULL;
-    }
-    // we get bombarded with "old" frames at the beginning - drop them for now
-    if (self->first_render_time == 0) {
-        self->first_render_time  = running_time;
-    }
-    if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
-        GST_OBJECT_UNLOCK (self);
-        GST_DEBUG_OBJECT(self, "dropping early frame");
-        return GST_FLOW_OK;
-    }
+  // we get bombarded with "old" frames at the beginning - drop them for now
+  if (self->first_render_time == 0) {
+    self->first_render_time = running_time;
+  }
 
-    DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
+  if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
+    GST_OBJECT_UNLOCK (self);
+    GST_DEBUG_OBJECT(self, "dropping early frame");
+    return GST_FLOW_OK;
+  }
 
-    if (rc == WAIT_FAILED) {
-        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
-    } else if (rc == WAIT_TIMEOUT) {
-        // FIXME: TODO log dropped frames
-        GST_DEBUG_OBJECT(self, "MUTEX TIMED OUT dropping frame");
-        GST_OBJECT_UNLOCK (self);
-        return GST_FLOW_OK;
-    } else if (rc != WAIT_OBJECT_0) {
-        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
-        GST_OBJECT_UNLOCK (self);
-        return GST_FLOW_OK;
-    }
+  DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
 
-    self->shmem->write_ptr++;
-    uint64_t index = self->shmem->write_ptr % self->shmem->count;
+  if (rc == WAIT_FAILED) {
+    GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+  } else if (rc == WAIT_TIMEOUT) {
+    // FIXME: TODO log dropped frames
+    GST_DEBUG_OBJECT(self, "MUTEX TIMED OUT dropping frame");
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  } else if (rc != WAIT_OBJECT_0) {
+    GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  }
 
-    uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
-    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+  self->shmem->write_ptr++;
 
-    if (frame->_gst_buf_ref != NULL) {
-      if (frame->ref_cnt > 0) {
-        GST_DEBUG_OBJECT(self,
+  uint64_t index = self->shmem->write_ptr % self->shmem->count;
+  uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
+  struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+
+  // current frame clean up
+  if (frame->_gst_buf_ref != NULL) {
+    if (frame->ref_cnt > 0) {
+      GST_DEBUG_OBJECT(self,
           "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %llu ref_cnt: %d",
           frame->_gst_buf_ref,
           index,
           frame->dxgi_handle,
           frame->ref_cnt);
 
-        self->shmem->write_ptr--;
-        ReleaseMutex(self->shmem_mutex);
-        GST_OBJECT_UNLOCK(self);
-        ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-        return GST_FLOW_OK;
-      }
+      self->shmem->write_ptr--;
+      ReleaseMutex(self->shmem_mutex);
+      GST_OBJECT_UNLOCK (self);
+      ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+      return GST_FLOW_OK;
+    }
+
+    gst_buffer_unref(frame->_gst_buf_ref);
+    frame->ref_cnt = 0;
+    frame->_gst_buf_ref = NULL;
+  }
+
+  GstMemory *memory = gst_buffer_peek_memory(buf, 0);
+
+  if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
+    GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
+        "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
+  }
+
+  GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
+
+  GstMapInfo map_info;
+
+  if (!gst_memory_map (GST_MEMORY_CAST(gl_dxgi_mem),
+      &map_info, GST_MAP_READ | GST_MAP_GL)) {
+     GST_ERROR_OBJECT(self, "Failed to map gst dxgi memory");
+  }
+
+  GST_DEBUG_OBJECT (self, "RENDER. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
+      gl_dxgi_mem->mem.tex_id,
+      gl_dxgi_mem->staging_shared_dxgi_handle,
+      gl_dxgi_mem->interop_handle);
+
+  gst_gl_context_thread_add (self->context,
+      (GstGLContextThreadFunc) _copy_texture_resource,
+      gl_dxgi_mem);
+
+  GST_DEBUG_OBJECT (self, "COPY TEX. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
+      gl_dxgi_mem->mem.tex_id,
+      gl_dxgi_mem->staging_shared_dxgi_handle,
+      gl_dxgi_mem->interop_handle);
+
+  gst_memory_unmap (GST_MEMORY_CAST(gl_dxgi_mem), &map_info);
+
+  GST_DEBUG_OBJECT (self, "UNMAP. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
+      gl_dxgi_mem->mem.tex_id,
+      gl_dxgi_mem->staging_shared_dxgi_handle,
+      gl_dxgi_mem->interop_handle);
+
+
+  frame->latency = latency;
+  frame->dts = buf->dts;
+  frame->pts = buf->pts;
+  frame->duration = buf->duration;
+  frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
+  frame->size = gst_buffer_get_size(buf);
+  frame->dxgi_handle = gl_dxgi_mem->staging_shared_dxgi_handle;
+  frame->nr = self->shmem->write_ptr;
+  frame->_gst_buf_ref = buf;
+  frame->ref_cnt = 1;
+
+  gst_buffer_ref(buf);
+
+  GST_DEBUG_OBJECT(self, 
+      "nr: %llu tex_id: %u dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+      frame->nr,
+      gl_dxgi_mem->mem.tex_id,
+      frame->dxgi_handle,
+      //frame->dts / 1000000,
+      frame->pts / 1000000,
+      index,
+      frame_offset,
+      frame->size,
+      buf,
+      frame->latency / 1000000
+      );
+
+  // cleanup all the refcnt 0 frames
+  for (int i = 0; i < self->shmem->count; i++) {
+    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+
+    if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
       gst_buffer_unref(frame->_gst_buf_ref);
-      frame->ref_cnt = 0;
-      frame->_gst_buf_ref = NULL;
+      memset(frame, 0, sizeof(struct frame));
     }
+  };
 
-    /* GstMapInfo map; */
-    GstMemory *memory = gst_buffer_peek_memory(buf, 0);
+  ReleaseMutex(self->shmem_mutex);
+  GST_OBJECT_UNLOCK(self);
+  ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
 
-    if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
-        GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
-            "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
-    }
-
-
-    GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
-
-    // We don't map memory here as we don't want to lock D3D11
-    // TODO: or should we?
-    frame->latency = latency;
-    frame->dts = buf->dts;
-    frame->pts = buf->pts;
-    frame->duration = buf->duration;
-    frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
-    frame->size = gst_buffer_get_size(buf);
-    frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
-    frame->nr = self->shmem->write_ptr;
-    frame->_gst_buf_ref = buf;
-    frame->ref_cnt = 1;
-    gst_buffer_ref (buf);
-
-    GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
-        frame->nr,
-        frame->dxgi_handle,
-        //frame->dts / 1000000,
-        frame->pts / 1000000,
-        index,
-        frame_offset,
-        frame->size,
-        buf,
-        frame->latency / 1000000
-        ); //size);
-
-    for (int i=0 ; i < self->shmem->count ; i++) {
-      uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
-      struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
-      if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
-        gst_buffer_unref(frame->_gst_buf_ref);
-        memset(frame, 0, sizeof(struct frame));
-      }
-    };
-
-    ReleaseMutex(self->shmem_mutex);
-    GST_OBJECT_UNLOCK (self);
-    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-
-    return GST_FLOW_OK;
+  return GST_FLOW_OK;
 }
 
 static void
@@ -567,14 +614,10 @@ const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
   D3D_FEATURE_LEVEL_9_3,
 };
 
-static ID3D11Device* create_device_d3d11() {
-  // TODO: should I be using ComPtr here?
-  ID3D11Device *device;
-  // ID3D11DeviceContext *context;
-  // IDXGIAdapter *adapter;
-
-  /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
-  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
+static gboolean
+create_device_d3d11 (ID3D11Device ** device, ID3D11DeviceContext ** context) 
+{
+  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3;
 
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 
@@ -590,19 +633,20 @@ static ID3D11Device* create_device_d3d11() {
       d3d_feature_levels,
       sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
       D3D11_SDK_VERSION,
-      &device,
+      device,
       &level_used, 
-      NULL);
+      context);
 
   GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
 
-  return device;
+  return hr == S_OK;
 }
 
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
   GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
   GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
+
   share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
   share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
@@ -619,29 +663,36 @@ static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *sh
     gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
 }
 
-static void init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
-
+static void 
+init_d3d11_context (GstGLContext * gl_context, gpointer * sink) 
+{
   GstShmSink *self = GST_SHM_SINK (sink);
 
-  GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
-  init_wgl_functions(gl_context, share_context);
-  share_context->d3d11_device = create_device_d3d11();
-  g_assert( share_context->d3d11_device != NULL);
-  share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
-  g_assert( share_context->device_interop_handle != NULL);
-  g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
+  GstDXGID3D11Context *share_context = g_new (GstDXGID3D11Context, 1);
+  share_context->pixels = g_malloc(1280 * 720 * 4); // TODO jake
+
+  init_wgl_functions (gl_context, share_context);
+
+  create_device_d3d11 (&share_context->d3d11_device, &share_context->device_context);
+  g_assert (share_context->d3d11_device != NULL);
+
+  share_context->device_interop_handle =
+    share_context->wglDXOpenDeviceNV (share_context->d3d11_device);
+
+  g_assert (share_context->device_interop_handle != NULL);
+
+  g_object_set_data (gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
   // FIXME: how do we close these???
 }
 
 static gboolean
-gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
+gst_dshow_filter_sink_ensure_gl_context (GstShmSink * self) {
   GError *error = NULL;
 
   if (self->context && true) {
     //FIXME check has dxgi and if not -> remove and add?
     return TRUE;
   }
-
 
   if (! self->context) {
     gst_gl_ensure_element_data (GST_ELEMENT (self),

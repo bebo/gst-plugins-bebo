@@ -107,6 +107,7 @@ class CPushPinDesktop :
     uint64_t frame_sent_cnt_ = 0;
     uint64_t frame_dropped_cnt_ = 0;
     uint64_t frame_late_cnt_ = 0;
+    uint64_t frame_gpu_map_late_cnt = 0;
     uint64_t first_frame_ms_ = 0;
     uint64_t last_frame_sent_ms_ = 0;
     uint64_t last_got_frame_from_shmem_ms_ = 0;

@@ -6,10 +6,6 @@
 #include "DibHelper.h"
 #include "Logging.h"
 
-#ifndef MIN
-#define MIN(a,b)  ((a) < (b) ? (a) : (b))  // danger! can evaluate "a" twice.
-#endif
-
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
@@ -17,7 +13,6 @@
 #define GPU_QUEUE_MAX_FRAME_COUNT         5
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 #define WAIT_FOR_GPU_MAP
-#define FILL_GPU_QUEUE_BEFORE_FULL
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -55,6 +50,7 @@ CPushPinDesktop::~CPushPinDesktop()
   if (frame_pool_) {
     delete frame_pool_;
   }
+
   // FIXME release resources...
 }
 
@@ -282,6 +278,7 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter)
       &d3d_context_);
   info("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int)level_used, (unsigned int)level_used);
+
   return S_OK;
 }
 
@@ -415,14 +412,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       got_frame = false;
     }
 
-#ifdef FILL_GPU_QUEUE_BEFORE_FULL
     // prioritize fill buffer to fill up the queue before start consuming from our own queue
     if (!got_frame &&
         dxgi_frame_queue_.size() < GPU_QUEUE_MAX_FRAME_COUNT) {
       HRESULT code = GetAndWaitForShmemFrame(&dxgi_frame, 0);
       got_frame = (code == S_OK);
     }
-#endif
 
     if (got_frame) {
       CopyTextureToStagingQueue(dxgi_frame);
@@ -481,14 +476,15 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   long double processing_time_ms = GetCounterSinceStartMillis(start_processing);
   frame_processing_time_ms_ += processing_time_ms;
 
-  _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
+  _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f, map_late: %llu",
       frame_total_cnt_,
       frame_dropped_cnt_,
       100.0 * frame_dropped_cnt_ / frame_total_cnt_,
       frame_late_cnt_,
       avg_fps,
       0.0, // GetFps(),
-      frame_processing_time_ms_ / frame_sent_cnt_
+      frame_processing_time_ms_ / frame_sent_cnt_,
+      frame_gpu_map_late_cnt
       );
 
   // Set TRUE on every sample for uncompressed frames 
@@ -581,6 +577,7 @@ HRESULT CPushPinDesktop::CopyTextureToStagingQueue(DxgiFrame* frame) {
   }
 
   frame->sent_to_gpu_time = StartCounter();
+
   d3d_context_->CopyResource(frame->texture.Get(), shared_texture.Get());
 
   dxgi_frame_queue_.push_back(frame);
@@ -603,7 +600,7 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
   // note: Unmap happens after we deliver the buffer, in UnrefDxgiFrame
 #ifdef WAIT_FOR_GPU_MAP
   hr = d3d_context_->Map(frame->texture.Get(), 0,
-      D3D11_MAP_READ,  //D3D11_MAP_READ
+      D3D11_MAP_READ,
       0,
       &cpu_mem);
 #else 
@@ -624,12 +621,27 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
       error("MAP failed: 0x%016x", hr);
     }
 
-    debug("DROP frame from failed to map from gpu to cpu. nr: %llu dxgi_handle: %llu map_time: %lu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
+    debug("DROP frame from failed to map from gpu to cpu. nr: %llu dxgi_handle: %llu map_time: %llu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
     UnrefDxgiFrame(frame);
     return hr;
   }
 
+  uint64_t frame_length = REFERENCE_TIME_TO_MS(frame->frame_length);
+  if (last_map_took_time_ms_ > frame_length) {
+    frame_gpu_map_late_cnt++;
+  }
+
   frame->mapped_into_cpu = true;
+
+
+#if _DEBUG
+  static BYTE* last_pushed_bytes = new BYTE[1280 * 720 * 4];
+  int n = memcmp(last_pushed_bytes, cpu_mem.pData, cpu_mem.DepthPitch);
+  if (n == 0) {
+    debug("DUPLICATE frame from gpu map. nr: %llu dxgi_handle: %llu map_time: %llu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
+  }
+  memcpy(last_pushed_bytes, cpu_mem.pData, cpu_mem.DepthPitch);
+#endif
 
   ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
   return S_OK;
@@ -687,7 +699,6 @@ HRESULT CPushPinDesktop::OpenShmMem()
     error("could not map shmem %d", GetLastError());
     return -1;
   }
-
 
   frame_pool_ = new DxgiFramePool((int)shmem_count);
   info("Opened Shared Memory Buffer");
@@ -937,20 +948,21 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
     return S_FALSE;
   }
 
-  auto shmFrame = GetShmFrame(dxgi_frame);
+  auto shm_frame = GetShmFrame(dxgi_frame);
 
   // TODO: check it is the same frame!
-  shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
+  shm_frame->ref_cnt = shm_frame->ref_cnt - 2;
 
   debug("RELEASE shmem texture. nr: %lld dxgi_handle: %llu i: %d ref_cnt: %d",
       dxgi_frame->nr,
       dxgi_frame->dxgi_handle,
       dxgi_frame->index,
-      shmFrame->ref_cnt);
+      shm_frame->ref_cnt);
 
   ReleaseMutex(shmem_mutex_);
 
   frame_pool_->ReturnFrame(dxgi_frame);
+
   return S_OK;
 }
 
