@@ -280,6 +280,7 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter)
       &d3d_device_,
       &level_used,
       &d3d_context_);
+
   info("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int)level_used, (unsigned int)level_used);
   return S_OK;
