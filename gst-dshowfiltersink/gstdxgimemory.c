@@ -123,7 +123,8 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   HRESULT result = share_context->d3d11_device->lpVtbl->CreateTexture2D(share_context->d3d11_device,
       &desc, NULL, d3d11texture);
   g_assert(result == S_OK);
-  gl->GenTextures (1, &tex_id);
+
+  gl->GenTextures(1, &tex_id);
 
   *interop_handle = share_context->wglDXRegisterObjectNV(
       share_context->device_interop_handle,
@@ -180,9 +181,9 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
 /* } */
 
 static gboolean
-_gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
+gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
 {
-  GST_INFO("_gl_dxgi_tex_create");
+  GST_DEBUG("gl_dxgi_tex_create");
   GstGLMemory * gl_mem = (GstGLMemory *)gl_dxgi_mem;
   GstGLContext *context = gl_mem->mem.context;
   GLenum internal_format;
@@ -209,12 +210,9 @@ _gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
         &gl_dxgi_mem->d3d11texture,
         &gl_dxgi_mem->dxgi_handle);
 
-    GST_INFO("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
+    GST_DEBUG("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
         gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT (gl_mem));
-    /* GST_TRACE ("Generating texture id:%u format:%u type:%u dimensions:%ux%u", */
-    /*     gl_mem->tex_id, tex_format, tex_type, gl_mem->tex_width, */
-    /*     GL_MEM_HEIGHT (gl_mem)); */
   }
 
   return TRUE;
@@ -227,13 +225,13 @@ GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context) {
 }
 
 static gpointer
-_gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
+gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 {
-
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
     GST_LOG("wglDXLockObjectsNV texture_id %#010x interop_id:%#010x",
       gl_mem->mem.tex_id,
       gl_mem->interop_handle);
+
     GstGLContext *context = gl_mem->mem.mem.context;
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
     BOOL result = share_context->wglDXLockObjectsNV(share_context->device_interop_handle,
@@ -263,12 +261,12 @@ _gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 }
 
 static void
-_gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
+gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
 {
-  /// FIXME - I should propably first unmap and then unlock...
   GstGLMemoryAllocatorClass *alloc_class;
   alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
   alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
+
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
     GST_LOG("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x",
       gl_mem->mem.tex_id,
@@ -303,7 +301,7 @@ _gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
 }
 
 static GstMemory *
-_gl_mem_alloc (GstAllocator * allocator, gsize size,
+gl_mem_alloc (GstAllocator * allocator, gsize size,
     GstAllocationParams * params)
 {
   g_warning ("Use gst_gl_base_memory_alloc () to allocate from this "
@@ -313,10 +311,10 @@ _gl_mem_alloc (GstAllocator * allocator, gsize size,
 }
 
 static GstGLDXGIMemory *
-_gl_dxgi_mem_alloc (GstGLBaseMemoryAllocator * allocator,
+gl_dxgi_mem_alloc (GstGLBaseMemoryAllocator * allocator,
     GstGLVideoAllocationParams * params)
 {
-  GST_LOG("_gl_dxgi_mem_alloc");
+  GST_LOG("gl_dxgi_mem_alloc");
   GstGLDXGIMemory *mem;
   guint alloc_flags;
 
@@ -351,7 +349,7 @@ _gl_dxgi_mem_alloc (GstGLBaseMemoryAllocator * allocator,
 }
 
 static GstMemory *
-_gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
+gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
 {
   GstAllocationParams params = { 0, GST_MEMORY_CAST (src)->align, 0, 0 };
   GstGLBaseMemoryAllocator *base_mem_allocator;
@@ -368,12 +366,13 @@ _gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
 
   /* If not doing a full copy, then copy to sysmem, the 2D represention of the
    * texture would become wrong */
-  if (offset > 0 || size < GST_MEMORY_CAST (src)->size) {
+  gsize s = size;
+  if (offset > 0 || s < GST_MEMORY_CAST (src)->size) {
     return base_mem_allocator->fallback_mem_copy (GST_MEMORY_CAST (src), offset,
-        size);
+        s);
   }
 
-  dest = (GstMemory *) g_new0 (GstGLDXGIMemory, 1);
+  dest = g_new0 (GstGLDXGIMemory, 1);
 
   gst_gl_memory_init (GST_GL_MEMORY_CAST (dest), allocator, NULL,
       src->mem.mem.context, src->mem.tex_target, src->mem.tex_format, &params,
@@ -409,13 +408,13 @@ _gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
     }
   }
 
-  return dest;
+  return GST_MEMORY_CAST (dest);
 }
 
 static void
-_gl_mem_destroy (GstGLDXGIMemory * gl_mem)
+gl_mem_destroy (GstGLDXGIMemory * gl_mem)
 {
-  GST_INFO("_gl_mem_destroy texture id:%u dimensions:%ux%u",
+  GST_DEBUG("gl_mem_destroy texture id:%u dimensions:%ux%u",
         gl_mem->mem.tex_id, gl_mem->mem.tex_width, GL_DXGI_MEM_HEIGHT (gl_mem));
 
   if (gl_mem->interop_handle) {
@@ -461,15 +460,15 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 
   /* TODO: */
 
-  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) _gl_dxgi_mem_alloc;
-  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) _gl_dxgi_tex_create;
-  gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) _gl_mem_destroy;
+  gl_base->alloc = (GstGLBaseMemoryAllocatorAllocFunction) gl_dxgi_mem_alloc;
+  gl_base->create = (GstGLBaseMemoryAllocatorCreateFunction) gl_dxgi_tex_create;
+  gl_base->destroy = (GstGLBaseMemoryAllocatorDestroyFunction) gl_mem_destroy;
 
-  gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) _gl_dxgi_tex_map;
-  gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) _gl_dxgi_tex_unmap;
-  gl_tex->copy = (GstGLBaseMemoryAllocatorCopyFunction) _gl_dxgi_text_copy;
+  gl_tex->map = (GstGLBaseMemoryAllocatorMapFunction) gl_dxgi_tex_map;
+  gl_tex->unmap = (GstGLBaseMemoryAllocatorUnmapFunction) gl_dxgi_tex_unmap;
+  gl_tex->copy = (GstGLBaseMemoryAllocatorCopyFunction) gl_dxgi_text_copy;
 
-  allocator_class->alloc = _gl_mem_alloc;
+  allocator_class->alloc = gl_mem_alloc;
 
   GST_DEBUG_CATEGORY_INIT (GST_CAT_GL_DXGI_MEMORY, "gldxgitexture", 0,
         "OpenGL DGXI shared memory");

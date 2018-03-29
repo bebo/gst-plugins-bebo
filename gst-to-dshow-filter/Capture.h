@@ -201,12 +201,6 @@ class CPushPinDesktop :
     int64_t GetNewFrameWaitTime();
     bool ShouldDropNewFrame();
 
-    // QueueFrameFromShm
-    // WrapAndCopy
-    // IsHeadTextureReady - if frame.head() is ready? check time
-      // WaitUntilSomethingReady (shm, timeout), if timeout -> map, if new frame -> schedule
-    // CopyToCpu
-    // Ship it!
 };
 
 class DxgiFrame {
@@ -225,7 +219,7 @@ class DxgiFrame {
 
     DxgiFrame();
     ~DxgiFrame();
-    void SetFrame(struct frame *frameData, uint64_t i, 
+    void SetFrame(struct frame *frame_data, uint64_t i, 
         REFERENCE_TIME start_time, REFERENCE_TIME end_time, 
         bool discontinuity);
 };

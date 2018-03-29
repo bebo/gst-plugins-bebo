@@ -130,31 +130,33 @@ gst_dshowfiltersink_set_context(GstElement *element,
 #define ALIGNMENT 64
 
 static void
-initialize_shared_memory(GstShmSink * self, uint64_t width, uint64_t height, uint64_t fps)
+initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps)
 {
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
+  if (self->shmem_mutex == 0) {
+    GST_ERROR_OBJECT(self, "could not create shmem mutex %d", GetLastError());
+    return;
+  }
 
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
   size = ((DWORD)frame_size * BUFFER_COUNT) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
     0, size, BEBO_SHMEM_NAME);
-
   if (!self->shmem_handle) {
-    // FIXME should be ERROR
-    GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
+    GST_ERROR_OBJECT(self, "could not create mapping %d", GetLastError());
     return;
   }
+
   self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (!self->shmem) {
-    // FIXME should be ERROR
-    GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
+    GST_ERROR_OBJECT(self, "could not map shmem %d", GetLastError());
     return;
   }
 
-  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, width, height);
+  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_RGBA, width, height);
   GstVideoInfo * info = &self->shmem->video_info;
   info->fps_n = fps;
 
@@ -174,13 +176,13 @@ gst_shm_sink_init (GstShmSink * self)
 {
   self->first_render_time = 0;
   self->latency = -1;
+
   g_cond_init (&self->cond);
   //self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
 
   // FIXME handle creation error
   self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
-  // FIXME handle creation error
 
   gst_allocation_params_init (&self->params);
 }
@@ -355,21 +357,17 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 {
-//  ShmBuffer *b;
-
   if (time == GST_CLOCK_TIME_NONE || self->buffer_time == GST_CLOCK_TIME_NONE)
     return TRUE;
 
-#if 0
-  b = sp_writer_get_pending_buffers (self->pipe);
-  for (; b != NULL; b = sp_writer_get_next_buffer (b)) {
-    GstBuffer *buf = sp_writer_buf_get_tag (b);
-    if (GST_CLOCK_DIFF (time, GST_BUFFER_PTS (buf)) > self->buffer_time)
-      return FALSE;
-  }
-#endif
-
   return TRUE;
+}
+
+static void
+_flush_gl (GstGLContext * context, GstShmSink * sink)
+{
+  const GstGLFuncs *gl = context->gl_vtable;
+  gl->Flush();
 }
 
 static bool latency_bool = TRUE;
@@ -472,11 +470,11 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
             "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
     }
 
+    gst_gl_context_thread_add(self->context, 
+      (GstGLContextThreadFunc) _flush_gl, self);
 
     GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
 
-    // We don't map memory here as we don't want to lock D3D11
-    // TODO: or should we?
     frame->latency = latency;
     frame->dts = buf->dts;
     frame->pts = buf->pts;
@@ -526,7 +524,6 @@ free_buffer_locked (GstBuffer * buffer, void *data)
 
   *list = g_slist_prepend (*list, buffer);
 }
-
 
 static gboolean
 gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
@@ -580,18 +577,13 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
 {
   D3D_FEATURE_LEVEL_11_0,
-  D3D_FEATURE_LEVEL_10_1,
-  D3D_FEATURE_LEVEL_10_0,
-  D3D_FEATURE_LEVEL_9_3,
+  D3D_FEATURE_LEVEL_10_1
 };
 
-static ID3D11Device* create_device_d3d11() {
-  // TODO: should I be using ComPtr here?
+static ID3D11Device* 
+_create_device_d3d11() {
   ID3D11Device *device;
-  // ID3D11DeviceContext *context;
-  // IDXGIAdapter *adapter;
 
-  /* D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_9_3; */
   D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
 
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
@@ -612,7 +604,7 @@ static ID3D11Device* create_device_d3d11() {
       &level_used, 
       NULL);
 
-  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
 
   return device;
@@ -621,6 +613,7 @@ static ID3D11Device* create_device_d3d11() {
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
   GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
   GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
+
   share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
   share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
@@ -637,35 +630,39 @@ static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *sh
     gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
 }
 
-static void init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
-
+static void 
+_init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
   GstShmSink *self = GST_SHM_SINK (sink);
 
   GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
+
   init_wgl_functions(gl_context, share_context);
-  share_context->d3d11_device = create_device_d3d11();
+
+  share_context->d3d11_device = _create_device_d3d11();
   g_assert( share_context->d3d11_device != NULL);
+
   share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
   g_assert( share_context->device_interop_handle != NULL);
+
   g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
-  // FIXME: how do we close these???
+  // TODO: need to free these memory and close interop
 }
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
   GError *error = NULL;
 
-  if (self->context && true) {
+  if (self->context) {
     //FIXME check has dxgi and if not -> remove and add?
     return TRUE;
   }
 
-
-  if (! self->context) {
+  if (!self->context) {
     gst_gl_ensure_element_data (GST_ELEMENT (self),
           (GstGLDisplay **) & self->display,
           (GstGLContext **) & self->other_context);
   }
+
   if (!self->context) {
     GST_OBJECT_LOCK (self->display);
     do {
@@ -686,9 +683,8 @@ gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
     } while (!gst_gl_display_add_context (self->display, self->context));
     GST_OBJECT_UNLOCK (self->display);
   }
-  gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc) init_d3d11_context, self);
-  // TODO - wait until it happened?
 
+  gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc) _init_d3d11_context, self);
 
   return TRUE;
 
@@ -740,49 +736,59 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
 
+  guint vi_size = info.size;
+
   if (!shmem_init) {
     //FIXME This should live somewhere else.
-    GST_INFO("Initializating shared mem info to %d x %d at %llu fps", info.width, info.height, info.fps_n);
-    initialize_shared_memory(self, info.width, info.height, info.fps_n);
+    GST_INFO("Initializating shared mem info to %d x %d at %llu fps",
+        GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
+        GST_VIDEO_INFO_FPS_N(&info));
+
+    initialize_shared_memory(self,
+        GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
+        GST_VIDEO_INFO_FPS_N(&info));
+
     shmem_init = true;
   }
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;
   }
+
   if (pool) {
     GstStructure *cur_pool_config;
     cur_pool_config = gst_buffer_pool_get_config(pool);
-    gint size;
+    guint size;
     gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, info.size);
-    if (size == info.size) {
+    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
+    if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, pool, vi_size, BUFFER_COUNT, 0);
       return true;
-    }
-    else {
+    } else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
-        size, info.size);
+        size, vi_size);
       gst_object_unref(pool);
     }
   }
+
   GST_DEBUG("Make a new buffer pool.");
   pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_set_params (config, caps, info.size, 0, 0);
-
+  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
-  gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
+  gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
 
   if (!gst_buffer_pool_set_config (pool, config)) {
     gst_object_unref (pool);
     goto config_failed;
   }
+
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, pool, info.size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, pool, vi_size, BUFFER_COUNT, 0);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", pool);
+
   return true;
 
 invalid_caps:
