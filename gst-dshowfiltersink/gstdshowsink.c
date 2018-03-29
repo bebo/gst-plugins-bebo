@@ -130,27 +130,29 @@ gst_dshowfiltersink_set_context(GstElement *element,
 #define ALIGNMENT 64
 
 static void
-initialize_shared_memory(GstShmSink * self, uint64_t width, uint64_t height, uint64_t fps)
+initialize_shared_memory(GstShmSink * self, guint width, guint height, gint fps)
 {
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
+  if (self->shmem_mutex == 0) {
+    GST_ERROR_OBJECT(self, "failed to create shmem mutex %d", GetLastError());
+    return;
+  }
 
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
   size = ((DWORD)frame_size * BUFFER_COUNT) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
     0, size, BEBO_SHMEM_NAME);
-
   if (!self->shmem_handle) {
-    // FIXME should be ERROR
-    GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
+    GST_ERROR_OBJECT(self, "could not create mapping %d", GetLastError());
     return;
   }
+
   self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (!self->shmem) {
-    // FIXME should be ERROR
-    GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
+    GST_ERROR_OBJECT(self, "could not map shmem %d", GetLastError());
     return;
   }
 
@@ -328,17 +330,19 @@ gst_shm_sink_start (GstBaseSink * bsink)
 static void
 _copy_texture_resource (GstGLContext * context,
     GstGLDXGIMemory * gl_dxgi_mem,
-    gpointer data)
+    gpointer data,
+    guint row_pitch,
+    guint depth_pitch)
 {
   GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
   ID3D11DeviceContext *device_context = share_context->device_context;
 
   device_context->lpVtbl->UpdateSubresource(device_context,
-    gl_dxgi_mem->staging_texture,
+    (ID3D11Resource*) gl_dxgi_mem->staging_texture,
     0, NULL,
     data,
-    1280 * 4,
-    1280 * 720 * 4);
+    row_pitch,
+    depth_pitch);
 
   device_context->lpVtbl->Flush(device_context);
 }
@@ -478,9 +482,12 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       gl_dxgi_mem->staging_shared_dxgi_handle,
       0);
 
-  _copy_texture_resource(self->context,
-      gl_dxgi_mem,
-      map_info.data);
+  guint bpp = 4; // bits per plane
+  guint row_pitch = GST_VIDEO_INFO_WIDTH(self->info) * bpp;
+  guint depth_pitch = GST_VIDEO_INFO_WIDTH(self->info) * GST_VIDEO_INFO_HEIGHT(self->info) * bpp;
+
+  _copy_texture_resource(self->context, gl_dxgi_mem, map_info.data,
+      row_pitch, depth_pitch);
 
   GST_DEBUG_OBJECT (self, "COPY TEX. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
       gl_dxgi_mem->mem.tex_id,
@@ -740,14 +747,20 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   gst_query_add_allocation_param (query, allocator, &params);
   gst_object_unref (allocator); 
 
-  GstVideoInfo info;
-  if (!gst_video_info_from_caps (&info, caps))
+  GstVideoInfo *info = self->info;
+  if (!gst_video_info_from_caps (info, caps))
     goto invalid_caps;
 
   if (!shmem_init) {
     //FIXME This should live somewhere else.
-    GST_INFO("Initializating shared mem info to %d x %d at %llu fps", info.width, info.height, info.fps_n);
-    initialize_shared_memory(self, info.width, info.height, info.fps_n);
+    GST_INFO("Initializating shared mem info to %d x %d at %llu fps", 
+        GST_VIDEO_INFO_WIDTH(info), GST_VIDEO_INFO_HEIGHT(info), 
+        GST_VIDEO_INFO_FPS_N(info));
+
+    initialize_shared_memory(self, 
+        GST_VIDEO_INFO_WIDTH(info), 
+        GST_VIDEO_INFO_HEIGHT(info), 
+        GST_VIDEO_INFO_FPS_N(info));
     shmem_init = true;
   }
 
@@ -759,15 +772,15 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     cur_pool_config = gst_buffer_pool_get_config(pool);
     gint size;
     gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, info.size);
-    if (size == info.size) {
+    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, info->size);
+    if (size == info->size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, pool, info.size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, pool, info->size, BUFFER_COUNT, 0);
       return true;
     }
     else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
-        size, info.size);
+        size, info->size);
       gst_object_unref(pool);
     }
   }
@@ -775,7 +788,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_set_params (config, caps, info.size, 0, 0);
+  gst_buffer_pool_config_set_params (config, caps, info->size, 0, 0);
 
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
@@ -785,7 +798,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     goto config_failed;
   }
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, pool, info.size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, pool, info->size, BUFFER_COUNT, 0);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", pool);
   return true;
 

@@ -282,6 +282,8 @@ HRESULT CPushPinDesktop::CreateDeviceD3D11(IDXGIAdapter *adapter)
   return S_OK;
 }
 
+// override buffer processing loop so we can unref dxgi frame after 
+// we deliver the frame
 HRESULT CPushPinDesktop::DoBufferProcessingLoop(void)
 {
   Command com;
