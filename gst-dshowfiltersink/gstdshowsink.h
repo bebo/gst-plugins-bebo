@@ -51,7 +51,7 @@ struct _GstShmSink
   GstGLContext *context;
   GstGLContext *other_context;
   GstGLDisplay *display;
-  GstVideoInfo *info;
+  GstVideoInfo info;
 
   struct shmem *shmem;
   HANDLE shmem_handle;

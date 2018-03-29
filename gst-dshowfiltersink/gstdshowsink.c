@@ -343,18 +343,15 @@ static void
 _copy_texture_resource (GstGLContext * context,
     GstGLDXGIMemory * gl_dxgi_mem,
     gpointer data,
-    guint row_pitch,
-    guint depth_pitch)
+    guint stride,
+    guint size)
 {
   GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
   ID3D11DeviceContext *device_context = share_context->device_context;
 
   device_context->lpVtbl->UpdateSubresource(device_context,
     (ID3D11Resource*) gl_dxgi_mem->staging_texture,
-    0, NULL,
-    data,
-    row_pitch,
-    depth_pitch);
+    0, NULL, data, stride, size);
 
   device_context->lpVtbl->Flush(device_context);
 }
@@ -496,12 +493,11 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       gl_dxgi_mem->staging_shared_dxgi_handle,
       0);
 
-  guint bpp = 4; // bits per plane
-  guint row_pitch = GST_VIDEO_INFO_WIDTH(self->info) * bpp;
-  guint depth_pitch = GST_VIDEO_INFO_WIDTH(self->info) * GST_VIDEO_INFO_HEIGHT(self->info) * bpp;
+  guint stride = GST_VIDEO_INFO_PLANE_STRIDE(&self->info, 0);
+  guint size = GST_VIDEO_INFO_SIZE(&self->info);
 
   _copy_texture_resource(self->context, gl_dxgi_mem, map_info.data,
-      row_pitch, depth_pitch);
+      stride, size);
 
   GST_DEBUG_OBJECT (self, "COPY TEX. tex_id: %u staging_handle: %#010x interop_handle: %#010x", 
       gl_dxgi_mem->mem.tex_id,
@@ -761,49 +757,51 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   gst_query_add_allocation_param (query, allocator, &params);
   gst_object_unref (allocator); 
 
-  GstVideoInfo *info = self->info;
-  if (!gst_video_info_from_caps (info, caps))
+  GstVideoInfo info;
+  if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
 
   if (!shmem_init) {
     //FIXME This should live somewhere else.
     GST_INFO("Initializating shared mem info to %d x %d at %llu fps", 
-        GST_VIDEO_INFO_WIDTH(info), GST_VIDEO_INFO_HEIGHT(info), 
-        GST_VIDEO_INFO_FPS_N(info));
+        GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info), 
+        GST_VIDEO_INFO_FPS_N(&info));
 
-    initialize_shared_memory(self, 
-        GST_VIDEO_INFO_WIDTH(info), 
-        GST_VIDEO_INFO_HEIGHT(info), 
-        GST_VIDEO_INFO_FPS_N(info));
+    initialize_shared_memory(self, GST_VIDEO_INFO_WIDTH(&info), 
+        GST_VIDEO_INFO_HEIGHT(&info), GST_VIDEO_INFO_FPS_N(&info));
+
     shmem_init = true;
   }
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;
   }
+
+  guint vi_size = info.size;
+
   if (pool) {
     GstStructure *cur_pool_config;
     cur_pool_config = gst_buffer_pool_get_config(pool);
     gint size;
     gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, info->size);
-    if (size == info->size) {
+    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
+    if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, pool, info->size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, pool, vi_size, BUFFER_COUNT, 0);
       return true;
     }
     else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
-        size, info->size);
+        size, vi_size);
       gst_object_unref(pool);
     }
   }
+
   GST_DEBUG("Make a new buffer pool.");
   pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_set_params (config, caps, info->size, 0, 0);
-
+  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, self->allocator, &params);
 
@@ -811,8 +809,11 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     gst_object_unref (pool);
     goto config_failed;
   }
+
+  self->info = info;
+
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, pool, info->size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, pool, vi_size, BUFFER_COUNT, 0);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", pool);
   return true;
 
