@@ -58,7 +58,8 @@ enum
 {
   PROP_0,
   PROP_WAIT_FOR_CONNECTION,
-  PROP_BUFFER_TIME
+  PROP_BUFFER_TIME,
+  PROP_LATENCY
 };
 
 
@@ -172,6 +173,7 @@ static void
 gst_shm_sink_init (GstShmSink * self)
 {
   self->first_render_time = 0;
+  self->latency = -1;
   g_cond_init (&self->cond);
   //self->size = DEFAULT_SIZE;
   self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
@@ -223,6 +225,10 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
           "Maximum Size of the shm buffer in nanoseconds (-1 to disable)",
           -1, G_MAXINT64, -1,
           G_PARAM_CONSTRUCT | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property(gobject_class, PROP_LATENCY,
+    g_param_spec_int64("latency", "latency", "The pipeline's measured latency",
+      0, G_MAXINT64, 3, G_PARAM_READWRITE));
 
   signals[SIGNAL_CLIENT_CONNECTED] = g_signal_new ("client-connected",
       GST_TYPE_SHM_SINK, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
@@ -277,6 +283,9 @@ gst_shm_sink_set_property (GObject * object, guint prop_id,
       GST_OBJECT_UNLOCK (object);
       g_cond_broadcast (&self->cond);
       break;
+    case PROP_LATENCY:
+      self->latency = g_value_get_int64 (value);
+      break;
     default:
       break;
   }
@@ -297,6 +306,9 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_BUFFER_TIME:
       g_value_set_int64 (value, self->buffer_time);
+      break;
+    case PROP_LATENCY:
+      g_value_set_int64(value, self->latency / 1000000);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -360,6 +372,7 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
   return TRUE;
 }
 
+static bool latency_bool = TRUE;
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
@@ -387,6 +400,11 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
       running_time = gst_clock_get_time(clock) - base_time;
       latency = running_time - buf->pts;
+      if (latency_bool) {
+        self->latency = latency;
+        latency_bool = FALSE;
+        GST_INFO("Measured plugin latency to %d", self->latency / 1000000);
+      }
 
       /* GST_DEBUG_OBJECT (self, */
       /*   "pts %" GST_TIME_FORMAT ", running_time %" GST_TIME_FORMAT ", base_time %" GST_TIME_FORMAT ", latency %" GST_TIME_FORMAT, */
