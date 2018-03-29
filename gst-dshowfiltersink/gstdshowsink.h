@@ -69,6 +69,7 @@ struct _GstShmSink
 
   GstGLDXGIMemoryAllocator *allocator;
   GstAllocationParams params;
+  gint64 latency;
 };
 
 struct _GstShmSinkClass
