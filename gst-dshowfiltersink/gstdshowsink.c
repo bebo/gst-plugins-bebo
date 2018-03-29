@@ -63,20 +63,11 @@ enum
   PROP_BUFFER_TIME
 };
 
-
-/*
-struct GstShmClient
-{
-  ShmClient *client;
-  GstPollFD pollfd;
-};
-*/
-
 #define DEFAULT_SIZE ( 64 * 1024 * 1024 )
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
 /* Default is user read/write, group read */
 #define DEFAULT_PERMS ( S_IRUSR | S_IWUSR | S_IRGRP )
-
+#define ALIGNMENT 256
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
@@ -105,318 +96,73 @@ static gboolean gst_shm_sink_unlock_stop (GstBaseSink * bsink);
 static gboolean gst_shm_sink_propose_allocation (GstBaseSink * sink,
     GstQuery * query);
 
-static gpointer pollthread_func (gpointer data);
-
 static guint signals[LAST_SIGNAL] = { 0 };
-
-
-
-/********************
- * CUSTOM ALLOCATOR *
- ********************/
-
-#if 0 // no allocator for now
-
-#define GST_TYPE_SHM_SINK_ALLOCATOR \
-  (gst_shm_sink_allocator_get_type())
-#define GST_SHM_SINK_ALLOCATOR(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHM_SINK_ALLOCATOR, \
-      GstShmSinkAllocator))
-#define GST_SHM_SINK_ALLOCATOR_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK_ALLOCATOR, \
-      GstShmSinkAllocatorClass))
-#define GST_IS_SHM_SINK_ALLOCATOR(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK_ALLOCATOR))
-#define GST_IS_SHM_SINK_ALLOCATOR_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK_ALLOCATOR))
-
-struct _GstShmSinkAllocator
-{
-  GstAllocator parent;
-
-  GstShmSink *sink;
-};
-
-typedef struct _GstShmSinkAllocatorClass
-{
-  GstAllocatorClass parent;
-} GstShmSinkAllocatorClass;
-
-typedef struct _GstShmSinkMemory
-{
-  GstMemory mem;
-
-  gchar *data;
-  GstShmSink *sink;
-//  ShmBlock *block;
-} GstShmSinkMemory;
-
-GType gst_shm_sink_allocator_get_type (void);
-
-G_DEFINE_TYPE (GstShmSinkAllocator, gst_shm_sink_allocator, GST_TYPE_ALLOCATOR);
-
-static void
-gst_shm_sink_allocator_dispose (GObject * object)
-{
-  GstShmSinkAllocator *self = GST_SHM_SINK_ALLOCATOR (object);
-
-  if (self->sink)
-    gst_object_unref (self->sink);
-  self->sink = NULL;
-
-  G_OBJECT_CLASS (gst_shm_sink_allocator_parent_class)->dispose (object);
-}
-
-static void
-gst_shm_sink_allocator_free (GstAllocator * allocator, GstMemory * mem)
-{
-  GstShmSinkMemory *mymem = (GstShmSinkMemory *) mem;
-
-  if (mymem->block) {
-    GST_OBJECT_LOCK (mymem->sink);
-    sp_writer_free_block (mymem->block);
-    GST_OBJECT_UNLOCK (mymem->sink);
-    gst_object_unref (mymem->sink);
-  }
-  gst_object_unref (mem->allocator);
-
-  g_slice_free (GstShmSinkMemory, mymem);
-}
-
-static gpointer
-gst_shm_sink_allocator_mem_map (GstMemory * mem, gsize maxsize,
-    GstMapFlags flags)
-{
-  GstShmSinkMemory *mymem = (GstShmSinkMemory *) mem;
-
-  return mymem->data;
-}
-
-static void
-gst_shm_sink_allocator_mem_unmap (GstMemory * mem)
-{
-}
-
-static GstMemory *
-gst_shm_sink_allocator_mem_share (GstMemory * mem, gssize offset, gssize size)
-{
-  GstShmSinkMemory *mymem = (GstShmSinkMemory *) mem;
-  GstShmSinkMemory *mysub;
-  GstMemory *parent;
-
-  /* find the real parent */
-  if ((parent = mem->parent) == NULL)
-    parent = mem;
-
-  if (size == -1)
-    size = mem->size - offset;
-
-  mysub = g_slice_new0 (GstShmSinkMemory);
-  /* the shared memory is always readonly */
-  gst_memory_init (GST_MEMORY_CAST (mysub), GST_MINI_OBJECT_FLAGS (parent) |
-      GST_MINI_OBJECT_FLAG_LOCK_READONLY, gst_object_ref (mem->allocator),
-      parent, mem->maxsize, mem->align, mem->offset + offset, size);
-  mysub->data = mymem->data;
-
-  return (GstMemory *) mysub;
-}
-
-static gboolean
-gst_shm_sink_allocator_mem_is_span (GstMemory * mem1, GstMemory * mem2,
-    gsize * offset)
-{
-  GstShmSinkMemory *mymem1 = (GstShmSinkMemory *) mem1;
-  GstShmSinkMemory *mymem2 = (GstShmSinkMemory *) mem2;
-
-  if (offset) {
-    GstMemory *parent;
-
-    parent = mem1->parent;
-
-    *offset = mem1->offset - parent->offset;
-  }
-
-  /* and memory is contiguous */
-  return mymem1->data + mem1->offset + mem1->size ==
-      mymem2->data + mem2->offset;
-}
-
-static void
-gst_shm_sink_allocator_init (GstShmSinkAllocator * self)
-{
-  GstAllocator *allocator = GST_ALLOCATOR (self);
-
-  allocator->mem_map = gst_shm_sink_allocator_mem_map;
-  allocator->mem_unmap = gst_shm_sink_allocator_mem_unmap;
-  allocator->mem_share = gst_shm_sink_allocator_mem_share;
-  allocator->mem_is_span = gst_shm_sink_allocator_mem_is_span;
-}
-
-
-static GstMemory *
-gst_shm_sink_allocator_alloc_locked (GstShmSinkAllocator * self, gsize size,
-    GstAllocationParams * params)
-{
-  GstMemory *memory = NULL;
-  ShmBlock *block = NULL;
-  gsize maxsize = size + params->prefix + params->padding;
-  gsize align = params->align;
-
-  /* ensure configured alignment */
-  align |= gst_memory_alignment;
-  /* allocate more to compensate for alignment */
-  maxsize += align;
-
-  block = sp_writer_alloc_block (self->sink->pipe, maxsize);
-  if (block) {
-    GstShmSinkMemory *mymem;
-    gsize aoffset, padding;
-
-    GST_LOG_OBJECT (self,
-        "Allocated block %p with %" G_GSIZE_FORMAT " bytes at %p", block, size,
-        sp_writer_block_get_buf (block));
-
-    mymem = g_slice_new0 (GstShmSinkMemory);
-    memory = GST_MEMORY_CAST (mymem);
-    mymem->data = sp_writer_block_get_buf (block);
-    mymem->sink = gst_object_ref (self->sink);
-    mymem->block = block;
-
-    /* do alignment */
-    if ((aoffset = ((guintptr) mymem->data & align))) {
-      aoffset = (align + 1) - aoffset;
-      mymem->data += aoffset;
-      maxsize -= aoffset;
-    }
-
-    if (params->prefix && (params->flags & GST_MEMORY_FLAG_ZERO_PREFIXED))
-      memset (mymem->data, 0, params->prefix);
-
-    padding = maxsize - (params->prefix + size);
-    if (padding && (params->flags & GST_MEMORY_FLAG_ZERO_PADDED))
-      memset (mymem->data + params->prefix + size, 0, padding);
-
-    gst_memory_init (memory, params->flags, g_object_ref (self), NULL,
-        maxsize, align, params->prefix, size);
-  }
-
-  return memory;
-}
-
-static GstMemory *
-gst_shm_sink_allocator_alloc (GstAllocator * allocator, gsize size,
-    GstAllocationParams * params)
-{
-  GstShmSinkAllocator *self = GST_SHM_SINK_ALLOCATOR (allocator);
-  GstMemory *memory = NULL;
-
-  GST_OBJECT_LOCK (self->sink);
-  memory = gst_shm_sink_allocator_alloc_locked (self, size, params);
-  GST_OBJECT_UNLOCK (self->sink);
-
-  if (!memory) {
-    memory = gst_allocator_alloc (NULL, size, params);
-    GST_LOG_OBJECT (self,
-        "Not enough shared memory for GstMemory of %" G_GSIZE_FORMAT
-        "bytes, allocating using standard allocator", size);
-  }
-
-  return memory;
-}
-
-
-static void
-gst_shm_sink_allocator_class_init (GstShmSinkAllocatorClass * klass)
-{
-  GstAllocatorClass *allocator_class = GST_ALLOCATOR_CLASS (klass);
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
-
-  allocator_class->alloc = gst_shm_sink_allocator_alloc;
-  allocator_class->free = gst_shm_sink_allocator_free;
-  object_class->dispose = gst_shm_sink_allocator_dispose;
-}
-
-static GstShmSinkAllocator *
-gst_shm_sink_allocator_new (GstShmSink * sink)
-{
-  GstShmSinkAllocator *self = g_object_new (GST_TYPE_SHM_SINK_ALLOCATOR, NULL);
-
-  self->sink = gst_object_ref (sink);
-
-  return self;
-}
-
-#endif // no custom allocator for now
 
 /***************
  * MAIN OBJECT *
  ***************/
 
 #define ALIGN(nr, align) \
- (nr % align == 0) ? nr : align * (nr / align +1)
+  (nr % align == 0) ? nr : align * (nr / align +1)
 
-void get_buffer_size(size_t *buffer_size, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
-    // FIXME  - fix hard coded 720p
-    size_t size = 1382400;   // i420 720p
-    // reading beyond buffer size is a thing for video buffers - so we need to make the backing buffer a bit bigger
-    size += alignment;
-    *buffer_size = ALIGN(size, alignment);
+static void 
+get_buffer_size (size_t *buffer_size, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
+  size_t size = width * height * 3 / 2;   // i420
+  // reading beyond buffer size is a thing for v
+  size += alignment;
+  *buffer_size = ALIGN(size, alignment);
 }
 
-void get_frame_size(size_t *frame_size, size_t *frame_data_offset, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
-    // FIXME  - fix hard coded 720p
+static void 
+get_frame_size (size_t *frame_size, size_t *frame_data_offset, GstVideoFormat format, uint32_t width, uint32_t height, uint32_t alignment) {
+  size_t buffer_size;
+  get_buffer_size(&buffer_size, format, width, height, alignment);
+  size_t header_size = ALIGN(sizeof(struct frame_header), alignment);
 
-    size_t buffer_size;
-    get_buffer_size(&buffer_size, format, width, height, alignment);
-    size_t header_size = ALIGN(sizeof(struct frame_header), alignment);
-
-    *frame_size = buffer_size + header_size;
-    *frame_data_offset = header_size;
+  *frame_size = buffer_size + header_size;
+  *frame_data_offset = header_size;
 }
 
-#define ALIGNMENT 256
-static void
-gst_shm_sink_init (GstShmSink * self)
-{
-  g_cond_init (&self->cond);
-  self->size = DEFAULT_SIZE;
-  self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
-
+static void 
+init_shmem (GstShmSink * self, GstVideoInfo * info) {
+  // FIXME handle creation error
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
-  // FIXME handle creation error
   self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
-  // FIXME handle creation error
 
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   int buffer_count = 5;
+
   // FIXME  - fix hard coded 720p
   size_t frame_data_offset;
   size_t frame_size;
-  get_frame_size(&frame_size, &frame_data_offset, GST_VIDEO_FORMAT_I420, 1280, 720, ALIGNMENT);
+
+  get_frame_size(&frame_size, &frame_data_offset, 
+      GST_VIDEO_INFO_FORMAT(info), 
+      GST_VIDEO_INFO_WIDTH(info),
+      GST_VIDEO_INFO_HEIGHT(info),
+      ALIGNMENT);
   size = ((DWORD) frame_size * buffer_count) + header_size;
 
   self->shmem_handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-        0, size, BEBO_SHMEM_NAME);
+      0, size, BEBO_SHMEM_NAME);
 
   if (!self->shmem_handle) {
-      // FIXME should be ERROR
-      GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
-      return;
+    // FIXME should be ERROR
+    GST_WARNING_OBJECT(self, "could not create mapping %d", GetLastError());
+    return;
   }
   self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (!self->shmem) {
-      // FIXME should be ERROR
-      GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
-      return;
+    // FIXME should be ERROR
+    GST_WARNING_OBJECT(self, "could not map shmem %d", GetLastError());
+    return;
   }
 
-  gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_I420, 1280, 720);
-
-//  for (int i = 0; i < GST_VIDEO_MAX_PLANES; ++i) {
-//      self->shmem->video_info.plane_offsets[i] = GST_VIDEO_INFO_PLANE_OFFSET(&(self->shmem->video_info), i);
-//      self->shmem->video_info.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&(self->shemem->video_info), i);
-//  }
+  gst_video_info_set_format(&self->shmem->video_info, 
+      GST_VIDEO_INFO_FORMAT(info), 
+      GST_VIDEO_INFO_WIDTH(info),
+      GST_VIDEO_INFO_HEIGHT(info));
 
   self->shmem->frame_offset = header_size;
   self->shmem->frame_size = frame_size;
@@ -428,8 +174,16 @@ gst_shm_sink_init (GstShmSink * self)
   self->shmem->shmem_size = size;
 
   ReleaseMutex(self->shmem_mutex);
-// self->perms = DEFAULT_PERMS;
-//  gst_allocation_params_init (&self->params);
+  // self->perms = DEFAULT_PERMS;
+  // gst_allocation_params_init (&self->params);
+}
+
+static void
+gst_shm_sink_init (GstShmSink * self)
+{
+  g_cond_init (&self->cond);
+  self->size = DEFAULT_SIZE;
+  self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
 }
 
 static void
@@ -454,43 +208,43 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->unlock = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock);
   gstbasesink_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock_stop);
   gstbasesink_class->propose_allocation =
-      GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
+    GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
 
   g_object_class_install_property (gobject_class, PROP_SOCKET_PATH,
       g_param_spec_string ("socket-path",
-          "Path to the control socket",
-          "The path to the control socket used to control the shared memory "
-          "transport. This may be modified during the NULL->READY transition",
-          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+        "Path to the control socket",
+        "The path to the control socket used to control the shared memory "
+        "transport. This may be modified during the NULL->READY transition",
+        NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 #if 0
   g_object_class_install_property (gobject_class, PROP_PERMS,
       g_param_spec_uint ("perms",
-          "Permissions on the shm area",
-          "Permissions to set on the shm area",
-          0, 07777, DEFAULT_PERMS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+        "Permissions on the shm area",
+        "Permissions to set on the shm area",
+        0, 07777, DEFAULT_PERMS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #endif
 
   g_object_class_install_property (gobject_class, PROP_SHM_SIZE,
       g_param_spec_uint ("shm-size",
-          "Size of the shm area",
-          "Size of the shared memory area",
-          0, G_MAXUINT, DEFAULT_SIZE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+        "Size of the shm area",
+        "Size of the shared memory area",
+        0, G_MAXUINT, DEFAULT_SIZE,
+        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_WAIT_FOR_CONNECTION,
       g_param_spec_boolean ("wait-for-connection",
-          "Wait for a connection until rendering",
-          "Block the stream until the shm pipe is connected",
-          DEFAULT_WAIT_FOR_CONNECTION,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+        "Wait for a connection until rendering",
+        "Block the stream until the shm pipe is connected",
+        DEFAULT_WAIT_FOR_CONNECTION,
+        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_BUFFER_TIME,
       g_param_spec_int64 ("buffer-time",
-          "Buffer Time of the shm buffer",
-          "Maximum Size of the shm buffer in nanoseconds (-1 to disable)",
-          -1, G_MAXINT64, -1,
-          G_PARAM_CONSTRUCT | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+        "Buffer Time of the shm buffer",
+        "Maximum Size of the shm buffer in nanoseconds (-1 to disable)",
+        -1, G_MAXINT64, -1,
+        G_PARAM_CONSTRUCT | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   signals[SIGNAL_CLIENT_CONNECTED] = g_signal_new ("client-connected",
       GST_TYPE_SHM_SINK, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
@@ -568,7 +322,7 @@ gst_shm_sink_set_property (GObject * object, guint prop_id,
       }
       self->size = g_value_get_uint (value);
       */
-      GST_OBJECT_UNLOCK (object);
+        GST_OBJECT_UNLOCK (object);
       break;
 #endif 
     case PROP_WAIT_FOR_CONNECTION:
@@ -620,8 +374,6 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
   GST_OBJECT_UNLOCK (object);
 }
 
-
-
 static gboolean
 gst_shm_sink_start (GstBaseSink * bsink)
 {
@@ -630,60 +382,8 @@ gst_shm_sink_start (GstBaseSink * bsink)
 
   self->stop = FALSE;
 
-#if 0
-  if (!self->socket_path) {
-    GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
-        ("Could not open socket."), (NULL));
-    return FALSE;
-  }
-
-#endif
-
   GST_DEBUG_OBJECT (self, "Creating new socket at %s"
       " with shared memory of %d bytes", self->socket_path, self->size);
-#if 0
-  self->pipe = sp_writer_create (self->socket_path, self->size, self->perms);
-
-  if (!self->pipe) {
-    GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
-        ("Could not open socket."), (NULL));
-    return FALSE;
-  }
-
-  sp_set_data (self->pipe, self);
-  g_free (self->socket_path);
-  self->socket_path = g_strdup (sp_writer_get_path (self->pipe));
-
-  GST_DEBUG ("Created socket at %s", self->socket_path);
-
-
-  self->poll = gst_poll_new (TRUE);
-  gst_poll_fd_init (&self->serverpollfd);
-  self->serverpollfd.fd = sp_get_fd (self->pipe);
-  gst_poll_add_fd (self->poll, &self->serverpollfd);
-  gst_poll_fd_ctl_read (self->poll, &self->serverpollfd, TRUE);
-
-  self->pollthread =
-      g_thread_try_new ("gst-shmsink-poll-thread", pollthread_func, self, &err);
-
-  if (!self->pollthread)
-    goto thread_error;
-
-  self->allocator = gst_shm_sink_allocator_new (self);
-
-  return TRUE;
-
-thread_error:
-
-  sp_writer_close (self->pipe, NULL, NULL);
-  self->pipe = NULL;
-  gst_poll_free (self->poll);
-
-  GST_ELEMENT_ERROR (self, CORE, THREAD, ("Could not start thread"),
-      ("%s", err->message));
-  g_error_free (err);
-  return FALSE;
-#endif
   return TRUE;
 }
 
@@ -705,43 +405,14 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 
   GST_DEBUG_OBJECT (self, "Stopping");
 
-#if 0
-  while (self->clients) {
-    struct GstShmClient *client = self->clients->data;
-    self->clients = g_list_remove (self->clients, client);
-    sp_writer_close_client (self->pipe, client->client,
-        (sp_buffer_free_callback) gst_buffer_unref, NULL);
-    g_signal_emit (self, signals[SIGNAL_CLIENT_DISCONNECTED], 0,
-        client->pollfd.fd);
-    g_slice_free (struct GstShmClient, client);
-  }
-
-  gst_poll_free (self->poll);
-  self->poll = NULL;
-
-  sp_writer_close (self->pipe, NULL, NULL);
-  self->pipe = NULL;
-#endif
-
   return TRUE;
 }
 
 static gboolean
 gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 {
-//  ShmBuffer *b;
-
   if (time == GST_CLOCK_TIME_NONE || self->buffer_time == GST_CLOCK_TIME_NONE)
     return TRUE;
-
-#if 0
-  b = sp_writer_get_pending_buffers (self->pipe);
-  for (; b != NULL; b = sp_writer_get_next_buffer (b)) {
-    GstBuffer *buf = sp_writer_buf_get_tag (b);
-    if (GST_CLOCK_DIFF (time, GST_BUFFER_PTS (buf)) > self->buffer_time)
-      return FALSE;
-  }
-#endif
 
   return TRUE;
 }
@@ -749,163 +420,57 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
-    GstShmSink *self = GST_SHM_SINK (bsink);
-    // TODO
-    //GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
-    //     gst_buffer_n_memory (buf),
-    //    gst_buffer_get_size(buf));
+  GstShmSink *self = GST_SHM_SINK (bsink);
+  // TODO
+  //GST_WARNING_OBJECT (self, "we need to implemen sink_render ! Buffer %p has %d GstMemory size: %d", buf,
+  //     gst_buffer_n_memory (buf),
+  //    gst_buffer_get_size(buf));
 
-    if (!GST_IS_BUFFER(buf)) {
-        GST_WARNING_OBJECT(self, "NOT A BUFFER???");
-    }
-    GST_OBJECT_LOCK (self);
-
-    DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
-    if (rc == WAIT_FAILED) {
-        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
-    } else if (rc != WAIT_OBJECT_0) {
-        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
-    }
-    
-    uint64_t i = self->shmem->write_ptr % self->shmem->count;
-    self->shmem->write_ptr++;
-
-    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
-    uint64_t data_offset = self->shmem->frame_data_offset;
-
-    struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset));
-    void *data = ((char*)frame) + data_offset;
-
-    GstMapInfo map;
-    GstMemory *memory = NULL;
-
-    gst_buffer_map(buf, &map, GST_MAP_READ);
-    frame->dts = buf->dts;
-    frame->pts = buf->pts;
-    frame->duration = buf->duration;
-    frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
-    gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
-    gst_buffer_unmap(buf, &map);
-    GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
-        //frame->dts / 1000000,
-        frame->pts / 1000000,
-        i,
-        frame_offset,
-        data_offset,
-        size);
-
-    ReleaseMutex(self->shmem_mutex);
-    GST_OBJECT_UNLOCK (self);
-    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-
-    return GST_FLOW_OK;
-
-#if 0
-  int rv = 0;
-  GstMapInfo map;
-  gboolean need_new_memory = FALSE;
-  GstFlowReturn ret = GST_FLOW_OK;
-  GstMemory *memory = NULL;
-  GstBuffer *sendbuf = NULL;
-
+  if (!GST_IS_BUFFER(buf)) {
+    GST_WARNING_OBJECT(self, "NOT A BUFFER???");
+  }
   GST_OBJECT_LOCK (self);
-  while (self->wait_for_connection && !self->clients) {
-    g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-    if (self->unlock)
-      goto flushing;
+
+  DWORD rc = WaitForSingleObject(self->shmem_mutex, INFINITE);
+  if (rc == WAIT_FAILED) {
+    GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+  } else if (rc != WAIT_OBJECT_0) {
+    GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
   }
 
-  while (!gst_shm_sink_can_render (self, GST_BUFFER_TIMESTAMP (buf))) {
-    g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-    if (self->unlock)
-      goto flushing;
-  }
+  uint64_t i = self->shmem->write_ptr % self->shmem->count;
+  self->shmem->write_ptr++;
 
+  uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+  uint64_t data_offset = self->shmem->frame_data_offset;
 
-  if (gst_buffer_n_memory (buf) > 1) {
-    GST_LOG_OBJECT (self, "Buffer %p has %d GstMemory, we only support a single"
-        " one, need to do a memcpy", buf, gst_buffer_n_memory (buf));
-    need_new_memory = TRUE;
-  } else {
-    memory = gst_buffer_peek_memory (buf, 0);
+  struct frame_header *frame = ((struct frame_header*) (((unsigned char*)self->shmem) + frame_offset));
+  void *data = ((char*)frame) + data_offset;
 
-    if (memory->allocator != GST_ALLOCATOR (self->allocator)) {
-      need_new_memory = TRUE;
-      GST_LOG_OBJECT (self, "Memory in buffer %p was not allocated by "
-          "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
-    }
-  }
+  GstMapInfo map;
+  GstMemory *memory = NULL;
 
-  if (need_new_memory) {
-    if (gst_buffer_get_size (buf) > sp_writer_get_max_buf_size (self->pipe)) {
-      gsize area_size = sp_writer_get_max_buf_size (self->pipe);
-      GST_OBJECT_UNLOCK (self);
-      GST_ELEMENT_ERROR (self, RESOURCE, NO_SPACE_LEFT,
-          ("Shared memory area is too small"),
-          ("Shared memory area of size %" G_GSIZE_FORMAT " is smaller than"
-              "buffer of size %" G_GSIZE_FORMAT, area_size,
-              gst_buffer_get_size (buf)));
-      return GST_FLOW_ERROR;
-    }
+  gst_buffer_map(buf, &map, GST_MAP_READ);
+  frame->dts = buf->dts;
+  frame->pts = buf->pts;
+  frame->duration = buf->duration;
+  frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
+  gsize size = gst_buffer_extract(buf, 0, data, self->shmem->buffer_size);
+  gst_buffer_unmap(buf, &map);
 
-    while ((memory =
-            gst_shm_sink_allocator_alloc_locked (self->allocator,
-                gst_buffer_get_size (buf), &self->params)) == NULL) {
-      g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-      if (self->unlock)
-        goto flushing;
-    }
+  GST_DEBUG_OBJECT(self, "pts: %lld i: %d frame_offset: %d offset: data_offset: %d size: %d",
+      //frame->dts / 1000000,
+      frame->pts / 1000000,
+      i,
+      frame_offset,
+      data_offset,
+      size);
 
-    while (self->wait_for_connection && !self->clients) {
-      g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-      if (self->unlock) {
-        GST_OBJECT_UNLOCK (self);
-        gst_memory_unref (memory);
-        return GST_FLOW_FLUSHING;
-      }
-    }
-
-    gst_memory_map (memory, &map, GST_MAP_WRITE);
-    gst_buffer_extract (buf, 0, map.data, map.size);
-    gst_memory_unmap (memory, &map);
-
-    sendbuf = gst_buffer_new ();
-    gst_buffer_copy_into (sendbuf, buf, GST_BUFFER_COPY_METADATA, 0, -1);
-    gst_buffer_append_memory (sendbuf, memory);
-  } else {
-    sendbuf = gst_buffer_ref (buf);
-  }
-
-  gst_buffer_map (sendbuf, &map, GST_MAP_READ);
-  /* Make the memory readonly as of now as we've sent it to the other side
-   * We know it's not mapped for writing anywhere as we just mapped it for
-   * reading
-   */
-
-  rv = sp_writer_send_buf (self->pipe, (char *) map.data, map.size, sendbuf);
-
-  gst_buffer_unmap (sendbuf, &map);
-
+  ReleaseMutex(self->shmem_mutex);
   GST_OBJECT_UNLOCK (self);
+  ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
 
-  if (rv == 0) {
-    GST_DEBUG_OBJECT (self, "No clients connected, unreffing buffer");
-    gst_buffer_unref (sendbuf);
-  } else if (rv == -1) {
-    GST_ELEMENT_ERROR (self, STREAM, FAILED, ("Invalid allocated buffer"),
-        ("The shmpipe library rejects our buffer, this is a bug"));
-    ret = GST_FLOW_ERROR;
-  }
-
-  /* If we allocated our own memory, then unmap it */
-
-  return ret;
-
-flushing:
-  GST_OBJECT_UNLOCK (self);
-#endif
-
-  return GST_FLOW_FLUSHING;
+  return GST_FLOW_OK;
 }
 
 static void
@@ -918,136 +483,6 @@ free_buffer_locked (GstBuffer * buffer, void *data)
   *list = g_slist_prepend (*list, buffer);
 }
 
-static gpointer
-pollthread_func (gpointer data)
-{
-  GstShmSink *self = GST_SHM_SINK (data);
-//  GList *item;
-  GstClockTime timeout = GST_CLOCK_TIME_NONE;
-  int rv = 0;
-
-  while (!self->stop) {
-
-    do {
-      rv = gst_poll_wait (self->poll, timeout);
-    } while (rv < 0 && errno == EINTR);
-
-#if 0
-    if (rv < 0) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed waiting on fd activity"),
-                         ("gst_poll_wait returned %d, errno: %d", rv, errno));
-      return NULL;
-    }
-
-    timeout = GST_CLOCK_TIME_NONE;
-
-    if (self->stop)
-      return NULL;
-
-    if (gst_poll_fd_has_closed (self->poll, &self->serverpollfd)) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed read from shmsink"),
-          ("Control socket has closed"));
-      return NULL;
-    }
-
-    if (gst_poll_fd_has_error (self->poll, &self->serverpollfd)) {
-      GST_ELEMENT_ERROR (self, RESOURCE, READ, ("Failed to read from shmsink"),
-          ("Control socket has error"));
-      return NULL;
-    }
-
-    if (gst_poll_fd_can_read (self->poll, &self->serverpollfd)) {
-      ShmClient *client;
-      struct GstShmClient *gclient;
-
-      GST_OBJECT_LOCK (self);
-      client = sp_writer_accept_client (self->pipe);
-      GST_OBJECT_UNLOCK (self);
-
-      if (!client) {
-        GST_ELEMENT_ERROR (self, RESOURCE, READ,
-            ("Failed to read from shmsink"),
-            ("Control socket returns wrong data"));
-        return NULL;
-      }
-
-      gclient = g_slice_new (struct GstShmClient);
-      gclient->client = client;
-      gst_poll_fd_init (&gclient->pollfd);
-      gclient->pollfd.fd = sp_writer_get_client_fd (client);
-      gst_poll_add_fd (self->poll, &gclient->pollfd);
-      gst_poll_fd_ctl_read (self->poll, &gclient->pollfd, TRUE);
-      self->clients = g_list_prepend (self->clients, gclient);
-      g_signal_emit (self, signals[SIGNAL_CLIENT_CONNECTED], 0,
-          gclient->pollfd.fd);
-      /* we need to call gst_poll_wait before calling gst_poll_* status
-         functions on that new descriptor, so restart the loop, so _wait
-         will have been called on all elements of self->poll, whether
-         they have just been added or not. */
-      timeout = 0;
-      continue;
-    }
-
-  again:
-    for (item = self->clients; item; item = item->next) {
-      struct GstShmClient *gclient = item->data;
-
-      if (gst_poll_fd_has_closed (self->poll, &gclient->pollfd)) {
-        GST_WARNING_OBJECT (self, "One client is gone, closing");
-        goto close_client;
-      }
-
-      if (gst_poll_fd_has_error (self->poll, &gclient->pollfd)) {
-        GST_WARNING_OBJECT (self, "One client fd has error, closing");
-        goto close_client;
-      }
-
-      if (gst_poll_fd_can_read (self->poll, &gclient->pollfd)) {
-        int rv;
-        gpointer tag = NULL;
-
-        GST_OBJECT_LOCK (self);
-        rv = sp_writer_recv (self->pipe, gclient->client, &tag);
-        GST_OBJECT_UNLOCK (self);
-
-        if (rv < 0) {
-          GST_WARNING_OBJECT (self, "One client has read error,"
-              " closing (retval: %d errno: %d)", rv, errno);
-          goto close_client;
-        }
-
-        g_assert (rv == 0 || tag == NULL);
-
-        if (rv == 0)
-          gst_buffer_unref (tag);
-      }
-      continue;
-    close_client:
-      {
-        GSList *list = NULL;
-        GST_OBJECT_LOCK (self);
-        sp_writer_close_client (self->pipe, gclient->client,
-            (sp_buffer_free_callback) free_buffer_locked, (void **) &list);
-        GST_OBJECT_UNLOCK (self);
-        g_slist_free_full (list, (GDestroyNotify) gst_buffer_unref);
-      }
-
-      gst_poll_remove_fd (self->poll, &gclient->pollfd);
-      self->clients = g_list_remove (self->clients, gclient);
-
-      g_signal_emit (self, signals[SIGNAL_CLIENT_DISCONNECTED], 0,
-          gclient->pollfd.fd);
-      g_slice_free (struct GstShmClient, gclient);
-
-      goto again;
-    }
-#endif
-    g_cond_broadcast (&self->cond);
-  }
-
-  return NULL;
-}
-
 static gboolean
 gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
 {
@@ -1057,11 +492,6 @@ gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
     case GST_EVENT_EOS:
       GST_OBJECT_LOCK (self);
       // TODO
-#if 0
-      while (self->wait_for_connection && sp_writer_pending_writes (self->pipe)
-          && !self->unlock)
-        g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-#endif
       GST_OBJECT_UNLOCK (self);
       break;
     default:
@@ -1102,11 +532,21 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
   GstShmSink *self = GST_SHM_SINK (sink);
 
-#if 0 // TODO ?
+#if 0 // do we want our own allocator?
   if (self->allocator)
     gst_query_add_allocation_param (query, GST_ALLOCATOR (self->allocator),
         NULL);
 #endif
+
+  GstCaps *caps;
+  gboolean need_pool;
+  gst_query_parse_allocation(query, &caps, &need_pool);
+
+  GstVideoInfo info;
+  if (!gst_video_info_from_caps (&info, caps))
+    return FALSE;
+
+  init_shmem(self, &info);
 
   return TRUE;
 }
