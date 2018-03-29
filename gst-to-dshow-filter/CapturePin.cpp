@@ -223,7 +223,7 @@ HRESULT CPushPinDesktop::InitializeDXGI() {
 #endif
 
   HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
-      (void**)(dxgi_factory.GetAddressOf()));
+      (void**) (dxgi_factory.GetAddressOf()));
 
   // TODO: we need to get the right adapter but, we don't have access to dxgi shared handle atm
   // cuz it's in dxgi_frame
