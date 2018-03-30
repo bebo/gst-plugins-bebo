@@ -65,7 +65,7 @@ enum
 
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
-#define BUFFER_COUNT 30
+#define BUFFER_COUNT 15
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
@@ -302,7 +302,6 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
   GST_OBJECT_LOCK (object);
 
   switch (prop_id) {
-  
     case PROP_WAIT_FOR_CONNECTION:
       g_value_set_boolean (value, self->wait_for_connection);
       break;
@@ -374,145 +373,150 @@ static bool latency_bool = TRUE;
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
-    GstShmSink *self = GST_SHM_SINK (bsink);
-    GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
+  GstShmSink *self = GST_SHM_SINK (bsink);
+  GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
 
 
-    if (!GST_IS_BUFFER(buf)) {
-        GST_ERROR_OBJECT(self, "NOT A BUFFER???");
-        return GST_FLOW_ERROR;
+  if (!GST_IS_BUFFER(buf)) {
+    GST_ERROR_OBJECT(self, "NOT A BUFFER???");
+    return GST_FLOW_ERROR;
+  }
+  GST_OBJECT_LOCK (self);
+
+  /* GST_OBJECT_LOCK (self); */
+  GstClock *clock = GST_ELEMENT_CLOCK (self);
+  if (clock != NULL) {
+    gst_object_ref (clock);
+  }
+
+  GstClockTime running_time = 0;
+  GstClockTime latency = 0;
+
+  if (clock != NULL) {
+    /* The time according to the current clock */
+    GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
+    running_time = gst_clock_get_time(clock) - base_time;
+    latency = running_time - buf->pts;
+    if (latency_bool) {
+      self->latency = latency;
+      latency_bool = FALSE;
+      GST_INFO("Measured plugin latency to %d", self->latency / 1000000);
     }
-    GST_OBJECT_LOCK (self);
+    gst_object_unref (clock);
+    clock = NULL;
+  }
+  // we get bombarded with "old" frames at the beginning - drop them for now
+  if (self->first_render_time == 0) {
+    self->first_render_time  = running_time;
+  }
 
-    /* GST_OBJECT_LOCK (self); */
-    GstClock *clock = GST_ELEMENT_CLOCK (self);
-    if (clock != NULL) {
-        gst_object_ref (clock);
-    }
+  if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
+    GST_OBJECT_UNLOCK (self);
+    GST_DEBUG_OBJECT(self, "dropping early frame");
+    return GST_FLOW_OK;
+  }
 
-    GstClockTime running_time = 0;
-    GstClockTime latency = 0;
-    if (clock != NULL) {
+  // TOGO: GST_VIDEO_INFO_FPS_N(self->video_info);
+  DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
 
-      /* The time according to the current clock */
-      GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
-      running_time = gst_clock_get_time(clock) - base_time;
-      latency = running_time - buf->pts;
-      if (latency_bool) {
-        self->latency = latency;
-        latency_bool = FALSE;
-        GST_INFO("Measured plugin latency to %d", self->latency / 1000000);
-      }
+  if (rc == WAIT_FAILED) {
+    GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
+  } else if (rc == WAIT_TIMEOUT) {
+    // FIXME: TODO log dropped frames
+    GST_DEBUG_OBJECT(self, "MUTEX TIMED OUT dropping frame");
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  } else if (rc != WAIT_OBJECT_0) {
+    GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  }
 
-      /* GST_DEBUG_OBJECT (self, */
-      /*   "pts %" GST_TIME_FORMAT ", running_time %" GST_TIME_FORMAT ", base_time %" GST_TIME_FORMAT ", latency %" GST_TIME_FORMAT, */
-      /*   GST_TIME_ARGS (buf->pts), GST_TIME_ARGS(running_time), GST_TIME_ARGS (base_time), GST_TIME_ARGS(latency)); */
+  self->shmem->write_ptr++;
 
-      gst_object_unref (clock);
-      clock = NULL;
-    }
-    // we get bombarded with "old" frames at the beginning - drop them for now
-    if (self->first_render_time == 0) {
-        self->first_render_time  = running_time;
-    }
-    if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
-        GST_OBJECT_UNLOCK (self);
-        GST_DEBUG_OBJECT(self, "dropping early frame");
-        return GST_FLOW_OK;
-    }
+  uint64_t index = self->shmem->write_ptr % self->shmem->count;
+  uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
+  struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
 
-    DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
-
-    if (rc == WAIT_FAILED) {
-        GST_WARNING_OBJECT(self, "MUTEX ERROR %#010x", GetLastError());
-    } else if (rc == WAIT_TIMEOUT) {
-        // FIXME: TODO log dropped frames
-        GST_DEBUG_OBJECT(self, "MUTEX TIMED OUT dropping frame");
-        GST_OBJECT_UNLOCK (self);
-        return GST_FLOW_OK;
-    } else if (rc != WAIT_OBJECT_0) {
-        GST_WARNING_OBJECT(self, "WTF MUTEX %#010x", rc);
-        GST_OBJECT_UNLOCK (self);
-        return GST_FLOW_OK;
-    }
-
-    self->shmem->write_ptr++;
-    uint64_t index = self->shmem->write_ptr % self->shmem->count;
-
-    uint64_t frame_offset =  self->shmem->frame_offset +  index * self->shmem->frame_size;
-    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
-
-    if (frame->_gst_buf_ref != NULL) {
-      if (frame->ref_cnt > 0) {
-        GST_DEBUG_OBJECT(self,
-          "gst_buffer_unref(%p) no free buffer unread buffer - freeing anyway - index: %d dxgi_handle: %llu ref_cnt: %d",
-          frame->_gst_buf_ref,
+  if (frame->_gst_buf_ref != NULL) {
+    if (frame->ref_cnt > 0) {
+      GST_DEBUG_OBJECT(self,
+          "buffer is still being referenced, dropping incoming frame. nr: %llu index: %d dxgi_handle: %llu ref_cnt: %d",
+          frame->nr,
           index,
           frame->dxgi_handle,
           frame->ref_cnt);
 
-        self->shmem->write_ptr--;
-        ReleaseMutex(self->shmem_mutex);
-        GST_OBJECT_UNLOCK(self);
-        ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-        return GST_FLOW_OK;
-      }
-      gst_buffer_unref(frame->_gst_buf_ref);
-      frame->ref_cnt = 0;
-      frame->_gst_buf_ref = NULL;
+      self->shmem->write_ptr--;
+
+      ReleaseMutex(self->shmem_mutex);
+      GST_OBJECT_UNLOCK(self);
+
+      // we shouldn't notify the other side that we dropped a frame?
+      // ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+
+      // TODO: ADD DROPPED FRAMES STATS
+      return GST_FLOW_OK;
     }
 
-    /* GstMapInfo map; */
-    GstMemory *memory = gst_buffer_peek_memory(buf, 0);
+    gst_buffer_unref(frame->_gst_buf_ref);
+    frame->ref_cnt = 0;
+    frame->_gst_buf_ref = NULL;
+  }
 
-    if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
-        GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
-            "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
-    }
+  /* GstMapInfo map; */
+  GstMemory *memory = gst_buffer_peek_memory(buf, 0);
 
-    gst_gl_context_thread_add(self->context, 
+  if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
+    GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
+        "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
+  }
+
+  gst_gl_context_thread_add(self->context, 
       (GstGLContextThreadFunc) _flush_gl, self);
 
-    GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
+  GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
 
-    frame->latency = latency;
-    frame->dts = buf->dts;
-    frame->pts = buf->pts;
-    frame->duration = buf->duration;
-    frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
-    frame->size = gst_buffer_get_size(buf);
-    frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
-    frame->nr = self->shmem->write_ptr;
-    frame->_gst_buf_ref = buf;
-    frame->ref_cnt = 1;
-    gst_buffer_ref (buf);
+  frame->latency = latency;
+  frame->dts = buf->dts;
+  frame->pts = buf->pts;
+  frame->duration = buf->duration;
+  frame->discontinuity = GST_BUFFER_IS_DISCONT(buf);
+  frame->size = gst_buffer_get_size(buf);
+  frame->dxgi_handle = gl_dxgi_mem->dxgi_handle;
+  frame->nr = self->shmem->write_ptr;
+  frame->_gst_buf_ref = buf;
+  frame->ref_cnt = 1;
+  gst_buffer_ref (buf);
 
-    GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
-        frame->nr,
-        frame->dxgi_handle,
-        //frame->dts / 1000000,
-        frame->pts / 1000000,
-        index,
-        frame_offset,
-        frame->size,
-        buf,
-        frame->latency / 1000000
-        ); //size);
+  GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+      frame->nr,
+      frame->dxgi_handle,
+      //frame->dts / 1000000,
+      frame->pts / 1000000,
+      index,
+      frame_offset,
+      frame->size,
+      buf,
+      frame->latency / 1000000
+      ); 
 
-    for (int i=0 ; i < self->shmem->count ; i++) {
-      uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
-      struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
-      if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
-        gst_buffer_unref(frame->_gst_buf_ref);
-        memset(frame, 0, sizeof(struct frame));
-      }
-    };
+  // unref buffers that are not being referenced anymore.
+  // do we need to do it here?
+  for (int i=0 ; i < self->shmem->count ; i++) {
+    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+    if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
+      gst_buffer_unref(frame->_gst_buf_ref);
+      memset(frame, 0, sizeof(struct frame));
+    }
+  };
 
-    ReleaseMutex(self->shmem_mutex);
-    GST_OBJECT_UNLOCK (self);
-    ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+  ReleaseMutex(self->shmem_mutex);
+  GST_OBJECT_UNLOCK (self);
 
-    return GST_FLOW_OK;
+  ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
+  return GST_FLOW_OK;
 }
 
 static void
