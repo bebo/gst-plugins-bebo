@@ -14,10 +14,9 @@
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
 #define GPU_WAIT_FRAME_COUNT              3
-#define GPU_QUEUE_MAX_FRAME_COUNT         5
+#define GPU_QUEUE_MAX_FRAME_COUNT         10
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
-#define WAIT_FOR_GPU_MAP
-#define FILL_GPU_QUEUE_BEFORE_FULL
+#define WAIT_BY_QUEUE_SIZE
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -369,7 +368,7 @@ D3D11_TEXTURE2D_DESC CPushPinDesktop::ConvertToStagingTextureDesc(D3D11_TEXTURE2
   desc.ArraySize = 1;
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_STAGING;
-  desc.CPUAccessFlags = D3D10_CPU_ACCESS_READ;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
   desc.BindFlags = 0;
   desc.MiscFlags = 0;
   return desc;
@@ -416,14 +415,12 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       got_frame = false;
     }
 
-#ifdef FILL_GPU_QUEUE_BEFORE_FULL
     // prioritize fill buffer to fill up the queue before start consuming from our own queue
     if (!got_frame &&
         dxgi_frame_queue_.size() < GPU_QUEUE_MAX_FRAME_COUNT) {
       HRESULT code = GetAndWaitForShmemFrame(&dxgi_frame, 0);
       got_frame = (code == S_OK);
     }
-#endif
 
     if (got_frame) {
       CopyTextureToStagingQueue(dxgi_frame);
@@ -441,6 +438,8 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 
       *out_dxgi_frame = dxgi_frame;
     }
+
+    d3d_context_->Flush();
   }
 
   DxgiFrame* out_frame = *out_dxgi_frame;
@@ -482,9 +481,10 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   long double processing_time_ms = GetCounterSinceStartMillis(start_processing);
   frame_processing_time_ms_ += processing_time_ms;
 
-  _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
+  _swprintf(out_, L"stats: total frames: %I64d dropped: %I64d duplicated: %llu pct_dropped: %.02f late: %I64d ave_fps: %.02f negotiated fps: %.03f avg proc time: %.03f",
       frame_total_cnt_,
       frame_dropped_cnt_,
+      frame_duplicated_cnt_,
       100.0 * frame_dropped_cnt_ / frame_total_cnt_,
       frame_late_cnt_,
       avg_fps,
@@ -511,9 +511,14 @@ int64_t CPushPinDesktop::GetNewFrameWaitTime() {
   }
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
+
+#ifdef WAIT_BY_QUEUE_SIZE
+  return REFERENCE_TIME_TO_MS(frame->frame_length);
+#else
   uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_to_gpu_time);
-  uint64_t wait_frame_count = frame->map_tries > 0 ? 1 : GPU_WAIT_FRAME_COUNT;
+  uint64_t wait_frame_count = GPU_WAIT_FRAME_COUNT;
   uint64_t wait_from_gpu_duration_ms = REFERENCE_TIME_TO_MS(wait_frame_count * frame->frame_length);
+
 
   if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
     return -1; // consume from the queue instead of taking new frames
@@ -527,8 +532,8 @@ int64_t CPushPinDesktop::GetNewFrameWaitTime() {
         age,
         wait_time_ms);
   return wait_time_ms;
+#endif
 }
-
 
 DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
   if (dxgi_frame_queue_.size() == 0) {
@@ -536,9 +541,22 @@ DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
   }
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
-
   uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_to_gpu_time);
-  uint64_t wait_frame_count = frame->map_tries > 0 ? 1 : GPU_WAIT_FRAME_COUNT;
+
+#ifdef WAIT_BY_QUEUE_SIZE
+  if (dxgi_frame_queue_.size() >= GPU_WAIT_FRAME_COUNT) {
+    dxgi_frame_queue_.pop_front();
+
+    debug("POPPED texture from gpu queue. nr: %llu dxgi_handle: %llu new_queue_size: %d age: %lld", 
+        frame->nr,
+        frame->dxgi_handle,
+        dxgi_frame_queue_.size(),
+        age);
+    return frame;
+  }
+
+#else
+  uint64_t wait_frame_count = GPU_WAIT_FRAME_COUNT;
   uint64_t wait_from_gpu_duration_ms = REFERENCE_TIME_TO_MS(wait_frame_count * frame->frame_length);
 
   if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
@@ -552,6 +570,7 @@ DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
 
     return frame;
   }
+#endif
 
   return NULL;
 }
@@ -602,21 +621,10 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
   HRESULT hr;
 
   // note: Unmap happens after we deliver the buffer, in UnrefDxgiFrame
-#ifdef WAIT_FOR_GPU_MAP
   hr = d3d_context_->Map(frame->texture.Get(), 0,
-      D3D11_MAP_READ,  //D3D11_MAP_READ
+      D3D11_MAP_READ,
       0,
       &cpu_mem);
-#else 
-  int64_t max_wait_time = REFERENCE_TIME_TO_MS(frame->frame_length);
-  do {
-    hr = d3d_context_->Map(frame->texture.Get(), 0, 
-        D3D11_MAP_READ,
-        D3D11_MAP_FLAG_DO_NOT_WAIT,
-        &cpu_mem);
-  } while (hr == DXGI_ERROR_WAS_STILL_DRAWING && 
-           GetCounterSinceStartMillisRounded(now) < max_wait_time);
-#endif
 
   last_map_took_time_ms_ = GetCounterSinceStartMillisRounded(now);
 
@@ -633,6 +641,16 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
   frame->mapped_into_cpu = true;
 
   ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
+
+#if _DEBUG
+  static BYTE* lf_data = new BYTE[1280 * 720 * 4];
+  if (memcmp(lf_data, cpu_mem.pData, cpu_mem.DepthPitch) == 0) {
+    frame_duplicated_cnt_++;
+    debug("DUPLICATE frame. nr: %llu dxgi_handle: %llu map_time: %lu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
+  }
+  memcpy(lf_data, cpu_mem.pData, cpu_mem.DepthPitch);
+#endif
+
   return S_OK;
 }
 
@@ -772,10 +790,10 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
   if (first_buffer) {
     debug("now: %lld", now);
 
-    uint64_t latency_ns = frame->duration * GPU_WAIT_FRAME_COUNT + frame->latency;
+    uint64_t delay_frame_count = GPU_WAIT_FRAME_COUNT;
+    uint64_t latency_ns = frame->duration * delay_frame_count + frame->latency;
     info("calculated gst_latency: %llu + gpu_latency: %d * %d = latency_ms: %d",
-      NS2MS(frame->latency), GPU_WAIT_FRAME_COUNT, NS2MS(frame->duration), NS2MS(latency_ns));
-    latency_ns = 7 + frame->latency;
+      NS2MS(frame->latency), delay_frame_count, NS2MS(frame->duration), NS2MS(latency_ns));
 
     // TODO take start delta/behind into account
     // we prefer dts because it is monotonic
@@ -931,7 +949,6 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
   }
 
   dxgi_frame->mapped_into_cpu = false;
-  dxgi_frame->map_tries = 0;
 
   if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
     error("didn't get lock");
@@ -959,7 +976,6 @@ DxgiFrame::DxgiFrame()
   : dxgi_handle(NULL), nr(0), index(0), 
     discontinuity(false),
     mapped_into_cpu(false),
-    map_tries(0L),
     start_time(0L),
     end_time(0L),
     sent_to_gpu_time(0L) {
