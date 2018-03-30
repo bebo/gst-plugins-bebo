@@ -369,7 +369,6 @@ _flush_gl (GstGLContext * context, GstShmSink * sink)
   gl->Flush();
 }
 
-static bool latency_bool = TRUE;
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
@@ -396,12 +395,9 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     /* The time according to the current clock */
     GstClockTime base_time = GST_ELEMENT_CAST (bsink)->base_time;
     running_time = gst_clock_get_time(clock) - base_time;
-    latency = running_time - buf->pts;
-    if (latency_bool) {
-      self->latency = latency;
-      latency_bool = FALSE;
-      GST_INFO("Measured plugin latency to %d", self->latency / 1000000);
-    }
+    self->latency = running_time - buf->pts;
+
+    GST_LOG("Measured plugin latency to %d", self->latency / 1000000);
     gst_object_unref (clock);
     clock = NULL;
   }
