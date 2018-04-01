@@ -31,8 +31,6 @@
 #include <gst/base/gstbasesink.h>
 #include "gstdxgimemory.h"
 
-//#include "shmpipe.h"
-
 G_BEGIN_DECLS
 #define GST_TYPE_SHM_SINK \
   (gst_shm_sink_get_type())

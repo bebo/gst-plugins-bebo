@@ -184,59 +184,11 @@ HRESULT CPushPinDesktop::CheckMediaType(const CMediaType *pMediaType)
     return E_INVALIDARG; // usually never this...
   }
 
-#if 0
-  // graphedit comes in with a really large one and then we set it (no good)
-  if (pvi->bmiHeader.biHeight > m_iCaptureConfigHeight || pvi->bmiHeader.biWidth > m_iCaptureConfigWidth) {
-    warn("CheckMediaType - E_INVALIDARG %d > %d || %d > %d",
-        pvi->bmiHeader.biHeight, m_iCaptureConfigHeight,
-        pvi->bmiHeader.biWidth, m_iCaptureConfigWidth);
-    return E_INVALIDARG;
-  }
-#endif
 
-#if 0
-  if ((SubType2 != MEDIASUBTYPE_RGB8) // these are all the same value? But maybe the pointers are different. Hmm.
-      && (SubType2 != MEDIASUBTYPE_RGB565)
-      && (SubType2 != MEDIASUBTYPE_RGB555)
-      && (SubType2 != MEDIASUBTYPE_RGB24)
-      && (SubType2 != MEDIASUBTYPE_RGB32)) {
-
-    if (SubType2 == WMMEDIASUBTYPE_I420) { // 30323449-0000-0010-8000-00AA00389B71 MEDIASUBTYPE_I420 == WMMEDIASUBTYPE_I420
-      return E_INVALIDARG;
-      if (pvi->bmiHeader.biBitCount == 12) { // biCompression 808596553 == 0x30323449
-        // 12 is correct for i420 -- WFMLE uses this, VLC *can* also use it, too
-      }
-      else {
-        warn("CheckMediaType - E_INVALIDARG invalid bit count: %d", pvi->bmiHeader.biBitCount);
-        return E_INVALIDARG;
-      }
-    } else {
-      if (SubType2 != MEDIASUBTYPE_YUY2 && SubType2 != MEDIASUBTYPE_UYVY) {
-        OLECHAR* bstrGuid;
-        StringFromCLSID(SubType2, &bstrGuid);
-        // note: Chrome always asks for YUV2 and UYVY, we only support I420
-        // 32595559-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_YUY2, which is apparently "identical format" to I420
-        // 59565955-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_UYVY
-        warn("CheckMediaType - E_INVALIDARG - Invalid SubType2: %S", bstrGuid);
-        ::CoTaskMemFree(bstrGuid);
-      }
-      // sometimes FLME asks for YV12 {32315659-0000-0010-8000-00AA00389B71}, or  
-      // 43594448-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_HDYC
-      // 56555949-0000-0010-8000-00AA00389B71  MEDIASUBTYPE_IYUV # dunno if I actually get this one
-      return E_INVALIDARG;
-    }
-  } else {
-    // RGB's -- our default -- WFMLE doesn't get here, VLC does :P
-    if (SubType2 != MEDIASUBTYPE_RGB32) {
-      return E_INVALIDARG;
-    }
-  }
-#else 
   if (SubType2 != MEDIASUBTYPE_RGB32 && 
       SubType2 != MEDIASUBTYPE_ARGB32) {
     return E_INVALIDARG;
   }
-#endif
 
   if (m_bFormatAlreadySet) {
     // then it must be the same as our current...see SetFormat msdn
@@ -472,15 +424,15 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
   int fps_n = (int)fps / UNITS;
 
   pvscc->VideoStandard = AnalogVideo_None;
-  pvscc->InputSize.cx = width; // getCaptureDesiredFinalWidth();
-  pvscc->InputSize.cy = height; //  getCaptureDesiredFinalHeight();
+  pvscc->InputSize.cx = width;
+  pvscc->InputSize.cy = height;
 
   // most of these values are fakes..
-  pvscc->MinCroppingSize.cx = width; //  getCaptureDesiredFinalWidth();
-  pvscc->MinCroppingSize.cy = height; // getCaptureDesiredFinalHeight();
+  pvscc->MinCroppingSize.cx = width; 
+  pvscc->MinCroppingSize.cy = height;
 
-  pvscc->MaxCroppingSize.cx = width; // getCaptureDesiredFinalWidth();
-  pvscc->MaxCroppingSize.cy = height; // getCaptureDesiredFinalHeight();
+  pvscc->MaxCroppingSize.cx = width;
+  pvscc->MaxCroppingSize.cy = height;
 
   pvscc->CropGranularityX = 1;
   pvscc->CropGranularityY = 1;
@@ -489,8 +441,8 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 
   pvscc->MinOutputSize.cx = 1;
   pvscc->MinOutputSize.cy = 1;
-  pvscc->MaxOutputSize.cx = width; // getCaptureDesiredFinalWidth();
-  pvscc->MaxOutputSize.cy = height; // getCaptureDesiredFinalHeight();
+  pvscc->MaxOutputSize.cx = width;
+  pvscc->MaxOutputSize.cy = height;
   pvscc->OutputGranularityX = 1;
   pvscc->OutputGranularityY = 1;
 
@@ -501,9 +453,6 @@ HRESULT STDMETHODCALLTYPE CPushPinDesktop::GetStreamCaps(int iIndex, AM_MEDIA_TY
 
   pvscc->MinFrameInterval = fps; // the larger default is actually the MinFrameInterval, not the max
   pvscc->MaxFrameInterval = 500000000; // 0.02 fps :) [though it could go lower, really...]
-
-  //    pvscc->MinBitsPerSecond = (LONG) 1*1*8*GetFps(); // if in 8 bit mode 1x1. I guess.
-  //   pvscc->MaxBitsPerSecond = (LONG) getCaptureDesiredFinalWidth()*getCaptureDesiredFinalHeight()*32*GetMaxFps() + 44; // + 44 header size? + the palette?
 
   pvscc->MinBitsPerSecond = (LONG)1 * 1 * 8 * fps_n; // if in 8 bit mode 1x1. I guess.
   pvscc->MaxBitsPerSecond = (LONG)width*height * 32 * fps_n + 44; // + 44 header size? + the palette?
@@ -719,8 +668,8 @@ HRESULT CPushPinDesktop::GetMediaType(int iPosition, CMediaType *pmt) // AM_MEDI
 
   // Now adjust some parameters that are the same for all formats
   pvi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  pvi->bmiHeader.biWidth = width; // getCaptureDesiredFinalWidth();
-  pvi->bmiHeader.biHeight = height; // getCaptureDesiredFinalHeight();
+  pvi->bmiHeader.biWidth = width;
+  pvi->bmiHeader.biHeight = height; 
   pvi->bmiHeader.biPlanes = 1;
   pvi->bmiHeader.biSizeImage = GetBitmapSize(&pvi->bmiHeader); // calculates the size for us, after we gave it the width and everything else we already chucked into it
   pvi->bmiHeader.biClrImportant = 0;

@@ -65,7 +65,7 @@ enum
 
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
-#define BUFFER_COUNT 15
+#define BUFFER_COUNT 20
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug

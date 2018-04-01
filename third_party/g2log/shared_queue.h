@@ -70,9 +70,14 @@ public:
     return queue_.empty();
   }
 
-  unsigned size() const{
+  size_t size() const{
     std::lock_guard<std::mutex> lock(m_);
     return queue_.size();
+  }
+
+  T& front() {
+    std::lock_guard<std::mutex> lock(m_);
+    return queue_.front();
   }
 };
 

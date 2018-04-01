@@ -16,6 +16,7 @@
 #include <d3d11.h>
 #include <d3d11_3.h>
 #include <dxgi.h>
+#include <shared_queue.h>
 
 #include "../shared/bebo_shmem.h"
 #include "registry.h"
@@ -123,12 +124,6 @@ class CPushPinDesktop :
     virtual HRESULT InitAllocator(IMemAllocator** ppAllocator) override;
     virtual HRESULT DecideAllocator(IMemInputPin* pPin, IMemAllocator** ppAlloc) override;
 
-    int getCaptureDesiredFinalWidth();
-    int getCaptureDesiredFinalHeight();
-
-    // STDMETHODIMP SuggestAllocatorProperties(const ALLOCATOR_PROPERTIES* pprop) override;
-    // STDMETHODIMP GetAllocatorProperties(ALLOCATOR_PROPERTIES* pprop) override;
-
   public:
     //CSourceStream overrrides
     HRESULT Inactive(void);
@@ -187,20 +182,26 @@ class CPushPinDesktop :
     HRESULT STDMETHODCALLTYPE Get(REFGUID guidPropSet, DWORD dwPropID, void *pInstanceData,DWORD cbInstanceData, void *pPropData, DWORD cbPropData, DWORD *pcbReturned);
     HRESULT STDMETHODCALLTYPE QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD *pTypeSupport);
 
-  private:
-    std::deque<DxgiFrame*> dxgi_frame_queue_;
+    // TODO: Not to use shared_queue for everything, reevaluate if it's needed
+    shared_queue<DxgiFrame*> dxgi_frame_queue_;
+    shared_queue<DxgiFrame*> mapped_frame_queue_;
+    shared_queue<DxgiFrame*> unref_frame_queue_;
     DxgiFramePool* frame_pool_;
+    DWORD get_frame_thread_;
 
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
     HRESULT InitializeDXGI();
 
     D3D11_TEXTURE2D_DESC ConvertToStagingTextureDesc(D3D11_TEXTURE2D_DESC share_desc);
 
-    HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
     HRESULT PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* media_sample);
-    DxgiFrame* GetReadyFrameFromQueue();
+
+    void DoGetFrame();
+    // functions below require to be on the same D3DDeviceContext thread
+    HRESULT CopyTextureToStagingQueue(DxgiFrame* frame);
     int64_t GetNewFrameWaitTime();
-    bool ShouldDropNewFrame();
+    bool MapStagingTexture();
+    void CleanupUnrefFrame();
 
 };
 
@@ -209,13 +210,13 @@ class DxgiFrame {
     HANDLE dxgi_handle;
     uint64_t nr;
     uint64_t index;
-    uint64_t sent_to_gpu_time;
     bool discontinuity;
     bool mapped_into_cpu;
     REFERENCE_TIME frame_length;
     REFERENCE_TIME start_time;
     REFERENCE_TIME end_time;
     ComPtr<ID3D11Texture2D> texture;
+    D3D11_MAPPED_SUBRESOURCE mapped_data;
 
     DxgiFrame();
     ~DxgiFrame();
@@ -224,6 +225,7 @@ class DxgiFrame {
         bool discontinuity);
 };
 
+// thread-safe
 class DxgiFramePool {
   public:
     DxgiFramePool(int size);
@@ -231,10 +233,12 @@ class DxgiFramePool {
 
     DxgiFrame* GetFrame();
     void ReturnFrame(DxgiFrame* frame);
+
   private:
     std::list<DxgiFrame*> pool_;
     int max_size_;
     int created_size_;
+    mutable std::mutex m_;
 };
 
 #endif
