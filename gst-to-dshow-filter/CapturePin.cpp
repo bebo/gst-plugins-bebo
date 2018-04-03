@@ -16,7 +16,6 @@
 #define GPU_WAIT_FRAME_COUNT              3
 #define GPU_QUEUE_MAX_FRAME_COUNT         10
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
-#define WAIT_BY_QUEUE_SIZE
 
 #ifdef _DEBUG 
 int show_performance = 1;
