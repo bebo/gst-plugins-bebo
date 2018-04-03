@@ -36,7 +36,9 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
     m_pParent(pFilter),
-    frame_pool_(NULL)
+    frame_pool_(NULL), 
+    last_frame_nr_(0),
+    last_start_time_(0)
 {
   info("CPushPinDesktop");
 

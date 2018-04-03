@@ -362,13 +362,6 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
   return TRUE;
 }
 
-static void
-_flush_gl (GstGLContext * context, GstShmSink * sink)
-{
-  const GstGLFuncs *gl = context->gl_vtable;
-  gl->Flush();
-}
-
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
@@ -382,7 +375,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   }
   GST_OBJECT_LOCK (self);
 
-  /* GST_OBJECT_LOCK (self); */
   GstClock *clock = GST_ELEMENT_CLOCK (self);
   if (clock != NULL) {
     gst_object_ref (clock);
@@ -401,6 +393,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     gst_object_unref (clock);
     clock = NULL;
   }
+
   // we get bombarded with "old" frames at the beginning - drop them for now
   if (self->first_render_time == 0) {
     self->first_render_time  = running_time;
@@ -437,9 +430,8 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   if (frame->_gst_buf_ref != NULL) {
     if (frame->ref_cnt > 0) {
       GST_DEBUG_OBJECT(self,
-          "buffer is still being referenced, dropping incoming frame. nr: %llu index: %d dxgi_handle: %llu ref_cnt: %d",
+          "buffer is still being referenced, dropping incoming frame. nr: %llu dxgi_handle: %llu ref_cnt: %d",
           frame->nr,
-          index,
           frame->dxgi_handle,
           frame->ref_cnt);
 
@@ -455,6 +447,17 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       return GST_FLOW_OK;
     }
 
+    GST_DEBUG_OBJECT(self, "UNREF(1) nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d buf: %p latency: %d",
+        frame->nr,
+        frame->dxgi_handle,
+        //frame->dts / 1000000,
+        frame->pts / 1000000,
+        frame_offset,
+        frame->size,
+        buf,
+        frame->latency / 1000000
+        ); 
+
     gst_buffer_unref(frame->_gst_buf_ref);
     frame->ref_cnt = 0;
     frame->_gst_buf_ref = NULL;
@@ -467,9 +470,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
         "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
   }
-
-  gst_gl_context_thread_add(self->context, 
-      (GstGLContextThreadFunc) _flush_gl, self);
 
   GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
 
@@ -485,12 +485,12 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   frame->ref_cnt = 1;
   gst_buffer_ref (buf);
 
-  GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu pts: %lld i: %d frame_offset: %d size: %d buf: %p latency: %d",
+  GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu tex_id: %#010x pts: %" GST_TIME_FORMAT " frame_offset: %d size: %d buf: %p latency: %d",
       frame->nr,
       frame->dxgi_handle,
+      gl_dxgi_mem->mem.tex_id,
       //frame->dts / 1000000,
-      frame->pts / 1000000,
-      index,
+      GST_TIME_ARGS(frame->pts),
       frame_offset,
       frame->size,
       buf,
@@ -499,10 +499,21 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
   // unref buffers that are not being referenced anymore.
   // do we need to do it here?
-  for (int i=0 ; i < self->shmem->count ; i++) {
+  for (int i = 0; i < self->shmem->count; i++) {
     uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
     struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
     if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
+      GST_DEBUG_OBJECT(self, "UNREF nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d buf: %p latency: %d",
+          frame->nr,
+          frame->dxgi_handle,
+          //frame->dts / 1000000,
+          frame->pts / 1000000,
+          frame_offset,
+          frame->size,
+          buf,
+          frame->latency / 1000000
+          ); 
+
       gst_buffer_unref(frame->_gst_buf_ref);
       memset(frame, 0, sizeof(struct frame));
     }
