@@ -14,8 +14,8 @@
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
-#define GPU_WAIT_FRAME_COUNT              3
-#define BUFFERED_FRAME_COUNT              8
+#define GPU_WAIT_FRAME_COUNT              1
+#define BUFFERED_FRAME_COUNT              1
 
 #ifdef _DEBUG 
 int show_performance = 1;
@@ -35,7 +35,9 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
     m_pParent(pFilter),
-    frame_pool_(NULL)
+    frame_pool_(NULL), 
+    last_frame_nr_(0),
+    last_start_time_(0)
 {
   info("CPushPinDesktop");
 
@@ -597,6 +599,16 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
     debug("DUPLICATE frame. nr: %llu dxgi_handle: %llu map_time: %lu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
   }
   memcpy(lf_data, frame->mapped_data.pData, frame->mapped_data.DepthPitch);
+
+  if (last_frame_nr_ >= frame->nr) {
+    error("OUTOFORDER frame number. last_frame_nr %llu nr %llu dxgi_handle %llu", last_frame_nr_.load(), frame->nr, frame->dxgi_handle);
+  }
+  last_frame_nr_ = frame->nr;
+
+  if (last_start_time_ >= frame->start_time) {
+    error("OUTOFORDERTIME frame. last_frame_nr %llu nr %llu dxgi_handle %llu last_start_time %lld start_time %lld", last_frame_nr_.load(), frame->nr, frame->dxgi_handle, last_start_time_.load(), frame->start_time);
+  }
+  last_start_time_ = frame->start_time;
 #endif
 
   return S_OK;

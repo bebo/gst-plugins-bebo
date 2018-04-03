@@ -8,6 +8,7 @@
 #ifndef CAPTURE_H
 #define CAPTURE_H
 
+#include <atomic>
 #include <queue>
 #include <list>
 #include <windows.h>
@@ -186,6 +187,8 @@ class CPushPinDesktop :
     shared_queue<DxgiFrame*> dxgi_frame_queue_;
     shared_queue<DxgiFrame*> mapped_frame_queue_;
     shared_queue<DxgiFrame*> unref_frame_queue_;
+    std::atomic<uint64_t> last_frame_nr_;
+    std::atomic<REFERENCE_TIME> last_start_time_;
     DxgiFramePool* frame_pool_;
     DWORD get_frame_thread_;
 
