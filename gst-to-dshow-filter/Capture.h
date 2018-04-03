@@ -8,6 +8,7 @@
 #ifndef CAPTURE_H
 #define CAPTURE_H
 
+#include <atomic>
 #include <queue>
 #include <list>
 #include <windows.h>
