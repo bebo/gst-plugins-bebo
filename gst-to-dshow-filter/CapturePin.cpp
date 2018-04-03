@@ -14,8 +14,8 @@
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
-#define GPU_WAIT_FRAME_COUNT              1
-#define BUFFERED_FRAME_COUNT              1
+#define GPU_WAIT_FRAME_COUNT              2
+#define BUFFERED_FRAME_COUNT              3
 
 #ifdef _DEBUG 
 int show_performance = 1;
