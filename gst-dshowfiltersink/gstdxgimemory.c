@@ -152,18 +152,13 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
   }
 
   gl->BindTexture (target, tex_id);
-  if (target == GL_TEXTURE_2D || target == GL_TEXTURE_RECTANGLE) {
-    /* gl->TexImage2D (target, 0, internal_format, width, height, 0, format, type, */
-    /*     NULL); */
-  }
-
   gl->TexParameteri (target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   gl->TexParameteri (target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   gl->TexParameteri (target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   gl->TexParameteri (target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
   gl->BindTexture (target, 0);
-  GST_DEBUG("new dxgi texture texture_id %#010x interop_id: %#010x dxgi_handle: %p %dx%d",
+
+  GST_DEBUG("new dxgi texture texture_id %#010x interop_id: %#010x dxgi_handle: %llu %dx%d",
     tex_id,
     *interop_handle,
     *dxgi_handle,
@@ -276,7 +271,7 @@ gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
     const GstGLFuncs *gl = context->gl_vtable;
 
-    gl->Flush();
+    gl->Finish();
 
     BOOL result = share_context->wglDXUnlockObjectsNV(share_context->device_interop_handle,
                                         1,
