@@ -496,6 +496,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   media_sample->SetSyncPoint(TRUE);
   media_sample->SetDiscontinuity(out_frame->discontinuity);
   media_sample->SetTime(&out_frame->start_time, &out_frame->end_time);
+  info("SetTime %lld %lld", out_frame->start_time, out_frame->end_time);
 
   return S_OK;
 }
@@ -687,7 +688,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
 
   // FIXME handle all error cases
   while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
-    DWORD result = SignalObjectAndWait(shmem_mutex_,
+    result = SignalObjectAndWait(shmem_mutex_,
         shmem_new_data_semaphore_,
         wait_time_ms,
         false);
@@ -745,11 +746,11 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
 
   CRefTime now;
   CSourceStream::m_pFilter->StreamTime(now);
-  now = max(0, now); // can be negative before it started and negative will mess us up
+  now = max(10, now); // can be negative before it started and negative will mess us up
   int64_t now_in_ns = now * 100;
 
   if (first_buffer) {
-    debug("now: %lld", now);
+
 
     uint64_t delay_frame_count = GPU_WAIT_FRAME_COUNT;
     uint64_t latency_ns = frame->duration * delay_frame_count + frame->latency;
@@ -766,7 +767,7 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
     }
     if (frame->pts != GST_CLOCK_TIME_NONE) {
       int64_t pts = frame->pts;
-      time_offset_pts_ns_ = frame->pts - now_in_ns + latency_ns;
+      time_offset_pts_ns_ = pts - now_in_ns + latency_ns;
       if (time_offset_type_ == TIME_OFFSET_NONE) {
         time_offset_type_ = TIME_OFFSET_PTS;
         warn("using PTS as reference delta in ns: %lld", time_offset_pts_ns_);
@@ -775,13 +776,13 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
       }
     }
   }
-  REFERENCE_TIME start_frame;
-  REFERENCE_TIME end_frame; 
+  REFERENCE_TIME start_frame = 0;
+  REFERENCE_TIME end_frame = 0; 
   bool discontinuity;
   bool have_time = false;
   if (time_offset_type_ == TIME_OFFSET_DTS) {
     if (frame->dts != GST_CLOCK_TIME_NONE) {
-      int64_t dts = frame->pts;
+      int64_t dts = frame->dts;
       start_frame = NS_TO_REFERENCE_TIME(dts - time_offset_dts_ns_);
       have_time = true;
     } else {
@@ -813,14 +814,29 @@ HRESULT CPushPinDesktop::GetAndWaitForShmemFrame(DxgiFrame** out_dxgi_frame, DWO
     start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns);
   }
 
-  if (last_frame_ != 0 && last_frame_ >= start_frame) {
+  if (first_buffer) {
+    start_frame = now;
+    duration_ns = (duration_ns * 95) / 100;
+    synchronizing_time_ = true;
+  } else if (synchronizing_time_) {
+
+    if (last_frame_ >= start_frame) {
+      REFERENCE_TIME proposed = start_frame;
+      duration_ns = (duration_ns * 95) / 100;
+      start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns);
+      info("syncing stream by %lld ms current: delta %lld start_frame: %lld",
+        NS2MS(duration_ns),
+        REFERENCE_TIME_TO_MS(start_frame - proposed),
+        REFERENCE_TIME_TO_MS(start_frame));
+    } else {
+      synchronizing_time_ = false;
+    }
+  } else if (last_frame_ >= start_frame) {
     warn("timestamp not monotonic now %lld nr: %llu last: %lld new: %lld",
       NS2MS(now_in_ns), frame->nr, REFERENCE_TIME_TO_MS(last_frame_), REFERENCE_TIME_TO_MS(start_frame));
     // fake it
     start_frame = last_frame_ + NS_TO_REFERENCE_TIME(duration_ns) / 2;
   }
-  debug("timestamp log now %lld nr: %llu last: %lld new: %lld",
-    NS2MS(now_in_ns), frame->nr, REFERENCE_TIME_TO_MS(last_frame_), REFERENCE_TIME_TO_MS(start_frame));
 
   end_frame = start_frame + NS_TO_REFERENCE_TIME(duration_ns);
   last_frame_ = start_frame;
