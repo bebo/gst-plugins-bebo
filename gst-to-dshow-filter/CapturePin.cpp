@@ -13,7 +13,7 @@
 #define NS_TO_REFERENCE_TIME(t)           (t)/100
 #define NS2MS(t)                          (t)/1000000
 #define REFERENCE_TIME_TO_MS(t)           (t)/10000
-#define GPU_WAIT_FRAME_COUNT              3
+#define GPU_WAIT_FRAME_COUNT              2
 #define GPU_QUEUE_MAX_FRAME_COUNT         10
 #define DEFAULT_WAIT_NEW_FRAME_TIME       200
 
@@ -35,9 +35,7 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
     m_pParent(pFilter),
-    frame_pool_(NULL), 
-    last_frame_nr_(0),
-    last_start_time_(0)
+    frame_pool_(NULL)
 {
   info("CPushPinDesktop");
 
@@ -513,27 +511,7 @@ int64_t CPushPinDesktop::GetNewFrameWaitTime() {
 
   DxgiFrame* frame = dxgi_frame_queue_.front();
 
-#ifdef WAIT_BY_QUEUE_SIZE
   return REFERENCE_TIME_TO_MS(frame->frame_length);
-#else
-  uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_to_gpu_time);
-  uint64_t wait_frame_count = GPU_WAIT_FRAME_COUNT;
-  uint64_t wait_from_gpu_duration_ms = REFERENCE_TIME_TO_MS(wait_frame_count * frame->frame_length);
-
-
-  if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
-    return -1; // consume from the queue instead of taking new frames
-  }
-
-  int64_t wait_time_ms = max(0, wait_from_gpu_duration_ms - age);
-  debug("WAITED for front texture to be old enough. nr: %llu dxgi_handle: %llu new_queue_size: %d age: %lld wait_time_ms: %lld", 
-        frame->nr,
-        frame->dxgi_handle,
-        dxgi_frame_queue_.size(),
-        age,
-        wait_time_ms);
-  return wait_time_ms;
-#endif
 }
 
 DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
@@ -544,7 +522,6 @@ DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
   DxgiFrame* frame = dxgi_frame_queue_.front();
   uint64_t age = GetCounterSinceStartMillisRounded(frame->sent_to_gpu_time);
 
-#ifdef WAIT_BY_QUEUE_SIZE
   if (dxgi_frame_queue_.size() >= GPU_WAIT_FRAME_COUNT) {
     dxgi_frame_queue_.pop_front();
 
@@ -555,23 +532,6 @@ DxgiFrame* CPushPinDesktop::GetReadyFrameFromQueue() {
         age);
     return frame;
   }
-
-#else
-  uint64_t wait_frame_count = GPU_WAIT_FRAME_COUNT;
-  uint64_t wait_from_gpu_duration_ms = REFERENCE_TIME_TO_MS(wait_frame_count * frame->frame_length);
-
-  if (age >= wait_from_gpu_duration_ms) { // the frame is old enough
-    dxgi_frame_queue_.pop_front();
-
-    debug("POPPED texture from gpu queue. nr: %llu dxgi_handle: %llu new_queue_size: %d age: %lld", 
-        frame->nr,
-        frame->dxgi_handle,
-        dxgi_frame_queue_.size(),
-        age);
-
-    return frame;
-  }
-#endif
 
   return NULL;
 }
