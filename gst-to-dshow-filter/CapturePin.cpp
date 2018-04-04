@@ -53,6 +53,9 @@ CPushPinDesktop::~CPushPinDesktop()
   if (frame_pool_) {
     delete frame_pool_;
   }
+  if (last_frame_pixels_ == 0) {
+    delete[] last_frame_pixels_;
+  }
   // FIXME release resources...
 }
 
@@ -496,8 +499,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
   media_sample->SetSyncPoint(TRUE);
   media_sample->SetDiscontinuity(out_frame->discontinuity);
   media_sample->SetTime(&out_frame->start_time, &out_frame->end_time);
-  info("SetTime %lld %lld", out_frame->start_time, out_frame->end_time);
-
+  debug("SetTime %lld %lld", out_frame->start_time, out_frame->end_time);
   return S_OK;
 }
 
@@ -605,12 +607,16 @@ HRESULT CPushPinDesktop::PushFrameToMediaSample(DxgiFrame* frame, IMediaSample* 
   ((CMediaSample*)media_sample)->SetPointer((BYTE*)cpu_mem.pData, cpu_mem.DepthPitch);
 
 #if _DEBUG
-  static BYTE* lf_data = new BYTE[1280 * 720 * 4];
-  if (memcmp(lf_data, cpu_mem.pData, cpu_mem.DepthPitch) == 0) {
+  if (last_frame_pixels_ == 0) {
+    last_frame_pixels_ = new BYTE[cpu_mem.DepthPitch];
+  }
+
+  if (memcmp(last_frame_pixels_, cpu_mem.pData, cpu_mem.DepthPitch) == 0) {
     frame_duplicated_cnt_++;
     debug("DUPLICATE frame. nr: %llu dxgi_handle: %llu map_time: %lu", frame->nr, frame->dxgi_handle, last_map_took_time_ms_);
   }
-  memcpy(lf_data, cpu_mem.pData, cpu_mem.DepthPitch);
+
+  memcpy(last_frame_pixels_, cpu_mem.pData, cpu_mem.DepthPitch);
 #endif
 
   return S_OK;
