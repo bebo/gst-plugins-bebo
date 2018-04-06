@@ -8,13 +8,17 @@
 #include <dvdmedia.h>
 #include <wmsdkidl.h>
 
-const int PIN_RESOLUTION_SIZE = 12;
+const int PIN_RESOLUTION_SIZE = 15;
 const int PIN_FPS_SIZE = 1;
-const int PIN_WIDTH[PIN_RESOLUTION_SIZE] = { 640, 854, 1120, // 4:3, 16:9, 21:9
+const int PIN_WIDTH[PIN_RESOLUTION_SIZE] = {
+  640, 854, 1120, // 4:3, 16:9, 21:9
+  720, 960, 1260,
   960, 1280, 1680,
   1200, 1600, 2100,
   1440, 1920, 2560 };
-const int PIN_HEIGHT[PIN_RESOLUTION_SIZE] = { 480, 480, 480,
+const int PIN_HEIGHT[PIN_RESOLUTION_SIZE] = {
+  480, 480, 480,
+  540, 540, 540,
   720, 720, 720,
   900, 900, 900,
   1080, 1080, 1080 };
