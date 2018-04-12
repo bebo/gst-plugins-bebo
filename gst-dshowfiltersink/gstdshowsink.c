@@ -172,10 +172,37 @@ initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps
 }
 
 static void
+clean_shmem_frame_with_max_ref_count(GstShmSink * self, int max_ref_cnt)
+{
+  // Caller expected to be responsible of holding locks!
+  for (int i = 0; i < self->shmem->count; i++) {
+    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
+    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
+    if (frame->_gst_buf_ref != NULL && frame->ref_cnt <= max_ref_cnt) {
+      GST_DEBUG_OBJECT(self,
+          "UNREF STOP nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d latency: %d refcnt: %lu",
+          frame->nr,
+          frame->dxgi_handle,
+          frame->pts / 1000000,
+          frame_offset,
+          frame->size,
+          frame->latency / 1000000,
+          frame->ref_cnt
+          ); 
+
+      gst_buffer_unref(frame->_gst_buf_ref);
+      memset(frame, 0, sizeof(struct frame));
+    }
+  };
+}
+
+static void
 gst_shm_sink_init (GstShmSink * self)
 {
   self->first_render_time = 0;
   self->latency = -1;
+  self->pool = NULL;
+  self->shmem_init = FALSE;
 
   g_cond_init (&self->cond);
   //self->size = DEFAULT_SIZE;
@@ -342,13 +369,25 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 {
   GstShmSink *self = GST_SHM_SINK (bsink);
 
+  GST_DEBUG_OBJECT (self, "Stopping");
+
   self->stop = TRUE;
+
+  GST_OBJECT_LOCK (self);
+  if (self->shmem_mutex) {
+    WaitForSingleObject(self->shmem_mutex, INFINITE);
+    clean_shmem_frame_with_max_ref_count(self, 1);
+    ReleaseMutex(self->shmem_mutex);
+  }
+  GST_OBJECT_UNLOCK (self);
+
+  if (self->pool)
+    gst_object_unref (self->pool);
+  self->pool = NULL;
 
   if (self->allocator)
     gst_object_unref (self->allocator);
   self->allocator = NULL;
-
-  GST_DEBUG_OBJECT (self, "Stopping");
 
   return TRUE;
 }
@@ -498,26 +537,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       ); 
 
   // unref buffers that are not being referenced anymore.
-  // do we need to do it here?
-  for (int i = 0; i < self->shmem->count; i++) {
-    uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
-    struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
-    if (frame->_gst_buf_ref != NULL && frame->ref_cnt == 0) {
-      GST_DEBUG_OBJECT(self, "UNREF nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d buf: %p latency: %d",
-          frame->nr,
-          frame->dxgi_handle,
-          //frame->dts / 1000000,
-          frame->pts / 1000000,
-          frame_offset,
-          frame->size,
-          buf,
-          frame->latency / 1000000
-          ); 
-
-      gst_buffer_unref(frame->_gst_buf_ref);
-      memset(frame, 0, sizeof(struct frame));
-    }
-  };
+  clean_shmem_frame_with_max_ref_count(self, 0);
 
   ReleaseMutex(self->shmem_mutex);
   GST_OBJECT_UNLOCK (self);
@@ -715,9 +735,6 @@ context_error:
   }
 }
 
-static GstBufferPool *pool = NULL;
-static bool shmem_init = false;
-
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
@@ -749,7 +766,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 
   guint vi_size = info.size;
 
-  if (!shmem_init) {
+  if (!self->shmem_init) {
     //FIXME This should live somewhere else.
     GST_INFO("Initializating shared mem info to %d x %d at %llu fps",
         GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
@@ -759,46 +776,46 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
         GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
         GST_VIDEO_INFO_FPS_N(&info));
 
-    shmem_init = true;
+    self->shmem_init = true;
   }
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;
   }
 
-  if (pool) {
+  if (self->pool) {
     GstStructure *cur_pool_config;
-    cur_pool_config = gst_buffer_pool_get_config(pool);
+    cur_pool_config = gst_buffer_pool_get_config(self->pool);
     guint size;
     gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
     GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
     if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, pool, vi_size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, 0);
       return true;
     } else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
         size, vi_size);
-      gst_object_unref(pool);
+      gst_object_unref(self->pool);
     }
   }
 
   GST_DEBUG("Make a new buffer pool.");
-  pool = gst_gl_buffer_pool_new(self->context);
+  self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
-  config = gst_buffer_pool_get_config (pool);
+  config = gst_buffer_pool_get_config (self->pool);
   gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
 
-  if (!gst_buffer_pool_set_config (pool, config)) {
-    gst_object_unref (pool);
+  if (!gst_buffer_pool_set_config (self->pool, config)) {
+    gst_object_unref (self->pool);
     goto config_failed;
   }
 
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, pool, vi_size, BUFFER_COUNT, 0);
-  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", pool);
+  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, 0);
+  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
 
   return true;
 
