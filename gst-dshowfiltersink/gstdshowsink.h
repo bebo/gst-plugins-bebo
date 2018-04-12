@@ -67,6 +67,9 @@ struct _GstShmSink
 
   GCond cond;
 
+  GstBufferPool *pool;
+  gboolean shmem_init;
+
   GstGLDXGIMemoryAllocator *allocator;
   GstAllocationParams params;
   gint64 latency;
