@@ -271,7 +271,7 @@ gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
     const GstGLFuncs *gl = context->gl_vtable;
 
-    gl->Finish();
+    // gl->Finish();
 
     BOOL result = share_context->wglDXUnlockObjectsNV(share_context->device_interop_handle,
                                         1,
