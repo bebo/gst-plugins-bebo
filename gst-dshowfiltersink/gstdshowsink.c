@@ -67,6 +67,10 @@ enum
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
 #define BUFFER_COUNT 10
 
+// frame count, if the dshow side doesn't consume it in 10 frames time,
+// we're going to unref it.
+#define FRAME_UNREF_THRESHOLD 10 
+
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
 
@@ -476,12 +480,27 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
       self->shmem->write_ptr--;
 
+      static int last_frame_nr = 0;
+      static int same_frame_counter = 0;
+
+      if (last_frame_nr == frame->nr) {
+        same_frame_counter++;
+      } else {
+        same_frame_counter = 0;
+      }
+
+      last_frame_nr = frame->nr;
+
+      if (last_frame_nr > FRAME_UNREF_THRESHOLD) {
+        gst_buffer_unref(frame->_gst_buf_ref);
+        frame->ref_cnt = 0;
+        frame->_gst_buf_ref = NULL;
+      }
+
       ReleaseMutex(self->shmem_mutex);
       GST_OBJECT_UNLOCK(self);
-
       // we shouldn't notify the other side that we dropped a frame?
       // ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
-
       // TODO: ADD DROPPED FRAMES STATS
       return GST_FLOW_OK;
     }
