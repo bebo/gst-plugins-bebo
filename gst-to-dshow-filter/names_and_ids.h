@@ -22,4 +22,4 @@ DEFINE_GUID(CLSID_PushSourceDesktop, 0xf55fa525, 0x30f4, 0x45cb, \
 // Filter name strings
 #define DS_FILTER_DESCRIPTION    L"Bebo GStreamer to Direct Show Filter"
 #define DS_FILTER_NAME           L"bebo-gst-to-dshow"
-#define DS_LOG_NAME              "bantha"
+#define DS_LOG_NAME              "gst-to-dshow"
