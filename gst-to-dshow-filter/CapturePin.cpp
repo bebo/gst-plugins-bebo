@@ -638,7 +638,6 @@ HRESULT CPushPinDesktop::OpenShmMem()
 
   shmem_handle_ = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
   if (!shmem_handle_) {
-    error("could not create mapping %d", GetLastError());
     return -1;
   }
 
