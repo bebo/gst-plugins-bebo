@@ -192,10 +192,12 @@ class CPushPinDesktop :
 
   private:
     std::deque<DxgiFrame*> dxgi_frame_queue_;
-    DxgiFramePool* frame_pool_;
+    DxgiFramePool* frame_pool_ = NULL;
+    bool dxgi_initialized_ = false;
+
 
     HRESULT CreateDeviceD3D11(IDXGIAdapter *adapter);
-    HRESULT InitializeDXGI();
+    HRESULT InitializeDXGI(DxgiFrame* dxgi_frame);
 
     D3D11_TEXTURE2D_DESC ConvertToStagingTextureDesc(D3D11_TEXTURE2D_DESC share_desc);
 
@@ -204,7 +206,6 @@ class CPushPinDesktop :
     DxgiFrame* GetReadyFrameFromQueue();
     int64_t GetNewFrameWaitTime();
     bool ShouldDropNewFrame();
-
 };
 
 class DxgiFrame {

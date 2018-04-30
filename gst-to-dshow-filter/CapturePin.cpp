@@ -34,8 +34,7 @@ const static D3D_FEATURE_LEVEL kD3DFeatureLevels[] =
 // the default child constructor...
 CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
   : CSourceStream(NAME("Push Source CPushPinDesktop child/pin"), phr, pFilter, L"Capture"),
-    m_pParent(pFilter),
-    frame_pool_(NULL)
+  m_pParent(pFilter)
 {
   info("CPushPinDesktop");
 
@@ -43,9 +42,6 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CGameCapture *pFilter)
 
   // now read some custom settings...
   WarmupCounter();
-
-  // TODO: we should do it when we get it from shmem
-  InitializeDXGI();
 }
 
 CPushPinDesktop::~CPushPinDesktop()
@@ -219,7 +215,7 @@ HRESULT CPushPinDesktop::DecideBufferSize(IMemAllocator *pAlloc,
   return NOERROR;
 } // DecideBufferSize
 
-HRESULT CPushPinDesktop::InitializeDXGI() {
+HRESULT CPushPinDesktop::InitializeDXGI(DxgiFrame* dxgi_frame) {
   ComPtr<IDXGIFactory2> dxgi_factory;
   UINT flags = 0;
 
@@ -230,15 +226,12 @@ HRESULT CPushPinDesktop::InitializeDXGI() {
   HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
       (void**)(dxgi_factory.GetAddressOf()));
 
-  // TODO: we need to get the right adapter but, we don't have access to dxgi shared handle atm
-  // cuz it's in dxgi_frame
-#if 0
   LUID luid;
-  dxgiFactory->GetSharedResourceAdapterLuid(dxgi_frame->dxgi_handle, &luid);
+  dxgi_factory->GetSharedResourceAdapterLuid(dxgi_frame->dxgi_handle, &luid);
 
   UINT index = 0;
   IDXGIAdapter* adapter = NULL;
-  while (SUCCEEDED(dxgiFactory->EnumAdapters(index, &adapter)))
+  while (SUCCEEDED(dxgi_factory->EnumAdapters(index, &adapter)))
   {
     DXGI_ADAPTER_DESC desc;
     adapter->GetDesc(&desc);
@@ -249,11 +242,11 @@ HRESULT CPushPinDesktop::InitializeDXGI() {
     adapter->Release();
     index++;
   }
-  adapter->Release();
-#endif
 
   //TODO handle result
-  hr = CreateDeviceD3D11(NULL);
+  hr = CreateDeviceD3D11(adapter);
+  adapter->Release();
+  dxgi_initialized_ = true;
   return hr;
 }
 
@@ -408,6 +401,10 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
         got_frame = false;
         continue;
       }
+    }
+
+    if (!dxgi_initialized_ && got_frame) {
+      InitializeDXGI(dxgi_frame);
     }
 
     if (got_frame && ShouldDropNewFrame()) {
