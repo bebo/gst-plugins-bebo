@@ -404,6 +404,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
     }
 
     if (!dxgi_initialized_ && got_frame) {
+      info("InitializeDXGI");
       InitializeDXGI(dxgi_frame);
     }
 
@@ -437,8 +438,9 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 
       *out_dxgi_frame = dxgi_frame;
     }
-
-    d3d_context_->Flush();
+    if (dxgi_initialized_) {
+      d3d_context_->Flush();
+    }
   }
 
   DxgiFrame* out_frame = *out_dxgi_frame;
