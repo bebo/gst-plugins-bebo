@@ -223,8 +223,8 @@ HRESULT CPushPinDesktop::InitializeDXGI(DxgiFrame* dxgi_frame) {
   flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
-  HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2), 
-      (void**)(dxgi_factory.GetAddressOf()));
+  HRESULT hr = CreateDXGIFactory2(flags, __uuidof(IDXGIFactory2),
+    (void**)(dxgi_factory.GetAddressOf()));
 
   LUID luid;
   dxgi_factory->GetSharedResourceAdapterLuid(dxgi_frame->dxgi_handle, &luid);
@@ -235,15 +235,21 @@ HRESULT CPushPinDesktop::InitializeDXGI(DxgiFrame* dxgi_frame) {
   {
     DXGI_ADAPTER_DESC desc;
     adapter->GetDesc(&desc);
+
+    info("Adapter -- VendorId: %d, DeviceId: %d, Description: %s", desc.VendorId, desc.DeviceId, desc.Description);
     if (desc.AdapterLuid.LowPart == luid.LowPart && desc.AdapterLuid.HighPart == luid.HighPart) {
-      // Identified a matching adapter.
+      info("Adapter Matches Frame -- VendorId: %d, DeviceId: %d, Description: %s", desc.VendorId, desc.DeviceId, desc.Description);
       break;
     }
     adapter->Release();
+    adapter = NULL;
     index++;
   }
 
-  //TODO handle result
+  if (adapter == NULL) {
+    error("Failed to create shared resource adapter");
+    return E_FAIL;
+  }
   hr = CreateDeviceD3D11(adapter);
   adapter->Release();
   dxgi_initialized_ = true;
@@ -405,7 +411,11 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
 
     if (!dxgi_initialized_ && got_frame) {
       info("InitializeDXGI");
-      InitializeDXGI(dxgi_frame);
+      HRESULT h = InitializeDXGI(dxgi_frame);
+      if (h == E_FAIL) {
+        UnrefDxgiFrame(dxgi_frame);
+        continue;
+      }
     }
 
     if (got_frame && ShouldDropNewFrame()) {
