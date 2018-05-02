@@ -414,6 +414,7 @@ HRESULT CPushPinDesktop::FillBuffer(IMediaSample* media_sample, DxgiFrame** out_
       HRESULT h = InitializeDXGI(dxgi_frame);
       if (h == E_FAIL) {
         UnrefDxgiFrame(dxgi_frame);
+        got_frame = false;
         continue;
       }
     }
