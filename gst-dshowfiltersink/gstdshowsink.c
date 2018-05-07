@@ -160,6 +160,8 @@ initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps
     return;
   }
 
+  memset(self->shmem, 0, size);
+
   gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_RGBA, width, height);
   GstVideoInfo * info = &self->shmem->video_info;
   info->fps_n = fps;
