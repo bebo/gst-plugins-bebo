@@ -788,14 +788,15 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   guint vi_size = info.size;
 
   if (!self->shmem_init) {
+
     //FIXME This should live somewhere else.
-    GST_INFO("Initializating shared mem info to %d x %d at %llu fps",
+    GST_INFO("Initializating shared mem info to %d x %d at %d fps",
         GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
-        GST_VIDEO_INFO_FPS_N(&info));
+        GST_VIDEO_INFO_FPS_N(&info)/GST_VIDEO_INFO_FPS_D(&info));
 
     initialize_shared_memory(self,
         GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
-        GST_VIDEO_INFO_FPS_N(&info));
+        GST_VIDEO_INFO_FPS_N(&info)/GST_VIDEO_INFO_FPS_D(&info));
 
     self->shmem_init = true;
   }
