@@ -3,8 +3,6 @@ CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
 
 PROJECT(libgstnvenc)
 
-
-SET(NVENC_SDK_BASE "${PROJECT_SOURCE_DIR}\\third_party\\nvenc_5.0.1_sdk" CACHE PATH "Path to NVENC SDK")
 SET(CUDA_PATH "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include")
 
 enable_language(CUDA)
