@@ -37,7 +37,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <string.h>
-#include "../shared/bebo_shmem.h"
+#include "shared/bebo_shmem.h"
 
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
@@ -69,7 +69,7 @@ enum
 
 // frame count, if the dshow side doesn't consume it in 10 frames time,
 // we're going to unref it.
-#define FRAME_UNREF_THRESHOLD 10 
+#define FRAME_UNREF_THRESHOLD 10
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
@@ -87,7 +87,7 @@ static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_GL_SINK_CAPS));
 
-#define parent_class gst_shm_sink_parent_class 
+#define parent_class gst_shm_sink_parent_class
 G_DEFINE_TYPE (GstShmSink, gst_shm_sink, GST_TYPE_BASE_SINK);
 
 static void gst_shm_sink_finalize (GObject * object);
@@ -108,7 +108,7 @@ static gboolean gst_shm_sink_propose_allocation (GstBaseSink * sink,
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
-static void 
+static void
 gst_dshowfiltersink_set_context(GstElement *element,
     GstContext *context) {
   GstShmSink *self = GST_SHM_SINK (element);
@@ -192,7 +192,7 @@ clean_shmem_frame_with_max_ref_count(GstShmSink * self, int max_ref_cnt)
           frame->size,
           frame->latency / 1000000,
           frame->ref_cnt
-          ); 
+          );
 
       gst_buffer_unref(frame->_gst_buf_ref);
       memset(frame, 0, sizeof(struct frame));
@@ -514,7 +514,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
         frame->size,
         buf,
         frame->latency / 1000000
-        ); 
+        );
 
     gst_buffer_unref(frame->_gst_buf_ref);
     frame->ref_cnt = 0;
@@ -553,7 +553,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       frame->size,
       buf,
       frame->latency / 1000000
-      ); 
+      );
 
   // unref buffers that are not being referenced anymore.
   clean_shmem_frame_with_max_ref_count(self, 0);
@@ -630,7 +630,7 @@ const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
   D3D_FEATURE_LEVEL_10_1
 };
 
-static ID3D11Device* 
+static ID3D11Device*
 _create_device_d3d11() {
   ID3D11Device *device;
 
@@ -643,15 +643,15 @@ _create_device_d3d11() {
 #endif
 
   HRESULT hr = D3D11CreateDevice(
-      NULL, 
+      NULL,
       D3D_DRIVER_TYPE_HARDWARE,
-      NULL, 
-      flags, 
+      NULL,
+      flags,
       d3d_feature_levels,
       sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
       D3D11_SDK_VERSION,
       &device,
-      &level_used, 
+      &level_used,
       NULL);
 
   GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
@@ -672,7 +672,7 @@ static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *sh
     gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
   share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
-  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC) 
+  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
   share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
@@ -680,7 +680,7 @@ static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *sh
     gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
 }
 
-static void 
+static void
 _init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
   GstShmSink *self = GST_SHM_SINK (sink);
 
@@ -777,7 +777,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 
   allocator = GST_ALLOCATOR (self->allocator);
   gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator); 
+  gst_object_unref (allocator);
 
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
