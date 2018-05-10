@@ -17,3 +17,4 @@ set_property(GLOBAL PROPERTY OS_FOLDERS ON)
 # Target configuration.
 #
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/gst/nvenc)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/gst/dshowfiltersink)
