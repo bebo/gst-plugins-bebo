@@ -44,6 +44,8 @@ ADD_LIBRARY(libgstnvenc SHARED
   gstnvenc.h
   gstnvh264enc.c
   gstnvh264enc.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
 )
 
 TARGET_LINK_LIBRARIES(libgstnvenc
@@ -59,4 +61,5 @@ TARGET_LINK_LIBRARIES(libgstnvenc
   winmm
   cuda
   cudart
+  D3D11
 )
