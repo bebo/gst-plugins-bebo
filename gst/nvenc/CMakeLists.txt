@@ -5,14 +5,6 @@ PROJECT(libgstnvenc)
 
 SET(CUDA_PATH "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include")
 
-enable_language(CUDA)
-
-set(
-    CUDA_NVCC_FLAGS
-    ${CUDA_NVCC_FLAGS};
-    -O3 -gencode arch=compute_22,code=sm_22
-)
-
 SET_PROPERTY(
   DIRECTORY
   APPEND PROPERTY COMPILE_DEFINITIONS
