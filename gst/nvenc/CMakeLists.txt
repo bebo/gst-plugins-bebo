@@ -18,14 +18,13 @@ INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib/glib-2.0/include
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
   ${PROJECT_SOURCE_DIR}/../../win32/common
-  ${NVENC_SDK_BASE}/Samples/common/inc
+  ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
   ${CMAKE_SOURCE_DIR}/gst-libs/gst
   ${CUDA_PATH}
 )
 
 LINK_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib
-  "${NVENC_SDK_BASE}\\Samples\\common\\inc"
   "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include"
   "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\lib\\x64"
 )
