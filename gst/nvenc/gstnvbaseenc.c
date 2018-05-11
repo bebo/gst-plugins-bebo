@@ -27,12 +27,14 @@
 
 #include <string.h>
 
-#if HAVE_NVENC_GST_GL
+#include <GL/glext.h>
+#include <GL/wglext.h>
+/* #if HAVE_NVENC_GST_GL */
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <cuda_gl_interop.h>
 #include <gst/gl/gl.h>
-#endif
+/* #endif */
 
 /* TODO:
  *  - reset last_flow on FLUSH_STOP (seeking)
@@ -43,6 +45,7 @@
 
 #define N_BUFFERS_PER_FRAME 1
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
+#define BUFFER_COUNT 20
 
 /* magic pointer value we can put in the async queue to signal shut down */
 #define SHUTDOWN_COOKIE ((gpointer)GINT_TO_POINTER (1))
@@ -139,32 +142,16 @@ _rc_mode_to_nv (GstNvRCMode mode)
   }
 }
 
-#if HAVE_NVENC_GST_GL
 static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS("video/x-raw, " "format = (string) { NV12, I420 }, "       // TODO: YV12, Y444 support
-        "width = (int) [ 16, 4096 ], height = (int) [ 16, 2160 ], "
-        "framerate = (fraction) [0, MAX],"
-        "interlace-mode = { progressive, mixed, interleaved } "
-        ";"
+    GST_STATIC_CAPS(
         "video/x-raw(memory:GLMemory), "
-        "format = (string) { NV12, Y444 }, "
+        "format = (string) RGBA, "
         "width = (int) [ 16, 4096 ], height = (int) [ 16, 2160 ], "
         "framerate = (fraction) [0, MAX],"
-        "interlace-mode = { progressive, mixed, interleaved } "
+        "texture-target = (string) { 2D }"
     ));
-#else 
-static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE("sink",
-    GST_PAD_SINK,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS("video/x-raw, " "format = (string) { NV12, I420 }, "       // TODO: YV12, Y444 support
-        "width = (int) [ 16, 4096 ], height = (int) [ 16, 2160 ], "
-        "framerate = (fraction) [0, MAX],"
-        "interlace-mode = { progressive, mixed, interleaved } "
-    ));
-#endif
-
 
 enum
 {
@@ -235,6 +222,7 @@ static void gst_nv_base_enc_finalize (GObject * obj);
 static GstCaps *gst_nv_base_enc_getcaps (GstVideoEncoder * enc,
     GstCaps * filter);
 static gboolean gst_nv_base_enc_stop_bitstream_thread (GstNvBaseEnc * nvenc);
+static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQuery * query);
 
 static void
 gst_nv_base_enc_class_init (GstNvBaseEncClass * klass)
@@ -259,6 +247,8 @@ gst_nv_base_enc_class_init (GstNvBaseEncClass * klass)
 
   videoenc_class->start = GST_DEBUG_FUNCPTR (gst_nv_base_enc_start);
   videoenc_class->stop = GST_DEBUG_FUNCPTR (gst_nv_base_enc_stop);
+  videoenc_class->propose_allocation =
+      GST_DEBUG_FUNCPTR (gst_nv_base_enc_propose_allocation);
 
   videoenc_class->set_format = GST_DEBUG_FUNCPTR (gst_nv_base_enc_set_format);
   videoenc_class->getcaps = GST_DEBUG_FUNCPTR (gst_nv_base_enc_getcaps);
@@ -515,19 +505,152 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->in_bufs_pool = g_async_queue_new ();
 
   nvenc->last_flow = GST_FLOW_OK;
+  nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
 
-#if HAVE_NVENC_GST_GL
-  {
-    gst_gl_ensure_element_data (GST_ELEMENT (nvenc),
-        (GstGLDisplay **) & nvenc->display,
-        (GstGLContext **) & nvenc->other_context);
-    if (nvenc->display)
-      gst_gl_display_filter_gl_api (GST_GL_DISPLAY (nvenc->display),
-          SUPPORTED_GL_APIS);
-  }
-#endif
+/* #if HAVE_NVENC_GST_GL */
+/*   { */
+/*     gst_gl_ensure_element_data (GST_ELEMENT (nvenc), */
+/*         (GstGLDisplay **) & nvenc->display, */
+/*         (GstGLContext **) & nvenc->other_context); */
+/*     if (nvenc->display) */
+/*       gst_gl_display_filter_gl_api (GST_GL_DISPLAY (nvenc->display), */
+/*           SUPPORTED_GL_APIS); */
+/*   } */
+/* #endif */
 
   return TRUE;
+}
+
+static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
+  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
+  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
+
+  share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
+  share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXCloseDeviceNV");
+  share_context->wglDXRegisterObjectNV = (PFNWGLDXREGISTEROBJECTNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
+  share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
+  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
+  share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
+  share_context->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
+    gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
+}
+
+const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
+{
+  D3D_FEATURE_LEVEL_11_0,
+  D3D_FEATURE_LEVEL_10_1
+};
+
+static ID3D11Device*
+_create_device_d3d11() {
+  ID3D11Device *device;
+
+  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
+
+  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+#ifdef _DEBUG
+  flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+  HRESULT hr = D3D11CreateDevice(
+      NULL,
+      D3D_DRIVER_TYPE_HARDWARE,
+      NULL,
+      flags,
+      d3d_feature_levels,
+      sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
+      D3D11_SDK_VERSION,
+      &device,
+      &level_used,
+      NULL);
+
+  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+      (unsigned int) level_used, (unsigned int) level_used);
+
+  return device;
+}
+
+static void
+_init_d3d11_context(GstGLContext* gl_context, gpointer * nvenc) {
+  GstNvBaseEnc *self = GST_NV_BASE_ENC (nvenc);
+
+  GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
+
+  init_wgl_functions(gl_context, share_context);
+
+  share_context->d3d11_device = _create_device_d3d11();
+  g_assert( share_context->d3d11_device != NULL);
+
+  share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
+  g_assert( share_context->device_interop_handle != NULL);
+
+  g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
+  // TODO: need to free these memory and close interop
+}
+
+static gboolean
+gst_nv_base_enc_ensure_gl_context(GstVideoEncoder * enc)
+{
+  GstNvBaseEnc *self = GST_NV_BASE_ENC (enc);
+  GError *error = NULL;
+
+  if (self->context) {
+    //FIXME check has dxgi and if not -> remove and add?
+    return TRUE;
+  }
+
+  if (!self->context) {
+    gst_gl_ensure_element_data (GST_ELEMENT (self),
+          (GstGLDisplay **) & self->display,
+          (GstGLContext **) & self->other_context);
+  }
+
+  if (!self->context) {
+    GST_OBJECT_LOCK (self->display);
+    do {
+      if (self->context) {
+        gst_object_unref (self->context);
+        self->context = NULL;
+      }
+      self->context =
+        gst_gl_display_get_gl_context_for_thread (self->display, NULL);
+      if (!self->context) {
+
+        if (!gst_gl_display_create_context (self->display, self->other_context,
+              &self->context, &error)) {
+          GST_OBJECT_UNLOCK (self->display);
+          goto context_error;
+        }
+      }
+    } while (!gst_gl_display_add_context (self->display, self->context));
+    GST_OBJECT_UNLOCK (self->display);
+  }
+
+  gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc) _init_d3d11_context, self);
+
+  return TRUE;
+
+context_error:
+  {
+    if (error) {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
+          (NULL));
+      g_clear_error (&error);
+    } else {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
+    }
+    if (self->context)
+      gst_object_unref (self->context);
+    self->context = NULL;
+    return FALSE;
+  }
 }
 
 static gboolean
@@ -559,6 +682,15 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
     gst_object_unref (nvenc->other_context);
     nvenc->other_context = NULL;
   }
+  if (nvenc->pool) {
+    gst_object_unref (nvenc->pool);
+  }
+  nvenc->pool = NULL;
+
+  if (nvenc->allocator) {
+    gst_object_unref (nvenc->allocator);
+  }
+  nvenc->allocator = NULL;
 
   return TRUE;
 }
@@ -1470,7 +1602,8 @@ _plane_get_n_components (GstVideoInfo * info, guint plane)
   }
 }
 
-#if HAVE_NVENC_GST_GL
+//#if HAVE_NVENC_GST_GL
+#if 0
 struct map_gl_input
 {
   GstNvBaseEnc *nvenc;
@@ -1703,10 +1836,10 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
     state = g_new0 (struct frame_state, 1);
   state->n_buffers = 1;
 
-#if HAVE_NVENC_GST_GL
+#if 0  // FIXME
   if (nvenc->gl_input) {
     struct gl_input_resource *in_gl_resource = input_buffer;
-    struct map_gl_input data;
+    /* struct map_gl_input data; */
 
     GST_LOG_OBJECT (enc, "got input buffer %p", in_gl_resource);
 
@@ -2022,5 +2155,87 @@ gst_nv_base_enc_get_property (GObject * object, guint prop_id, GValue * value,
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
+  }
+}
+
+static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQuery * query)
+{
+  GstNvBaseEnc *self= GST_NV_BASE_ENC (enc);
+  GST_LOG_OBJECT(self, "gst_nv_base_enc_propose_allocation");
+
+  GstCaps *caps;
+  gboolean need_pool;
+  gst_query_parse_allocation(query, &caps, &need_pool);
+  GstCapsFeatures *features;
+  features = gst_caps_get_features (caps, 0);
+
+  if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
+      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
+  }
+
+  // offer our custom allocator
+  GstAllocator *allocator;
+  GstAllocationParams params;
+  gst_allocation_params_init (&params);
+
+  allocator = GST_ALLOCATOR (self->allocator);
+  gst_query_add_allocation_param (query, allocator, &params);
+  gst_object_unref (allocator); 
+
+  GstVideoInfo info;
+  if (!gst_video_info_from_caps (&info, caps))
+    goto invalid_caps;
+
+  guint vi_size = info.size;
+
+  if (!gst_nv_base_enc_ensure_gl_context(self)) {
+    return FALSE;
+  }
+
+  if (self->pool) {
+    GstStructure *cur_pool_config;
+    cur_pool_config = gst_buffer_pool_get_config(self->pool);
+    guint size;
+    gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
+    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
+    if (size == vi_size) {
+      GST_DEBUG("Reusing buffer pool.");
+      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, 0);
+      return TRUE;
+    } else {
+      GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
+        size, vi_size);
+      gst_object_unref(self->pool);
+    }
+  }
+
+  GST_DEBUG("Make a new buffer pool.");
+  self->pool = gst_gl_buffer_pool_new(self->context);
+  GstStructure *config;
+  config = gst_buffer_pool_get_config (self->pool);
+  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
+  gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
+
+  if (!gst_buffer_pool_set_config (self->pool, config)) {
+    gst_object_unref (self->pool);
+    goto config_failed;
+  }
+
+  /* we need at least 2 buffer because we hold on to the last one */
+  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, 0);
+  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
+
+  return TRUE;
+
+invalid_caps:
+  {
+    GST_WARNING_OBJECT (self, "invalid caps specified");
+    return FALSE;
+  }
+config_failed:
+  {
+    GST_WARNING_OBJECT (self, "failed setting config");
+    return FALSE;
   }
 }

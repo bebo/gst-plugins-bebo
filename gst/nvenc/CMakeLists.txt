@@ -19,6 +19,7 @@ INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
   ${PROJECT_SOURCE_DIR}/../../win32/common
   ${NVENC_SDK_BASE}/Samples/common/inc
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst
   ${CUDA_PATH}
 )
 
@@ -34,6 +35,8 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEB
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 ADD_LIBRARY(libgstnvenc SHARED
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
   config.h
   gstnvbaseenc.c
   gstnvbaseenc.h

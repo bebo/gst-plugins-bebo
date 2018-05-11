@@ -1,3 +1,12 @@
+
+
+
+
+## Build Dependencies
+
+* Visual Studio 2015 (C++)
+* https://developer.nvidia.com/cuda-downloads
+
 # gstreamer to directshow
 ```
    +------------------------------+       +-------------------------------+
@@ -20,8 +29,6 @@ Currently tested on Windows 10 64 bit
 
 # Build
 
-## Build Dependencies
-* Visual Studio 2015 (C++)
 
 ## To register the DLL as a Direct Show Capture Service
 

@@ -22,7 +22,11 @@
 
 #include "gstnvenc.h"
 
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
 #include <gst/video/gstvideoencoder.h>
+#include "dxgi/gstdxgimemory.h"
 
 #define GST_TYPE_NV_BASE_ENC \
   (gst_nv_base_enc_get_type())
@@ -102,8 +106,12 @@ typedef struct {
    * 0 = none, 1 = fields, 2 = interleaved */
   gint            interlace_modes;
 
+  GstGLContext   *context;
   void           *display;            /* GstGLDisplay */
   void           *other_context;      /* GstGLContext */
+
+  GstBufferPool *pool;
+  GstGLDXGIMemoryAllocator *allocator;
 
   /* the maximum buffer size the encoder is configured for */
   guint               max_encode_width;
