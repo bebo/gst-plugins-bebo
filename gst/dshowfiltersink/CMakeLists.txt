@@ -49,4 +49,5 @@ TARGET_LINK_LIBRARIES(libgstdshowfiltersink
   uuid
   winmm
   D3D11
+  opengl32
 )
