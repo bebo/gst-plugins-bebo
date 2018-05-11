@@ -395,20 +395,6 @@ gst_shm_sink_stop (GstBaseSink * bsink)
     gst_object_unref (self->allocator);
   self->allocator = NULL;
 
-  if (self->display) {
-    gst_object_unref (self->display);
-    self->display = NULL;
-  }
-  if (self->other_context) {
-    gst_object_unref (nvenc->other_context);
-    self->other_context = NULL;
-  }
-
-  if (self->context) {
-    gst_object_unref (self->context);
-    self->other_context = NULL;
-  }
-
   return TRUE;
 }
 
