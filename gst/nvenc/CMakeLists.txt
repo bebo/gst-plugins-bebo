@@ -61,5 +61,6 @@ TARGET_LINK_LIBRARIES(libgstnvenc
   winmm
   cuda
   cudart
+  opengl32
   D3D11
 )
