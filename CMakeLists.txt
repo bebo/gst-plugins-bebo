@@ -7,8 +7,8 @@ add_definitions(-DGST_USE_UNSTABLE_API)
 project(bebo-gst)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-set(GST_INSTALL_BASE "${CMAKE_SOURCE_DIR}/third_party/gstreamer" CACHE PATH "Path to the GStreamer install base")
-set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/nvenc_5.0.1_sdk" CACHE PATH "Path to NVENC SDK")
+set(GST_INSTALL_BASE "${CMAKE_SOURCE_DIR}/third_party/gstreamer" CACHE INTERNAL "Path to the GStreamer install base")
+set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/nvenc_5.0.1_sdk" CACHE INTERNAL "Path to NVENC SDK")
 
 
 # Use folders in the resulting project files.
