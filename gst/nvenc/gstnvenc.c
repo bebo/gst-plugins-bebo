@@ -350,7 +350,7 @@ plugin_init (GstPlugin * plugin)
   } else {
     GST_INFO ("Created NVEncodeAPI instance, got function table");
 
-    gst_element_register (plugin, "nvh264encgpu", GST_RANK_PRIMARY * 2,
+    gst_element_register (plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
         gst_nv_h264_enc_get_type ());
   }
 
