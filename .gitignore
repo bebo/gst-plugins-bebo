@@ -28,7 +28,7 @@ tags
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
-
+third_party/
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
