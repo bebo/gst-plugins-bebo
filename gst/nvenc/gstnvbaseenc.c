@@ -149,8 +149,7 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE("sink",
         "video/x-raw(memory:GLMemory), "
         "format = (string) RGBA, "
         "width = (int) [ 16, 4096 ], height = (int) [ 16, 2160 ], "
-        "framerate = (fraction) [0, MAX],"
-        "texture-target = (string) { 2D }"
+        "framerate = (fraction) [0, MAX]"
     ));
 
 enum
@@ -413,14 +412,17 @@ _get_supported_input_formats (GstNvBaseEnc * nvenc)
 static gboolean
 gst_nv_base_enc_open (GstVideoEncoder * enc)
 {
+  GST_WARNING("OPEN NVENC");
   GstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
-
-  nvenc->cuda_ctx = gst_nvenc_create_cuda_context (nvenc->cuda_device_id);
+  if (!gst_nv_base_enc_ensure_gl_context(nvenc)) {
+    return FALSE;
+  }
+  /*nvenc->cuda_ctx = gst_nvenc_create_cuda_context (nvenc->cuda_device_id);
   if (nvenc->cuda_ctx == NULL) {
     GST_ELEMENT_ERROR (enc, LIBRARY, INIT, (NULL),
         ("Failed to create CUDA context, perhaps CUDA is not supported."));
     return FALSE;
-  }
+  } */
 
   {
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS params = { 0, };
@@ -429,7 +431,7 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     params.version = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER;
     params.apiVersion = NVENCAPI_VERSION;
     params.device = nvenc->cuda_ctx;
-    params.deviceType = NV_ENC_DEVICE_TYPE_CUDA;
+    params.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
     nv_ret = NvEncOpenEncodeSessionEx (&params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
@@ -1794,6 +1796,7 @@ _submit_input_buffer (GstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 static GstFlowReturn
 gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
+  return GST_FLOW_OK;
   gpointer input_buffer = NULL;
   GstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
   NV_ENC_OUTPUT_PTR out_buf;
@@ -2162,7 +2165,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
 {
   GstNvBaseEnc *self= GST_NV_BASE_ENC (enc);
   GST_LOG_OBJECT(self, "gst_nv_base_enc_propose_allocation");
-
+  GST_ERROR("PROPOSE ALLOCATION");
   GstCaps *caps;
   gboolean need_pool;
   gst_query_parse_allocation(query, &caps, &need_pool);
