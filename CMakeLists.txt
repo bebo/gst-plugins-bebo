@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.8)
 
 set(CMAKE_CONFIGURATION_TYPES Release Debug)
 
+add_definitions(-DGST_USE_UNSTABLE_API)
+
 project(bebo-gst)
 
 

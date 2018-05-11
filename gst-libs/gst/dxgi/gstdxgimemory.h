@@ -75,7 +75,7 @@ typedef struct _GstGLDXGIMemory
 typedef struct _GstGLDXGIMemoryAllocator
 {
   GstGLMemoryAllocator parent;
-  GstBaseSink *sink;
+  /* GstBaseSink *sink; */
 } GstGLDXGIMemoryAllocator;
 
 typedef struct _GstGLDXGIMemoryAllocatorClass
@@ -85,6 +85,6 @@ typedef struct _GstGLDXGIMemoryAllocatorClass
 } GstGLDXGIMemoryAllocatorClass;
 
 GType gst_gl_dxgi_memory_allocator_get_type(void);
-GstGLDXGIMemoryAllocator * gst_gl_dxgi_memory_allocator_new(GstBaseSink* sink);
+GstGLDXGIMemoryAllocator * gst_gl_dxgi_memory_allocator_new();
 
 GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context);

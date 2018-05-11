@@ -476,11 +476,11 @@ gst_gl_dxgi_memory_allocator_class_init (GstGLDXGIMemoryAllocatorClass * klass)
 }
 
 GstGLDXGIMemoryAllocator *
-gst_gl_dxgi_memory_allocator_new (GstBaseSink* sink)
+gst_gl_dxgi_memory_allocator_new ()
 {
   GstGLDXGIMemoryAllocator *self = g_object_new (GST_TYPE_GL_DXGI_MEMORY_ALLOCATOR, NULL);
 
-  self->sink = gst_object_ref (sink);
+  /* self->sink = gst_object_ref (sink); */
 
   return self;
 }
