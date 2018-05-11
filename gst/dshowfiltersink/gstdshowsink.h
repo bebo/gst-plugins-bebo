@@ -71,7 +71,7 @@ struct _GstShmSink
   gboolean shmem_init;
 
   GstGLDXGIMemoryAllocator *allocator;
-  GstAllocationParams params;
+  /* GstAllocationParams params; */
   gint64 latency;
 };
 

@@ -45,6 +45,7 @@
 #endif
 
 
+
 /* signals */
 enum
 {
@@ -80,7 +81,7 @@ GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
     "width = " GST_VIDEO_SIZE_RANGE ", "                                \
     "height = " GST_VIDEO_SIZE_RANGE ", "                               \
     "framerate = " GST_VIDEO_FPS_RANGE ", "                             \
-    "texture-target = (string) { 2D, external-oes }"
+    "texture-target = (string) { 2D }"
 
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
@@ -215,7 +216,7 @@ gst_shm_sink_init (GstShmSink * self)
   // FIXME handle creation error
   self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
 
-  gst_allocation_params_init (&self->params);
+  /* gst_allocation_params_init (&self->params); */
 }
 
 static void
@@ -372,6 +373,7 @@ static gboolean
 gst_shm_sink_stop (GstBaseSink * bsink)
 {
   GstShmSink *self = GST_SHM_SINK (bsink);
+  // FIXME unref gl context
 
   GST_DEBUG_OBJECT (self, "Stopping");
 
@@ -392,6 +394,20 @@ gst_shm_sink_stop (GstBaseSink * bsink)
   if (self->allocator)
     gst_object_unref (self->allocator);
   self->allocator = NULL;
+
+  if (self->display) {
+    gst_object_unref (self->display);
+    self->display = NULL;
+  }
+  if (self->other_context) {
+    gst_object_unref (nvenc->other_context);
+    self->other_context = NULL;
+  }
+
+  if (self->context) {
+    gst_object_unref (self->context);
+    self->other_context = NULL;
+  }
 
   return TRUE;
 }
