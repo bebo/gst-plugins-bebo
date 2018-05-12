@@ -457,7 +457,6 @@ _get_interlace_modes (D3DGstNvH264Enc * nvenc)
 static GstCaps *
 gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
 {
-  GST_WARNING("GETCAPS");
   D3DGstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
   GstCaps *supported_incaps = NULL;
   GstCaps *template_caps, *caps;
@@ -466,7 +465,6 @@ gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
   GST_OBJECT_LOCK (nvenc);
 
   if (input_formats != NULL) {
-    GST_WARNING("INPUT FORMAT NOT NULL");
     GValue *val;
 
     template_caps = gst_pad_get_pad_template_caps (enc->sinkpad);
