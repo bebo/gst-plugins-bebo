@@ -79,13 +79,13 @@ gst_nv_preset_get_type (void)
   };
 
   if (!nv_preset_type) {
-    nv_preset_type = g_enum_register_static ("GstNvPreset", presets);
+    nv_preset_type = g_enum_register_static ("D3DGstNvPreset", presets);
   }
   return nv_preset_type;
 }
 
 static GUID
-_nv_preset_to_guid (GstNvPreset preset)
+_nv_preset_to_guid (D3DGstNvPreset preset)
 {
   GUID null = { 0, };
 
@@ -124,13 +124,13 @@ gst_nv_rc_mode_get_type (void)
   };
 
   if (!nv_rc_mode_type) {
-    nv_rc_mode_type = g_enum_register_static ("GstNvRCMode", modes);
+    nv_rc_mode_type = g_enum_register_static ("D3DGstNvRCMode", modes);
   }
   return nv_rc_mode_type;
 }
 
 static NV_ENC_PARAMS_RC_MODE
-_rc_mode_to_nv (GstNvRCMode mode)
+_rc_mode_to_nv (D3DGstNvRCMode mode)
 {
   switch (mode) {
     case GST_NV_RC_MODE_DEFAULT:
