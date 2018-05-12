@@ -1,7 +1,7 @@
 
 CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
 
-PROJECT(libgstnvenc)
+PROJECT(libgstd3dnvenc)
 
 SET(CUDA_PATH "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include")
 
@@ -33,7 +33,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
 set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
-ADD_LIBRARY(libgstnvenc SHARED
+ADD_LIBRARY(libgstd3dnvenc SHARED
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
   config.h
@@ -47,7 +47,7 @@ ADD_LIBRARY(libgstnvenc SHARED
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
 )
 
-TARGET_LINK_LIBRARIES(libgstnvenc
+TARGET_LINK_LIBRARIES(libgstd3dnvenc
   gstreamer-1.0
   gstaudio-1.0
   gstvideo-1.0

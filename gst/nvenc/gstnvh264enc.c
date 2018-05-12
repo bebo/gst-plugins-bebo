@@ -240,7 +240,7 @@ gst_codec_utils_h264_caps_set_level_and_profile(GstCaps * caps,
 
 
 #define parent_class gst_nv_h264_enc_parent_class
-G_DEFINE_TYPE (GstNvH264Enc, gst_nv_h264_enc, GST_TYPE_NV_BASE_ENC);
+G_DEFINE_TYPE (D3DGstNvH264Enc, gst_nv_h264_enc, GST_TYPE_NV_BASE_ENC);
 
 /* *INDENT-OFF* */
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
@@ -259,11 +259,11 @@ static gboolean gst_nv_h264_enc_open (GstVideoEncoder * enc);
 static gboolean gst_nv_h264_enc_close (GstVideoEncoder * enc);
 static GstCaps *gst_nv_h264_enc_getcaps (GstVideoEncoder * enc,
     GstCaps * filter);
-static gboolean gst_nv_h264_enc_set_src_caps (GstNvBaseEnc * nvenc,
+static gboolean gst_nv_h264_enc_set_src_caps (D3DGstNvBaseEnc * nvenc,
     GstVideoCodecState * state);
-static gboolean gst_nv_h264_enc_set_encoder_config (GstNvBaseEnc * nvenc,
+static gboolean gst_nv_h264_enc_set_encoder_config (D3DGstNvBaseEnc * nvenc,
     GstVideoCodecState * state, NV_ENC_CONFIG * config);
-static gboolean gst_nv_h264_enc_set_pic_params (GstNvBaseEnc * nvenc,
+static gboolean gst_nv_h264_enc_set_pic_params (D3DGstNvBaseEnc * nvenc,
     GstVideoCodecFrame * frame, NV_ENC_PIC_PARAMS * pic_params);
 static void gst_nv_h264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -272,12 +272,12 @@ static void gst_nv_h264_enc_get_property (GObject * object, guint prop_id,
 static void gst_nv_h264_enc_finalize (GObject * obj);
 
 static void
-gst_nv_h264_enc_class_init (GstNvH264EncClass * klass)
+gst_nv_h264_enc_class_init (D3DGstNvH264EncClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstVideoEncoderClass *videoenc_class = GST_VIDEO_ENCODER_CLASS (klass);
-  GstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_CLASS (klass);
+  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_CLASS (klass);
 
   gobject_class->set_property = gst_nv_h264_enc_set_property;
   gobject_class->get_property = gst_nv_h264_enc_get_property;
@@ -304,7 +304,7 @@ gst_nv_h264_enc_class_init (GstNvH264EncClass * klass)
 }
 
 static void
-gst_nv_h264_enc_init (GstNvH264Enc * nvenc)
+gst_nv_h264_enc_init (D3DGstNvH264Enc * nvenc)
 {
 }
 
@@ -315,7 +315,7 @@ gst_nv_h264_enc_finalize (GObject * obj)
 }
 
 static gboolean
-_get_supported_profiles (GstNvH264Enc * nvenc)
+_get_supported_profiles (D3DGstNvH264Enc * nvenc)
 {
   NVENCSTATUS nv_ret;
   GUID profile_guids[64];
@@ -375,7 +375,7 @@ _get_supported_profiles (GstNvH264Enc * nvenc)
 static gboolean
 gst_nv_h264_enc_open (GstVideoEncoder * enc)
 {
-  GstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
+  D3DGstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
 
   if (!GST_VIDEO_ENCODER_CLASS (gst_nv_h264_enc_parent_class)->open (enc))
     return FALSE;
@@ -412,7 +412,7 @@ gst_nv_h264_enc_open (GstVideoEncoder * enc)
 static gboolean
 gst_nv_h264_enc_close (GstVideoEncoder * enc)
 {
-  GstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
+  D3DGstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
 
   GST_OBJECT_LOCK (nvenc);
   g_free (nvenc->supported_profiles);
@@ -423,7 +423,7 @@ gst_nv_h264_enc_close (GstVideoEncoder * enc)
 }
 
 static GValue *
-_get_interlace_modes (GstNvH264Enc * nvenc)
+_get_interlace_modes (D3DGstNvH264Enc * nvenc)
 {
   NV_ENC_CAPS_PARAM caps_param = { 0, };
   GValue *list = g_new0 (GValue, 1);
@@ -458,7 +458,7 @@ static GstCaps *
 gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
 {
   GST_WARNING("GETCAPS");
-  GstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
+  D3DGstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
   GstCaps *supported_incaps = NULL;
   GstCaps *template_caps, *caps;
   GValue *input_formats = GST_NV_BASE_ENC (enc)->input_formats;
@@ -499,7 +499,7 @@ gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
 }
 
 static gboolean
-gst_nv_h264_enc_set_profile_and_level (GstNvH264Enc * nvenc, GstCaps * caps)
+gst_nv_h264_enc_set_profile_and_level (D3DGstNvH264Enc * nvenc, GstCaps * caps)
 {
 #define N_BYTES_SPS 128
   guint8 sps[N_BYTES_SPS];
@@ -585,9 +585,9 @@ no_peer:
 }
 
 static gboolean
-gst_nv_h264_enc_set_src_caps (GstNvBaseEnc * nvenc, GstVideoCodecState * state)
+gst_nv_h264_enc_set_src_caps (D3DGstNvBaseEnc * nvenc, GstVideoCodecState * state)
 {
-  GstNvH264Enc *h264enc = GST_NV_H264_ENC (nvenc);
+  D3DGstNvH264Enc *h264enc = GST_NV_H264_ENC (nvenc);
   GstVideoCodecState *out_state;
   GstStructure *s;
   GstCaps *out_caps;
@@ -617,10 +617,10 @@ gst_nv_h264_enc_set_src_caps (GstNvBaseEnc * nvenc, GstVideoCodecState * state)
 }
 
 static gboolean
-gst_nv_h264_enc_set_encoder_config (GstNvBaseEnc * nvenc,
+gst_nv_h264_enc_set_encoder_config (D3DGstNvBaseEnc * nvenc,
     GstVideoCodecState * state, NV_ENC_CONFIG * config)
 {
-  GstNvH264Enc *h264enc = GST_NV_H264_ENC (nvenc);
+  D3DGstNvH264Enc *h264enc = GST_NV_H264_ENC (nvenc);
   GstCaps *allowed_caps, *template_caps;
   GUID selected_profile = NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID;
   int level_idc = NV_ENC_LEVEL_AUTOSELECT;
@@ -694,7 +694,7 @@ gst_nv_h264_enc_set_encoder_config (GstNvBaseEnc * nvenc,
 }
 
 static gboolean
-gst_nv_h264_enc_set_pic_params (GstNvBaseEnc * enc, GstVideoCodecFrame * frame,
+gst_nv_h264_enc_set_pic_params (D3DGstNvBaseEnc * enc, GstVideoCodecFrame * frame,
     NV_ENC_PIC_PARAMS * pic_params)
 {
   /* encode whole picture in one single slice */
