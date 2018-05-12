@@ -240,7 +240,7 @@ gst_codec_utils_h264_caps_set_level_and_profile(GstCaps * caps,
 
 
 #define parent_class gst_nv_h264_enc_parent_class
-G_DEFINE_TYPE (D3DGstNvH264Enc, gst_nv_h264_enc, GST_TYPE_NV_BASE_ENC);
+G_DEFINE_TYPE (D3DGstNvH264Enc, gst_nv_h264_enc, GST_TYPE_D3D_NV_BASE_ENC);
 
 /* *INDENT-OFF* */
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
@@ -277,7 +277,7 @@ gst_nv_h264_enc_class_init (D3DGstNvH264EncClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstVideoEncoderClass *videoenc_class = GST_VIDEO_ENCODER_CLASS (klass);
-  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_CLASS (klass);
+  D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_CLASS (klass);
 
   gobject_class->set_property = gst_nv_h264_enc_set_property;
   gobject_class->get_property = gst_nv_h264_enc_get_property;
@@ -324,13 +324,13 @@ _get_supported_profiles (D3DGstNvH264Enc * nvenc)
   guint i, n, n_profiles;
 
   nv_ret =
-      NvEncGetEncodeProfileGUIDCount (GST_NV_BASE_ENC (nvenc)->encoder,
+      NvEncGetEncodeProfileGUIDCount (GST_D3D_NV_BASE_ENC (nvenc)->encoder,
       NV_ENC_CODEC_H264_GUID, &n);
   if (nv_ret != NV_ENC_SUCCESS)
     return FALSE;
 
   nv_ret =
-      NvEncGetEncodeProfileGUIDs (GST_NV_BASE_ENC (nvenc)->encoder,
+      NvEncGetEncodeProfileGUIDs (GST_D3D_NV_BASE_ENC (nvenc)->encoder,
       NV_ENC_CODEC_H264_GUID, profile_guids, G_N_ELEMENTS (profile_guids), &n);
   if (nv_ret != NV_ENC_SUCCESS)
     return FALSE;
@@ -385,7 +385,7 @@ gst_nv_h264_enc_open (GstVideoEncoder * enc)
     uint32_t i, num = 0;
     GUID guids[16];
 
-    NvEncGetEncodeGUIDs (GST_NV_BASE_ENC (nvenc)->encoder, guids,
+    NvEncGetEncodeGUIDs (GST_D3D_NV_BASE_ENC (nvenc)->encoder, guids,
         G_N_ELEMENTS (guids), &num);
 
     for (i = 0; i < num; ++i) {
@@ -438,7 +438,7 @@ _get_interlace_modes (D3DGstNvH264Enc * nvenc)
   caps_param.version = NV_ENC_CAPS_PARAM_VER;
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_FIELD_ENCODING;
 
-  if (NvEncGetEncodeCaps (GST_NV_BASE_ENC (nvenc)->encoder,
+  if (NvEncGetEncodeCaps (GST_D3D_NV_BASE_ENC (nvenc)->encoder,
           NV_ENC_CODEC_H264_GUID, &caps_param,
           &nvenc->interlace_modes) != NV_ENC_SUCCESS)
     nvenc->interlace_modes = 0;
@@ -461,7 +461,7 @@ gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
   D3DGstNvH264Enc *nvenc = GST_NV_H264_ENC (enc);
   GstCaps *supported_incaps = NULL;
   GstCaps *template_caps, *caps;
-  GValue *input_formats = GST_NV_BASE_ENC (enc)->input_formats;
+  GValue *input_formats = GST_D3D_NV_BASE_ENC (enc)->input_formats;
 
   GST_OBJECT_LOCK (nvenc);
 
@@ -518,7 +518,7 @@ gst_nv_h264_enc_set_profile_and_level (D3DGstNvH264Enc * nvenc, GstCaps * caps)
   spp.ppsId = 0;
   spp.spsppsBuffer = &sps;
   spp.outSPSPPSPayloadSize = &seq_size;
-  nv_ret = NvEncGetSequenceParams (GST_NV_BASE_ENC (nvenc)->encoder, &spp);
+  nv_ret = NvEncGetSequenceParams (GST_D3D_NV_BASE_ENC (nvenc)->encoder, &spp);
   if (nv_ret != NV_ENC_SUCCESS) {
     GST_ELEMENT_ERROR (nvenc, STREAM, ENCODE, ("Encode header failed."),
         ("NvEncGetSequenceParams return code=%d", nv_ret));
