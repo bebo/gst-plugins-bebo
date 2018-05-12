@@ -247,6 +247,8 @@ gst_nvenc_get_nv_buffer_format (GstVideoFormat fmt)
       return NV_ENC_BUFFER_FORMAT_IYUV_PL;
     case GST_VIDEO_FORMAT_Y444:
       return NV_ENC_BUFFER_FORMAT_YUV444_PL;
+    case GST_VIDEO_FORMAT_RGBA:
+      return NV_ENC_BUFFER_FORMAT_ABGR;
     default:
       break;
   }
