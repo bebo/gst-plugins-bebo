@@ -2102,7 +2102,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
 {
   D3DGstNvBaseEnc *self= GST_D3D_NV_BASE_ENC (enc);
   GST_LOG_OBJECT(self, "gst_nv_base_enc_propose_allocation");
-  GST_ERROR("PROPOSE ALLOCATION");
+  GST_INFO("Proposing D3D11 texture allocation");
   GstCaps *caps;
   gboolean need_pool;
   gst_query_parse_allocation(query, &caps, &need_pool);
