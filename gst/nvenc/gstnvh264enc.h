@@ -25,18 +25,18 @@
 #define GST_TYPE_NV_H264_ENC \
   (gst_nv_h264_enc_get_type())
 #define GST_NV_H264_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_NV_H264_ENC,GstNvH264Enc))
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_NV_H264_ENC,D3DGstNvH264Enc))
 #define GST_NV_H264_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_NV_H264_ENC,GstNvH264EncClass))
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_NV_H264_ENC,D3DGstNvH264EncClass))
 #define GST_NV_H264_ENC_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_NV_H264_ENC,GstNvH264EncClass))
+  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_NV_H264_ENC,D3DGstNvH264EncClass))
 #define GST_IS_NV_H264_ENC(obj) \
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_NV_H264_ENC))
 #define GST_IS_NV_H264_ENC_CLASS(obj) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_NV_H264_ENC))
 
 typedef struct {
-  GstNvBaseEnc base_nvenc;
+  D3DGstNvBaseEnc base_nvenc;
 
   /* the supported input formats */
   GValue        * supported_profiles;             /* OBJECT LOCK */
@@ -47,11 +47,11 @@ typedef struct {
   /* supported interlacing input modes.
    * 0 = none, 1 = fields, 2 = interleaved */
   gint            interlace_modes;
-} GstNvH264Enc;
+} D3DGstNvH264Enc;
 
 typedef struct {
-  GstNvBaseEncClass video_encoder_class;
-} GstNvH264EncClass;
+  D3DGstNvBaseEncClass video_encoder_class;
+} D3DGstNvH264EncClass;
 
 G_GNUC_INTERNAL
 GType gst_nv_h264_enc_get_type (void);

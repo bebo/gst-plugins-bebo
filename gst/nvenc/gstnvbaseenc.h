@@ -31,11 +31,11 @@
 #define GST_TYPE_NV_BASE_ENC \
   (gst_nv_base_enc_get_type())
 #define GST_NV_BASE_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_NV_BASE_ENC,GstNvBaseEnc))
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEnc))
 #define GST_NV_BASE_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_NV_BASE_ENC,GstNvBaseEncClass))
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEncClass))
 #define GST_NV_BASE_ENC_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_NV_BASE_ENC,GstNvBaseEncClass))
+  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEncClass))
 #define GST_IS_NV_BASE_ENC(obj) \
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_NV_BASE_ENC))
 #define GST_IS_NV_BASE_ENC_CLASS(obj) \
@@ -120,31 +120,31 @@ typedef struct {
   GstVideoInfo        input_info;     /* buffer configuration for buffers sent to NVENC */
 
   GstFlowReturn   last_flow;          /* ATOMIC */
-} GstNvBaseEnc;
+} D3DGstNvBaseEnc;
 
 typedef struct {
   GstVideoEncoderClass video_encoder_class;
 
   GUID codec_id;
 
-  gboolean (*set_src_caps)       (GstNvBaseEnc * nvenc,
+  gboolean (*set_src_caps)       (D3DGstNvBaseEnc * nvenc,
                                   GstVideoCodecState * state);
-  gboolean (*set_pic_params)     (GstNvBaseEnc * nvenc,
+  gboolean (*set_pic_params)     (D3DGstNvBaseEnc * nvenc,
                                   GstVideoCodecFrame * frame,
                                   NV_ENC_PIC_PARAMS * pic_params);
-  gboolean (*set_encoder_config) (GstNvBaseEnc * nvenc,
+  gboolean (*set_encoder_config) (D3DGstNvBaseEnc * nvenc,
                                   GstVideoCodecState * state,
                                   NV_ENC_CONFIG * config);
-} GstNvBaseEncClass;
+} D3DGstNvBaseEncClass;
 
 G_GNUC_INTERNAL
 GType gst_nv_base_enc_get_type (void);
 
 
-void gst_nv_base_enc_get_max_encode_size      (GstNvBaseEnc * nvenc,
+void gst_nv_base_enc_get_max_encode_size      (D3DGstNvBaseEnc * nvenc,
                                                guint * max_width,
                                                guint * max_height);
-void gst_nv_base_enc_set_max_encode_size      (GstNvBaseEnc * nvenc,
+void gst_nv_base_enc_set_max_encode_size      (D3DGstNvBaseEnc * nvenc,
                                                guint max_width,
                                                guint max_height);
 
