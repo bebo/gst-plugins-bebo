@@ -17,8 +17,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_NV_BASE_ENC_H_INCLUDED__
-#define __GST_NV_BASE_ENC_H_INCLUDED__
+#ifndef __GST_D3D_NV_BASE_ENC_H_INCLUDED__
+#define __GST_D3D_NV_BASE_ENC_H_INCLUDED__
 
 #include "gstnvenc.h"
 
@@ -28,18 +28,18 @@
 #include <gst/video/gstvideoencoder.h>
 #include "dxgi/gstdxgimemory.h"
 
-#define GST_TYPE_NV_BASE_ENC \
+#define GST_TYPE_D3D_NV_BASE_ENC \
   (gst_nv_base_enc_get_type())
-#define GST_NV_BASE_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEnc))
-#define GST_NV_BASE_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEncClass))
-#define GST_NV_BASE_ENC_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_NV_BASE_ENC,D3DGstNvBaseEncClass))
-#define GST_IS_NV_BASE_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_NV_BASE_ENC))
-#define GST_IS_NV_BASE_ENC_CLASS(obj) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_NV_BASE_ENC))
+#define GST_D3D_NV_BASE_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_D3D_NV_BASE_ENC,D3DGstNvBaseEnc))
+#define GST_D3D_NV_BASE_ENC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_D3D_NV_BASE_ENC,D3DGstNvBaseEncClass))
+#define GST_D3D_NV_BASE_ENC_GET_CLASS(obj) \
+  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_D3D_NV_BASE_ENC,D3DGstNvBaseEncClass))
+#define GST_IS_D3D_NV_BASE_ENC(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_D3D_NV_BASE_ENC))
+#define GST_IS_D3D_NV_BASE_ENC_CLASS(obj) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_D3D_NV_BASE_ENC))
 
 typedef enum {
   GST_NV_PRESET_DEFAULT,
@@ -148,4 +148,4 @@ void gst_nv_base_enc_set_max_encode_size      (D3DGstNvBaseEnc * nvenc,
                                                guint max_width,
                                                guint max_height);
 
-#endif /* __GST_NV_BASE_ENC_H_INCLUDED__ */
+#endif /* __GST_D3D_NV_BASE_ENC_H_INCLUDED__ */

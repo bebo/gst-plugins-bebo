@@ -313,7 +313,7 @@ gst_nv_base_enc_class_init (D3DGstNvBaseEncClass * klass)
 static gboolean
 _get_supported_input_formats (D3DGstNvBaseEnc * nvenc)
 {
-  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_GET_CLASS (nvenc);
+  D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (nvenc);
   guint64 format_mask = 0;
   uint32_t i, num = 0;
   NV_ENC_BUFFER_FORMAT formats[64];
@@ -419,7 +419,7 @@ static gboolean
 gst_nv_base_enc_open (GstVideoEncoder * enc)
 {
   GST_WARNING("OPEN NVENC");
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   if (!gst_nv_base_enc_ensure_gl_context(nvenc)) {
     GST_ERROR("COULD NOT OPEN");
     return FALSE;
@@ -463,7 +463,7 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
 static void
 gst_nv_base_enc_set_context (GstElement * element, GstContext * context)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (element);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (element);
 
 #if HAVE_NVENC_GST_GL
   gst_gl_handle_set_context (element, context,
@@ -480,7 +480,7 @@ gst_nv_base_enc_set_context (GstElement * element, GstContext * context)
 static gboolean
 gst_nv_base_enc_sink_query (GstVideoEncoder * enc, GstQuery * query)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   switch (GST_QUERY_TYPE (query)) {
 #if HAVE_NVENC_GST_GL
@@ -508,7 +508,7 @@ gst_nv_base_enc_sink_query (GstVideoEncoder * enc, GstQuery * query)
 static gboolean
 gst_nv_base_enc_start (GstVideoEncoder * enc)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
@@ -599,7 +599,7 @@ _create_device_d3d11() {
 
 static void
 _init_d3d11_context(GstGLContext* gl_context, gpointer * nvenc) {
-  D3DGstNvBaseEnc *self = GST_NV_BASE_ENC (nvenc);
+  D3DGstNvBaseEnc *self = GST_D3D_NV_BASE_ENC (nvenc);
 
   GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
 
@@ -620,7 +620,7 @@ _init_d3d11_context(GstGLContext* gl_context, gpointer * nvenc) {
 static gboolean
 gst_nv_base_enc_ensure_gl_context(GstVideoEncoder * enc)
 {
-  D3DGstNvBaseEnc *self = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *self = GST_D3D_NV_BASE_ENC (enc);
   GError *error = NULL;
 
   if (self->context) {
@@ -678,7 +678,7 @@ context_error:
 static gboolean
 gst_nv_base_enc_stop (GstVideoEncoder * enc)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
 
@@ -720,7 +720,7 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
 static GValue *
 _get_interlace_modes (D3DGstNvBaseEnc * nvenc)
 {
-  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_GET_CLASS (nvenc);
+  D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (nvenc);
   NV_ENC_CAPS_PARAM caps_param = { 0, };
   GValue *list = g_new0 (GValue, 1);
   GValue val = G_VALUE_INIT;
@@ -752,7 +752,7 @@ _get_interlace_modes (D3DGstNvBaseEnc * nvenc)
 static GstCaps *
 gst_nv_base_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   GstCaps *supported_incaps = NULL;
   GstCaps *template_caps, *caps;
 
@@ -793,7 +793,7 @@ gst_nv_base_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
 static gboolean
 gst_nv_base_enc_close (GstVideoEncoder * enc)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   if (nvenc->encoder) {
     if (NvEncDestroyEncoder (nvenc->encoder) != NV_ENC_SUCCESS)
@@ -1234,8 +1234,8 @@ static gboolean
 gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
 {
   GST_INFO("SET FORMAT");
-  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_GET_CLASS (enc);
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   GstVideoInfo *info = &state->info;
   GstVideoCodecState *old_state = nvenc->input_state;
   NV_ENC_RECONFIGURE_PARAMS reconfigure_params = { 0, };
@@ -1757,7 +1757,7 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
     GstVideoInfo * info, void *inputBuffer, void *inputBufferPtr,
     NV_ENC_BUFFER_FORMAT bufferFormat, void *outputBufferPtr)
 {
-  D3DGstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_GET_CLASS (nvenc);
+  D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (nvenc);
   NV_ENC_PIC_PARAMS pic_params = { 0, };
   NVENCSTATUS nv_ret;
 
@@ -1829,7 +1829,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
   GST_INFO("HANDLE FRAME");
   gpointer input_buffer = NULL;
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
   GstVideoFrame vframe;
@@ -1988,7 +1988,7 @@ gst_nv_base_enc_drain_encoder (D3DGstNvBaseEnc * nvenc)
 static GstFlowReturn
 gst_nv_base_enc_finish (GstVideoEncoder * enc)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   GST_FIXME_OBJECT (enc, "implement finish");
 
@@ -2020,7 +2020,7 @@ static void
 gst_nv_base_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (object);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (object);
 
   switch (prop_id) {
     case PROP_DEVICE_ID:
@@ -2065,7 +2065,7 @@ static void
 gst_nv_base_enc_get_property (GObject * object, guint prop_id, GValue * value,
     GParamSpec * pspec)
 {
-  D3DGstNvBaseEnc *nvenc = GST_NV_BASE_ENC (object);
+  D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (object);
 
   switch (prop_id) {
     case PROP_DEVICE_ID:
@@ -2100,7 +2100,7 @@ gst_nv_base_enc_get_property (GObject * object, guint prop_id, GValue * value,
 
 static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQuery * query)
 {
-  D3DGstNvBaseEnc *self= GST_NV_BASE_ENC (enc);
+  D3DGstNvBaseEnc *self= GST_D3D_NV_BASE_ENC (enc);
   GST_LOG_OBJECT(self, "gst_nv_base_enc_propose_allocation");
   GST_ERROR("PROPOSE ALLOCATION");
   GstCaps *caps;
