@@ -51,7 +51,7 @@ typedef enum {
   GST_NV_PRESET_LOW_LATENCY_HP,
   GST_NV_PRESET_LOSSLESS_DEFAULT,
   GST_NV_PRESET_LOSSLESS_HP,
-} GstNvPreset;
+} D3DGstNvPreset;
 
 typedef enum {
   GST_NV_RC_MODE_DEFAULT,
@@ -59,16 +59,16 @@ typedef enum {
   GST_NV_RC_MODE_CBR,
   GST_NV_RC_MODE_VBR,
   GST_NV_RC_MODE_VBR_MINQP,
-} GstNvRCMode;
+} D3DGstNvRCMode;
 
 typedef struct {
   GstVideoEncoder video_encoder;
 
   /* properties */
   guint           cuda_device_id;
-  GstNvPreset     preset_enum;
+  D3DGstNvPreset     preset_enum;
   GUID            selected_preset;
-  GstNvRCMode     rate_control_mode;
+  D3DGstNvRCMode     rate_control_mode;
   gint            qp_min;
   gint            qp_max;
   gint            qp_const;
