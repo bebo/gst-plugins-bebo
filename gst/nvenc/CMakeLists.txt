@@ -58,8 +58,6 @@ TARGET_LINK_LIBRARIES(libgstd3dnvenc
   rpcrt4
   uuid
   winmm
-  cuda
-  cudart
   opengl32
   D3d11
 )
