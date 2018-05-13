@@ -8,7 +8,7 @@ project(bebo-gst)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(GST_INSTALL_BASE "${CMAKE_SOURCE_DIR}/third_party/gstreamer" CACHE INTERNAL "Path to the GStreamer install base")
-set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/Video_Codec_SDK_8.1.24" CACHE INTERNAL "Path to NVENC SDK")
+set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/Video_Codec_SDK_7.1.9/Video_Codec_SDK_7.1.9" CACHE INTERNAL "Path to NVENC SDK")
 
 
 # Use folders in the resulting project files.
@@ -21,6 +21,7 @@ find_package(D3D11 REQUIRED)
 include(DownloadDependency)
 DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/gstreamer-base/gstreamer.tar.bz2" "gstreamer")
 
+DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/third_party/Video_Codec_SDK_7.1.9.tar.bz2" "Video_Codec_SDK_7.1.9")
 #
 # Target configuration.
 #
