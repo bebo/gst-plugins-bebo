@@ -75,7 +75,6 @@ typedef struct {
   guint           bitrate;
   gint            gop_size;
 
-  CUcontext       cuda_ctx;
   void          * encoder;
 
   /* the supported input formats */

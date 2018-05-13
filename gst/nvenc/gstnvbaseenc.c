@@ -30,9 +30,6 @@
 #include <GL/glext.h>
 #include <GL/wglext.h>
 /* #if HAVE_NVENC_GST_GL */
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <cuda_gl_interop.h>
 #include <gst/gl/gl.h>
 #include <gst/video/gstvideometa.h>
 
@@ -443,8 +440,8 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     nv_ret = NvEncOpenEncodeSessionEx (&params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
-      if (gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
-        nvenc->cuda_ctx = NULL;
+      //if (gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
+        //nvenc->cuda_ctx = NULL;
       return FALSE;
     }
     GST_INFO ("created NVENC encoder %p", nvenc->encoder);
@@ -801,11 +798,11 @@ gst_nv_base_enc_close (GstVideoEncoder * enc)
     nvenc->encoder = NULL;
   }
 
-  if (nvenc->cuda_ctx) {
-    if (!gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
-      return FALSE;
-    nvenc->cuda_ctx = NULL;
-  }
+  //if (nvenc->cuda_ctx) {
+  //  if (!gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
+  //    return FALSE;
+  //  nvenc->cuda_ctx = NULL;
+  //}
 
   GST_OBJECT_LOCK (nvenc);
   g_free (nvenc->input_formats);
@@ -1139,7 +1136,7 @@ gst_nv_base_enc_free_buffers (D3DGstNvBaseEnc * nvenc)
     if (nvenc->gl_input) {
       struct gl_input_resource *in_gl_resource = nvenc->input_bufs[i];
 
-      cuCtxPushCurrent (nvenc->cuda_ctx);
+      // cuCtxPushCurrent (nvenc->cuda_ctx);
       nv_ret =
           NvEncUnregisterResource (nvenc->encoder,
           in_gl_resource->nv_resource.registeredResource);
@@ -1148,7 +1145,7 @@ gst_nv_base_enc_free_buffers (D3DGstNvBaseEnc * nvenc)
             in_gl_resource, nv_ret);
 
       g_free (in_gl_resource);
-      cuCtxPopCurrent (NULL);
+      //cuCtxPopCurrent (NULL);
     } else
 #endif
     {
@@ -1448,7 +1445,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       for (i = 0; i < nvenc->n_bufs; ++i) {
         struct gl_input_resource *in_gl_resource =
             g_new0 (struct gl_input_resource, 1);
-        CUresult cu_ret;
+        // CUresult cu_ret;
 
         memset (&in_gl_resource->nv_resource, 0,
             sizeof (in_gl_resource->nv_resource));
