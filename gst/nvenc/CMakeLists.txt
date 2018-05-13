@@ -1,9 +1,4 @@
-
-CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
-
 PROJECT(libgstd3dnvenc)
-
-SET(CUDA_PATH "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include")
 
 SET_PROPERTY(
   DIRECTORY
@@ -25,8 +20,6 @@ INCLUDE_DIRECTORIES(
 
 LINK_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib
-  "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\include"
-  "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v9.1\\lib\\x64"
 )
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
@@ -43,8 +36,6 @@ ADD_LIBRARY(libgstd3dnvenc SHARED
   gstnvenc.h
   gstnvh264enc.c
   gstnvh264enc.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
 )
 
 TARGET_LINK_LIBRARIES(libgstd3dnvenc
@@ -59,5 +50,5 @@ TARGET_LINK_LIBRARIES(libgstd3dnvenc
   uuid
   winmm
   opengl32
-  D3d11
+  d3d11
 )
