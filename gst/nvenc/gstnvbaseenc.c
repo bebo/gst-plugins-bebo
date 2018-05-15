@@ -582,14 +582,14 @@ _create_device_d3d11() {
   GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
   
-  GUID myIID_ID3D112Multithread = {
-    0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
+  //GUID myIID_ID3D112Multithread = {
+  //  0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
 
-  ID3D11Multithread *mt;
-  hr = (device)->lpVtbl->QueryInterface(device, &myIID_ID3D112Multithread,
-      (void**)&mt);
-  g_assert(hr == S_OK);
-  mt->lpVtbl->SetMultithreadProtected(mt, TRUE);
+  //ID3D11Multithread *mt;
+  //hr = (device)->lpVtbl->QueryInterface(device, &myIID_ID3D112Multithread,
+  //    (void**)&mt);
+  //g_assert(hr == S_OK);
+  //mt->lpVtbl->SetMultithreadProtected(mt, TRUE);
 
   return device;
 }
@@ -879,12 +879,38 @@ _find_frame_with_output_buffer (D3DGstNvBaseEnc * nvenc, NV_ENC_OUTPUT_PTR out_b
   return ret;
 }
 
+struct bslock {
+  NV_ENC_LOCK_BITSTREAM *lock_bs;
+  void* encoder;
+  NV_ENC_OUTPUT_PTR out_buf;
+};
+
+static void
+lock_bitstream_helper(GstGLContext *ctx, struct bslock* bs) {
+  NVENCSTATUS nv_ret = NvEncLockBitstream(bs->encoder, bs->lock_bs);
+  if (nv_ret != NV_ENC_SUCCESS) {
+    /* FIXME: what to do here? */
+    GST_ERROR("Failed to lock bitstream: %d", nv_ret);
+    bs->out_buf = SHUTDOWN_COOKIE;
+  }
+}
+
+static void
+unlock_bitstream_helper(GstGLContext *ctx, struct bslock* bs) {
+  NVENCSTATUS nv_ret = NvEncUnlockBitstream(bs->encoder, bs->out_buf);
+  if (nv_ret != NV_ENC_SUCCESS) {
+    /* FIXME: what to do here? */
+    GST_ERROR("Failed to unlock bitsream: %d", nv_ret);
+    bs->out_buf = SHUTDOWN_COOKIE;
+  }
+}
+
 static gpointer
 gst_nv_base_enc_bitstream_thread (gpointer user_data)
 {
   GstVideoEncoder *enc = user_data;
   D3DGstNvBaseEnc *nvenc = user_data;
-
+  NVENCSTATUS nv_ret;
   GstDXGID3D11Context * ctx = get_dxgi_share_context(nvenc->context);
 
   /* overview of operation:
@@ -902,7 +928,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
     GstBuffer *buffers[N_BUFFERS_PER_FRAME];
     struct frame_state *state = NULL;
     GstVideoCodecFrame *frame = NULL;
-    NVENCSTATUS nv_ret;
     GstFlowReturn flow = GST_FLOW_OK;
     gint i;
 
@@ -933,16 +958,12 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 
         /* FIXME: this would need to be updated for other slice modes */
         lock_bs.sliceOffsets = NULL;
-
-        nv_ret = NvEncLockBitstream (nvenc->encoder, &lock_bs);
-        if (nv_ret != NV_ENC_SUCCESS) {
-          /* FIXME: what to do here? */
-          GST_ELEMENT_ERROR (nvenc, STREAM, ENCODE, (NULL),
-              ("Failed to lock bitstream buffer %p, ret %d",
-                  lock_bs.outputBitstream, nv_ret));
-          out_buf = SHUTDOWN_COOKIE;
-          break;
-        }
+        struct bslock b = {
+          .lock_bs = &lock_bs,
+          .out_buf = out_buf,
+          .encoder = nvenc->encoder
+        };
+        gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)lock_bitstream_helper, &b);
 
         GST_LOG_OBJECT (nvenc, "picture type %d", lock_bs.pictureType);
 
@@ -969,15 +990,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         /* TODO: use lock_bs.outputTimeStamp and lock_bs.outputDuration */
         /* TODO: check pts/dts is handled properly if there are B-frames */
 
-        nv_ret = NvEncUnlockBitstream (nvenc->encoder, state->out_bufs[i]);
-        if (nv_ret != NV_ENC_SUCCESS) {
-          /* FIXME: what to do here? */
-          GST_ELEMENT_ERROR (nvenc, STREAM, ENCODE, (NULL),
-              ("Failed to unlock bitstream buffer %p, ret %d",
-                  lock_bs.outputBitstream, nv_ret));
-          state->out_bufs[i] = SHUTDOWN_COOKIE;
-          break;
-        }
+        gst_gl_context_thread_add(nvenc->context, unlock_bitstream_helper, &b);
 
         GST_LOG_OBJECT (nvenc, "returning bitstream buffer %p to pool",
             state->out_bufs[i]);
