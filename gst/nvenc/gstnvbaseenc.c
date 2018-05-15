@@ -1019,7 +1019,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         struct gl_input_resource *in_gl_resource = in_buf;
         gst_buffer_unref(in_gl_resource->buf);
 
-#if 0
+#if 1
         nv_ret =
             NvEncUnmapInputResource (nvenc->encoder,
             in_gl_resource->nv_mapped_resource.mappedResource);
@@ -1850,7 +1850,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   guint frame_n = 0;
   g_assert (nvenc->encoder != NULL);
 
-
   if (g_atomic_int_compare_and_exchange (&nvenc->reconfig, TRUE, FALSE)) {
     if (!gst_nv_base_enc_set_format (enc, nvenc->input_state))
       return GST_FLOW_ERROR;
@@ -1909,7 +1908,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       in_gl_resource, nv_ret);
     return GST_FLOW_ERROR;
   }
-#if 0
+#if 1
   in_gl_resource->nv_mapped_resource.version = NV_ENC_MAP_INPUT_RESOURCE_VER;
   in_gl_resource->nv_mapped_resource.registeredResource =
       in_gl_resource->nv_resource.registeredResource;
@@ -1938,6 +1937,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 
   gst_buffer_ref(frame->input_buffer);  // FIXME unref somewhere
   in_gl_resource->buf = frame->input_buffer;
+
   flow =
     _submit_input_buffer(nvenc, frame, &info, in_gl_resource,
       in_gl_resource->nv_resource.registeredResource,
