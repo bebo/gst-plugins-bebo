@@ -32,9 +32,3 @@ plugin_init (GstPlugin * plugin)
   return gst_element_register (plugin, "dshowfiltersink",
       GST_RANK_NONE, GST_TYPE_SHM_SINK);
 }
-
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
-    GST_VERSION_MINOR,
-    shm,
-    "DirectShow filter sink",
-    plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
