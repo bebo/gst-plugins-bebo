@@ -25,5 +25,4 @@ DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/third_party
 #
 # Target configuration.
 #
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/gst/nvenc)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/gst/dshowfiltersink)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/gst)
