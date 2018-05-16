@@ -42,6 +42,8 @@ set FILENAME=gst-bebo_%TAG%.zip
 @if errorlevel 1 (
   exit /b %errorlevel%
 )
+
+cd ..
 "C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-bebo/%FILENAME% --body %FILENAME%
 
 @if errorlevel 1 (
