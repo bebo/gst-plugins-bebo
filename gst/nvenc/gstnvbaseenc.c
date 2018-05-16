@@ -905,6 +905,28 @@ unlock_bitstream_helper(GstGLContext *ctx, struct bslock* bs) {
   }
 }
 
+struct umh {
+  void* encoder;
+  struct gl_input_resource * in_gl_resource;
+};
+
+static void
+unmap_helper(GstGLContext *ctx, struct umh *u) {
+  NVENCSTATUS nv_ret =
+    NvEncUnmapInputResource(u->encoder,
+      u->in_gl_resource->nv_mapped_resource.mappedResource);
+  if (nv_ret != NV_ENC_SUCCESS) {
+    GST_ERROR_OBJECT("Failed to unmap input resource %p, ret %d",
+      u->in_gl_resource, nv_ret);
+  }
+  nv_ret =
+    NvEncUnregisterResource(u->encoder,
+      u->in_gl_resource->nv_resource.registeredResource);
+  if (nv_ret != NV_ENC_SUCCESS)
+    GST_ERROR_OBJECT("Failed to unregister resource %p, ret %d",
+      u->in_gl_resource, nv_ret);
+}
+
 static gpointer
 gst_nv_base_enc_bitstream_thread (gpointer user_data)
 {
@@ -1013,27 +1035,20 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
     for (i = 0; i < state->n_buffers; i++) {
       void *in_buf = state->in_bufs[i];
       g_assert (in_buf != NULL);
-
-#if HAVE_NVENC_GST_GL
       if (nvenc->gl_input) {
         struct gl_input_resource *in_gl_resource = in_buf;
         gst_buffer_unref(in_gl_resource->buf);
 
-#if 1
-        nv_ret =
-            NvEncUnmapInputResource (nvenc->encoder,
-            in_gl_resource->nv_mapped_resource.mappedResource);
-        if (nv_ret != NV_ENC_SUCCESS) {
-          GST_ERROR_OBJECT (nvenc, "Failed to unmap input resource %p, ret %d",
-              in_gl_resource, nv_ret);
-          break;
-        }
+        struct umh u = {
+          .encoder = nvenc->encoder,
+          .in_gl_resource = in_gl_resource
+        };
+        gst_gl_context_thread_add(nvenc->context, unmap_helper, &u);
 
         memset (&in_gl_resource->nv_mapped_resource, 0,
             sizeof (in_gl_resource->nv_mapped_resource));
-#endif
       }
-#endif
+
 
       g_async_queue_push (nvenc->in_bufs_pool, in_buf);
     }
