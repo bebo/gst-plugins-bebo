@@ -630,6 +630,7 @@ gst_nv_base_enc_ensure_gl_context(GstVideoEncoder * enc)
           (GstGLDisplay **) & self->display,
           (GstGLContext **) & self->other_context);
   }
+  GST_INFO_OBJECT(self, "other_context:%" GST_PTR_FORMAT, self->other_context);
 
   if (!self->context) {
     GST_OBJECT_LOCK (self->display);
@@ -651,6 +652,7 @@ gst_nv_base_enc_ensure_gl_context(GstVideoEncoder * enc)
     } while (!gst_gl_display_add_context (self->display, self->context));
     GST_OBJECT_UNLOCK (self->display);
   }
+  GST_INFO_OBJECT(self, "context:%" GST_PTR_FORMAT, self->context);
 
   gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc) _init_d3d11_context, self);
 
