@@ -28,7 +28,6 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEB
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 ADD_LIBRARY(libbebogst SHARED
-  dshowfiltersink/gstdshowfilter.c
   dshowfiltersink/gstdshowsink.c
   dshowfiltersink/gstdshowsink.h
   ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
@@ -68,6 +67,7 @@ INCLUDE_DIRECTORIES(
   ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
   ${NVENC_SDK_BASE}/Samples/Common/inc
   ${CMAKE_SOURCE_DIR}/gst-libs/gst
+  ${CMAKE_SOURCE_DIR}/gst
   ${CUDA_PATH}
 )
 
