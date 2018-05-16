@@ -6,6 +6,7 @@
 [._]s[a-v][a-z]
 [._]sw[a-p]
 
+cmake-build-debug/
 # Session
 Session.vim
 
