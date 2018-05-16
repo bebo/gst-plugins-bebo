@@ -1933,6 +1933,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   nv_ret =
       NvEncMapInputResource (nvenc->encoder,
       &in_gl_resource->nv_mapped_resource);
+
   if (nv_ret != NV_ENC_SUCCESS) {
     GST_ERROR_OBJECT (nvenc, "Failed to map input resource %p, ret %d",
         in_gl_resource, nv_ret);
@@ -1957,10 +1958,8 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 
   flow =
     _submit_input_buffer(nvenc, frame, &info, in_gl_resource,
-      in_gl_resource->nv_resource.registeredResource,
-      in_gl_resource->nv_resource.bufferFormat, out_buf);
-//      in_gl_resource->nv_mapped_resource.mappedResource,
-//      in_gl_resource->nv_mapped_resource.mappedBufferFmt, out_buf);
+      in_gl_resource->nv_mapped_resource.mappedResource,
+      in_gl_resource->nv_mapped_resource.mappedBufferFmt, out_buf);
 
   /* encoder will keep frame in list internally, we'll look it up again later
     * in the thread where we get the output buffers and finish it there */
