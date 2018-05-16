@@ -16,7 +16,6 @@ cmake --build . --config Release
 )
 
 set FILENAME=gst-bebo_%TAG%.zip
-set RELEASE_NAME=gst-bebo_%ENV%.zip
 "C:\Program Files\7-Zip\7z.exe" a -r ..\%FILENAME% -w .\gst\Release\* -mem=AES256
 
 @if errorlevel 1 (
@@ -24,8 +23,7 @@ set RELEASE_NAME=gst-bebo_%ENV%.zip
 )
 
 cd ..
-"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-cef/%FILENAME% --body %FILENAME%
-"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-cef/%RELEASE_NAME% --body %FILENAME%
+"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-bebo/%FILENAME% --body %FILENAME%
 
 @if errorlevel 1 (
   exit /b %errorlevel%
