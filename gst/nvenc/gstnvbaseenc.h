@@ -96,6 +96,9 @@ typedef struct {
   /* output bufs in use (input bufs in use are tracked via the codec frames) */
   GAsyncQueue    *bitstream_queue;
 
+  // Used for test
+  GQueue *frame_queue;
+
   /* we spawn a thread that does the (blocking) waits for output buffers
    * to become available, so we can continue to feed data to the encoder
    * while we wait */
