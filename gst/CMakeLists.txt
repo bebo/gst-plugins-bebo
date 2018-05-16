@@ -28,7 +28,6 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEB
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 ADD_LIBRARY(libbebogst SHARED
-  dshowfiltersink/config.h
   dshowfiltersink/gstdshowfilter.c
   dshowfiltersink/gstdshowsink.c
   dshowfiltersink/gstdshowsink.h
