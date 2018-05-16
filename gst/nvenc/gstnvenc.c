@@ -23,7 +23,7 @@
 
 #include "gstnvenc.h"
 #include "gstnvh264enc.h"
-
+#include "dshowfiltersink/gstdshowsink.h"
 GST_DEBUG_CATEGORY (gst_nvenc_debug);
 
 static NV_ENCODE_API_FUNCTION_LIST nvenc_api;
@@ -354,6 +354,8 @@ plugin_init (GstPlugin * plugin)
 
     gst_element_register (plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
         gst_nv_h264_enc_get_type ());
+    gst_element_register(plugin, "dshowfiltersink",
+      GST_RANK_NONE, GST_TYPE_SHM_SINK);
   }
 
   return TRUE;
@@ -361,6 +363,6 @@ plugin_init (GstPlugin * plugin)
 
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    d3dnvenc,
+    bebo,
     "GStreamer NVENC plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
