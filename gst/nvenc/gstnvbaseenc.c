@@ -510,6 +510,7 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
   nvenc->in_bufs_pool = g_async_queue_new ();
+  nvenc->frame_queue = g_queue_new();
 
   nvenc->last_flow = GST_FLOW_OK;
   nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
@@ -1857,6 +1858,12 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   GST_INFO("HANDLE FRAME");
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
+  g_queue_push_tail(nvenc->frame_queue, frame);
+  if (g_queue_get_length(nvenc->frame_queue) < 5) {
+    return GST_FLOW_OK;
+  }
+  frame = g_queue_pop_head(nvenc->frame_queue);
+
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
   GstVideoFrame vframe;
