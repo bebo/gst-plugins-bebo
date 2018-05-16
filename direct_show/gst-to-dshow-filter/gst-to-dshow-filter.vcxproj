@@ -105,7 +105,7 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">true</LinkIncremental>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)lib\$(Platform);$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)third_party\lib;$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(SolutionDir)lib\$(Platform);$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <LibraryPath Condition="'$(Configuration)|$(Platform)'=='releasex64|Win32'">$(SolutionDir)$(Platform)\$(Configuration)\;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
@@ -117,7 +117,7 @@
     <TargetName Condition="'$(Configuration)|$(Platform)'=='releasex64|x64'">$(ProjectName)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(SolutionDir)lib\$(Platform);$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)third_party\lib;$(SolutionDir)$(Platform)\$(Configuration);$(DXSDK_DIR)Lib\$(PlatformTarget);$(LibraryPath)</LibraryPath>
     <IncludePath>$(SolutionDir)third_party\g2log;$(SolutionDir)third_party\libyuv\include;$(SolutionDir)third_party\ipc-util;$(SolutionDir)util;$(SolutionDir)third_party\win7-directshow-samples\baseclasses;$(IncludePath)</IncludePath>
     <TargetExt>.DLL</TargetExt>
     <ExtensionsToDeleteOnClean>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName).lib;$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName).exp;$(ExtensionsToDeleteOnClean)</ExtensionsToDeleteOnClean>
@@ -173,6 +173,7 @@
       <AdditionalOptions>/VERBOSE:LIB %(AdditionalOptions)</AdditionalOptions>
       <Version>
       </Version>
+      <ImportLibrary>$(OutDir)$(TargetName).lib</ImportLibrary>
     </Link>
     <ProjectReference />
   </ItemDefinitionGroup>
@@ -317,11 +318,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\third_party\g2log\active.cpp" />
-    <ClCompile Include="..\third_party\g2log\crashhandler_win.cpp" />
-    <ClCompile Include="..\third_party\g2log\g2log.cpp" />
-    <ClCompile Include="..\third_party\g2log\g2logworker.cpp" />
-    <ClCompile Include="..\third_party\g2log\g2time.cpp" />
+    <ClCompile Include="..\..\third_party\g2log\active.cpp" />
+    <ClCompile Include="..\..\third_party\g2log\crashhandler_win.cpp" />
+    <ClCompile Include="..\..\third_party\g2log\g2log.cpp" />
+    <ClCompile Include="..\..\third_party\g2log\g2logworker.cpp" />
+    <ClCompile Include="..\..\third_party\g2log\g2time.cpp" />
     <ClCompile Include="allocator.cpp" />
     <ClCompile Include="DibHelper.cpp" />
     <ClCompile Include="Logging.cpp" />
@@ -335,11 +336,11 @@
     <None Include="gst-to-dshow.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\third_party\g2log\active.h" />
-    <ClInclude Include="..\third_party\g2log\crashhandler.h" />
-    <ClInclude Include="..\third_party\g2log\g2log.h" />
-    <ClInclude Include="..\third_party\g2log\g2logworker.h" />
-    <ClInclude Include="..\third_party\g2log\g2time.h" />
+    <ClInclude Include="..\..\third_party\g2log\active.h" />
+    <ClInclude Include="..\..\third_party\g2log\crashhandler.h" />
+    <ClInclude Include="..\..\third_party\g2log\g2log.h" />
+    <ClInclude Include="..\..\third_party\g2log\g2logworker.h" />
+    <ClInclude Include="..\..\third_party\g2log\g2time.h" />
     <ClInclude Include="..\third_party\g2log\shared_queue.h" />
     <ClInclude Include="allocator.h" />
     <ClInclude Include="DibHelper.h" />
