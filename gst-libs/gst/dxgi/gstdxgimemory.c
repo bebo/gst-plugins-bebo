@@ -24,6 +24,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
+#include "gstdxgidevice.h"
 #include "gstdxgimemory.h"
 
 #ifdef NDEBUG

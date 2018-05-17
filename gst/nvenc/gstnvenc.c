@@ -323,10 +323,9 @@ gst_nvenc_get_nv_buffer_format (GstVideoFormat fmt)
 //  return (cuCtxDestroy (ctx) == CUDA_SUCCESS);
 //}
 
-
 typedef NVENCSTATUS(NVENCAPI* PNVENCODEAPICREATEINSTANCE)(NV_ENCODE_API_FUNCTION_LIST *functionList);
-static gboolean
-plugin_init (GstPlugin * plugin)
+
+gboolean load_nvenc_dlls()
 {
   GST_DEBUG_CATEGORY_INIT (gst_nvenc_debug, "nvenc", 0, "Nvidia NVENC encoder");
 
@@ -347,22 +346,11 @@ plugin_init (GstPlugin * plugin)
       return FALSE;
   }
   nvenc_api.version = NV_ENCODE_API_FUNCTION_LIST_VER;
-  if (nvEncodeAPICreateInstance (&nvenc_api) != NV_ENC_SUCCESS) {
-    GST_ERROR ("Failed to get NVEncodeAPI function table!");
+  if (nvEncodeAPICreateInstance(&nvenc_api) != NV_ENC_SUCCESS) {
+    GST_ERROR("Failed to get NVEncodeAPI function table!");
+    return FALSE;
   } else {
-    GST_INFO ("Created NVEncodeAPI instance, got function table");
-
-    gst_element_register (plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
-        gst_nv_h264_enc_get_type ());
-    gst_element_register(plugin, "dshowfiltersink",
-      GST_RANK_NONE, GST_TYPE_SHM_SINK);
-  }
-
-  return TRUE;
+    GST_INFO("Created NVEncodeAPI instance, got function table");
+    return TRUE;
+  } 
 }
-
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
-    GST_VERSION_MINOR,
-    bebo,
-    "GStreamer NVENC plugin",
-    plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

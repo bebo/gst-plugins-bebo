@@ -32,6 +32,7 @@
 /* #if HAVE_NVENC_GST_GL */
 #include <gst/gl/gl.h>
 #include <gst/video/gstvideometa.h>
+#include "gstdxgidevice.h"
 
 #include <D3d11_4.h>
 
@@ -529,94 +530,14 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   return TRUE;
 }
 
-static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
-  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
 
-  share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
-  share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXCloseDeviceNV");
-  share_context->wglDXRegisterObjectNV = (PFNWGLDXREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
-  share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
-  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
-  share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
-  share_context->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
-}
-
-const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
-{
-  D3D_FEATURE_LEVEL_11_1,
-  D3D_FEATURE_LEVEL_11_0,
-  D3D_FEATURE_LEVEL_10_1
-};
-
-static ID3D11Device*
-_create_device_d3d11() {
-  ID3D11Device *device;
-
-  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_11_1;
-
-  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-
-#ifdef _DEBUG
-  flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-  HRESULT hr = D3D11CreateDevice(
-      NULL,
-      D3D_DRIVER_TYPE_HARDWARE,
-      NULL,
-      flags,
-      d3d_feature_levels,
-      sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
-      D3D11_SDK_VERSION,
-      &device,
-      &level_used,
-      NULL);
-
-  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
-      (unsigned int) level_used, (unsigned int) level_used);
-  
-  //GUID myIID_ID3D112Multithread = {
-  //  0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
-
-  //ID3D11Multithread *mt;
-  //hr = (device)->lpVtbl->QueryInterface(device, &myIID_ID3D112Multithread,
-  //    (void**)&mt);
-  //g_assert(hr == S_OK);
-  //mt->lpVtbl->SetMultithreadProtected(mt, TRUE);
-
-  return device;
-}
-
-static void
-_init_d3d11_context(GstGLContext* gl_context, gpointer * nvenc) {
-  D3DGstNvBaseEnc *self = GST_D3D_NV_BASE_ENC (nvenc);
-
-  GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
-
-  init_wgl_functions(gl_context, share_context);
-
-  share_context->d3d11_device = _create_device_d3d11();
-  g_assert( share_context->d3d11_device != NULL);
-
-  share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
-  g_assert( share_context->device_interop_handle != NULL);
-
-  g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
-
-
-  // TODO: need to free these memory and close interop
-}
 
 static gboolean
-gst_nv_base_enc_ensure_gl_context(GstVideoEncoder * enc)
+gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
+{
+  return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
+}
+#if 0
 {
   D3DGstNvBaseEnc *self = GST_D3D_NV_BASE_ENC (enc);
   GError *error = NULL;
@@ -674,6 +595,7 @@ context_error:
     return FALSE;
   }
 }
+#endif 
 
 static gboolean
 gst_nv_base_enc_stop (GstVideoEncoder * enc)
@@ -1855,7 +1777,6 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 static GstFlowReturn
 gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
-  GST_INFO("HANDLE FRAME");
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   g_queue_push_tail(nvenc->frame_queue, frame);

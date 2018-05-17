@@ -1,8 +1,6 @@
-/* GStreamer
- * Copyright (C) <2018> Pigs in Flight, Inc (Bebo)
- * Copyright (C) <2009> Collabora Ltd
- *  @author: Olivier Crete <olivier.crete@collabora.co.uk
- * Copyright (C) <2009> Nokia Inc
+/* GStreamer NVENC plugin
+ * Copyright (C) 2015 Centricular Ltd
+ * Copyright (C) 2018 Pigs In Flight, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -24,11 +22,28 @@
 #include "config.h"
 #endif
 
-#include "gstdshowsink.h"
+#include <gst/gst.h>
+#include "dshowfiltersink/gstdshowsink.h"
+#include "nvenc/gstnvh264enc.h"
+#include "nvenc/gstnvenc.h"
+
 
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
-  return gst_element_register (plugin, "dshowfiltersink",
-      GST_RANK_NONE, GST_TYPE_SHM_SINK);
+
+  if (!load_nvenc_dlls()) {
+    return FALSE;
+  }
+  gst_element_register (plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
+      gst_nv_h264_enc_get_type ());
+  gst_element_register(plugin, "dshowfiltersink",
+    GST_RANK_NONE, GST_TYPE_SHM_SINK);
+  return TRUE;
 }
+
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+    GST_VERSION_MINOR,
+    bebo,
+    "Bebo GStreamer plugin",
+    plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
