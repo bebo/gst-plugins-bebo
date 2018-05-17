@@ -413,6 +413,149 @@ _get_supported_input_formats (D3DGstNvBaseEnc * nvenc)
   return TRUE;
 }
 
+
+struct NvEncOpenEncodeSessionExParams {
+  NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS * params;
+  void ** encoder;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncOpenEncodeSessionEx(GstGLContext *context, struct NvEncOpenEncodeSessionExParams * p) {
+  p->status = NvEncOpenEncodeSessionEx (p->params, p->encoder);
+}
+
+static int gl_NvEncOpenEncodeSessionEx(GstGLContext *context, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS* params, void ** encoder) {
+
+  struct NvEncOpenEncodeSessionExParams p = {
+      .params = params,
+      .encoder = encoder,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncOpenEncodeSessionEx, &p);
+  return p.status;
+}
+
+//NVENCSTATUS NVENCAPI NvEncInitializeEncoder  (void* encoder, NV_ENC_INITIALIZE_PARAMS* createEncodeParams);
+struct NvEncInitializeEncoderParams {
+  void * encoder;
+  NV_ENC_INITIALIZE_PARAMS * createEncodeParams;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncInitializeEncoder(GstGLContext *context, struct NvEncInitializeEncoderParams * p) {
+  p->status = NvEncInitializeEncoder(p->encoder, p->createEncodeParams);
+}
+
+static int gl_NvEncInitializeEncoder(GstGLContext *context,void* encoder, NV_ENC_INITIALIZE_PARAMS* createEncodeParams)
+{
+
+  struct NvEncInitializeEncoderParams p = {
+      .encoder = encoder,
+      .createEncodeParams = createEncodeParams,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncInitializeEncoder, &p);
+  return p.status;
+}
+
+// NVENCSTATUS NVENCAPI NvEncReconfigureEncoder                   (void *encoder, NV_ENC_RECONFIGURE_PARAMS* reInitEncodeParams);
+struct NvEncReconfigureEncoderParams {
+  void * encoder;
+  NV_ENC_RECONFIGURE_PARAMS * reInitEncodeParams;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncReconfigureEncoder(GstGLContext *context, struct NvEncReconfigureEncoderParams * p) {
+  p->status = NvEncReconfigureEncoder(p->encoder, p->reInitEncodeParams);
+}
+
+static int gl_NvEncReconfigureEncoder(GstGLContext *context,void* encoder, NV_ENC_RECONFIGURE_PARAMS* reInitEncodeParams)
+{
+
+  struct NvEncReconfigureEncoderParams p = {
+      .encoder = encoder,
+      .reInitEncodeParams = reInitEncodeParams,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncReconfigureEncoder, &p);
+  return p.status;
+}
+
+// NVENCSTATUS NVENCAPI NvEncCreateInputBuffer                     (void* encoder, NV_ENC_CREATE_INPUT_BUFFER* createInputBufferParams);
+struct NvEncCreateInputBufferParams {
+  void * encoder;
+  NV_ENC_CREATE_INPUT_BUFFER * createInputBufferParams;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncCreateInputBuffer(GstGLContext *context, struct NvEncCreateInputBufferParams * p) {
+  p->status = NvEncCreateInputBuffer(p->encoder, p->createInputBufferParams);
+}
+
+static int gl_NvEncCreateInputBuffer(GstGLContext *context,void* encoder, NV_ENC_CREATE_INPUT_BUFFER* createInputBufferParams)
+{
+
+  struct NvEncCreateInputBufferParams p = {
+      .encoder = encoder,
+      .createInputBufferParams = createInputBufferParams,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncCreateInputBuffer, &p);
+  return p.status;
+}
+
+// NVENCSTATUS NVENCAPI NvEncCreateBitstreamBuffer                 (void* encoder, NV_ENC_CREATE_BITSTREAM_BUFFER* createBitstreamBufferParams);
+struct NvEncCreateBitstreamBufferParams {
+  void * encoder;
+  NV_ENC_CREATE_BITSTREAM_BUFFER * createBitstreamBufferParams;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncCreateBitstreamBuffer(GstGLContext *context, struct NvEncCreateBitstreamBufferParams * p) {
+  p->status = NvEncCreateBitstreamBuffer(p->encoder, p->createBitstreamBufferParams);
+}
+
+static int gl_NvEncCreateBitstreamBuffer(GstGLContext *context,void* encoder, NV_ENC_CREATE_BITSTREAM_BUFFER* createBitstreamBufferParams)
+{
+
+  struct NvEncCreateBitstreamBufferParams p = {
+      .encoder = encoder,
+      .createBitstreamBufferParams = createBitstreamBufferParams,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncCreateBitstreamBuffer, &p);
+  return p.status;
+}
+
+// NVENCSTATUS NVENCAPI NvEncEncodePicture                         (void* encoder, NV_ENC_PIC_PARAMS* encodePicParams);
+struct NvEncEncodePictureParams {
+  void * encoder;
+  NV_ENC_PIC_PARAMS * encodePicParams;
+  NVENCSTATUS status;
+};
+
+static void 
+gl_run_NvEncEncodePicture(GstGLContext *context, struct NvEncEncodePictureParams * p) {
+  p->status = NvEncEncodePicture(p->encoder, p->encodePicParams);
+}
+
+static int gl_NvEncEncodePicture(GstGLContext *context,void* encoder, NV_ENC_PIC_PARAMS* encodePicParams)
+{
+
+  struct NvEncEncodePictureParams p = {
+      .encoder = encoder,
+      .encodePicParams = encodePicParams,
+      .status = 0
+  };
+  gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_NvEncEncodePicture, &p);
+  return p.status;
+}
+
 static gboolean
 gst_nv_base_enc_open (GstVideoEncoder * enc)
 {
@@ -438,7 +581,7 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     params.apiVersion = NVENCAPI_VERSION;
     params.device = share_context->d3d11_device;
     params.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
-    nv_ret = NvEncOpenEncodeSessionEx (&params, &nvenc->encoder);
+    nv_ret = gl_NvEncOpenEncodeSessionEx(nvenc->context, &params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
       //if (gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
@@ -1340,10 +1483,10 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   G_LOCK (initialization_lock);
   if (old_state) {
     GST_INFO("Reconfiguring encoder");
-    nv_ret = NvEncReconfigureEncoder (nvenc->encoder, &reconfigure_params);
+    nv_ret = gl_NvEncReconfigureEncoder (nvenc->context, nvenc->encoder, &reconfigure_params);
   } else {
     GST_INFO("Initializing encoder");
-    nv_ret = NvEncInitializeEncoder (nvenc->encoder, params);
+    nv_ret = gl_NvEncInitializeEncoder (nvenc->context, nvenc->encoder, params);
   }
   G_UNLOCK (initialization_lock);
 
@@ -1459,7 +1602,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
         cin_buf.bufferFmt =
             gst_nvenc_get_nv_buffer_format (GST_VIDEO_INFO_FORMAT (info));
 
-        nv_ret = NvEncCreateInputBuffer (nvenc->encoder, &cin_buf);
+        nv_ret = gl_NvEncCreateInputBuffer (nvenc->context, nvenc->encoder, &cin_buf);
 
         if (nv_ret != NV_ENC_SUCCESS) {
           GST_WARNING_OBJECT (enc, "Failed to allocate input buffer: %d",
@@ -1490,7 +1633,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       cout_buf.memoryHeap = NV_ENC_MEMORY_HEAP_SYSMEM_CACHED;
 
       G_LOCK (initialization_lock);
-      nv_ret = NvEncCreateBitstreamBuffer (nvenc->encoder, &cout_buf);
+      nv_ret = gl_NvEncCreateBitstreamBuffer (nvenc->context, nvenc->encoder, &cout_buf);
       G_UNLOCK (initialization_lock);
 
       if (nv_ret != NV_ENC_SUCCESS) {
@@ -1752,7 +1895,7 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
     return GST_FLOW_ERROR;
   }
 
-  nv_ret = NvEncEncodePicture (nvenc->encoder, &pic_params);
+  nv_ret = gl_NvEncEncodePicture(nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret == NV_ENC_SUCCESS) {
     GST_LOG_OBJECT (nvenc, "Encoded picture");
   } else if (nv_ret == NV_ENC_ERR_NEED_MORE_INPUT) {
@@ -1930,7 +2073,7 @@ gst_nv_base_enc_drain_encoder (D3DGstNvBaseEnc * nvenc)
   pic_params.version = NV_ENC_PIC_PARAMS_VER;
   pic_params.encodePicFlags = NV_ENC_PIC_FLAG_EOS;
 
-  nv_ret = NvEncEncodePicture (nvenc->encoder, &pic_params);
+  nv_ret = gl_NvEncEncodePicture (nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret != NV_ENC_SUCCESS) {
     GST_LOG_OBJECT (nvenc, "Failed to drain encoder, ret %d", nv_ret);
     return FALSE;
