@@ -97,7 +97,7 @@ typedef struct {
   GAsyncQueue    *bitstream_queue;
 
   // Used for test
-  GQueue *frame_queue;
+  GAsyncQueue *frame_queue;
 
   /* we spawn a thread that does the (blocking) waits for output buffers
    * to become available, so we can continue to feed data to the encoder
