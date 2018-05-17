@@ -28,13 +28,15 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEB
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 ADD_LIBRARY(libbebogst SHARED
+  gstbeboplugin.c
+  ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
+  ${CMAKE_SOURCE_DIR}/shared/config.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
   dshowfiltersink/gstdshowsink.c
   dshowfiltersink/gstdshowsink.h
-  ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
-
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
-  nvenc/config.h
   nvenc/gstnvbaseenc.c
   nvenc/gstnvbaseenc.h
   nvenc/gstnvenc.c
@@ -68,6 +70,7 @@ INCLUDE_DIRECTORIES(
   ${NVENC_SDK_BASE}/Samples/Common/inc
   ${CMAKE_SOURCE_DIR}/gst-libs/gst
   ${CMAKE_SOURCE_DIR}/gst
+  ${CMAKE_SOURCE_DIR}/shared
   ${CUDA_PATH}
 )
 

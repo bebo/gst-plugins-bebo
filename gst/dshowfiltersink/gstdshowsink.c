@@ -38,6 +38,7 @@
 #include <gst/video/video.h>
 #include <string.h>
 #include "shared/bebo_shmem.h"
+#include "gstdxgidevice.h"
 
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
@@ -160,6 +161,8 @@ initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps
     GST_ERROR_OBJECT(self, "could not map shmem %d", GetLastError());
     return;
   }
+
+  memset(self->shmem, 0, size);
 
   gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_RGBA, width, height);
   GstVideoInfo * info = &self->shmem->video_info;
@@ -628,6 +631,7 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 
 const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
 {
+  D3D_FEATURE_LEVEL_11_1,
   D3D_FEATURE_LEVEL_11_0,
   D3D_FEATURE_LEVEL_10_1
 };
@@ -636,7 +640,7 @@ static ID3D11Device*
 _create_device_d3d11() {
   ID3D11Device *device;
 
-  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_10_1;
+  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_11_1;
 
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 
@@ -656,52 +660,18 @@ _create_device_d3d11() {
       &level_used,
       NULL);
 
-  GST_DEBUG("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
 
   return device;
 }
 
-static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
-  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
-
-  share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
-  share_context->wglDXCloseDeviceNV = (PFNWGLDXCLOSEDEVICENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXCloseDeviceNV");
-  share_context->wglDXRegisterObjectNV = (PFNWGLDXREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXRegisterObjectNV");
-  share_context->wglDXUnregisterObjectNV = (PFNWGLDXUNREGISTEROBJECTNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnregisterObjectNV");
-  share_context->wglDXLockObjectsNV = (PFNWGLDXLOCKOBJECTSNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXLockObjectsNV");
-  share_context->wglDXUnlockObjectsNV = (PFNWGLDXUNLOCKOBJECTSNVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
-  share_context->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
-    gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
-}
-
-static void
-_init_d3d11_context(GstGLContext* gl_context, gpointer * sink) {
-  GstShmSink *self = GST_SHM_SINK (sink);
-
-  GstDXGID3D11Context *share_context = g_new(GstDXGID3D11Context, 1);
-
-  init_wgl_functions(gl_context, share_context);
-
-  share_context->d3d11_device = _create_device_d3d11();
-  g_assert( share_context->d3d11_device != NULL);
-
-  share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
-  g_assert( share_context->device_interop_handle != NULL);
-
-  g_object_set_data(gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
-  // TODO: need to free these memory and close interop
-}
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
+  return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
+}
+#if 0
   GError *error = NULL;
 
   if (self->context) {
@@ -755,6 +725,7 @@ context_error:
     return FALSE;
   }
 }
+#endif
 
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
