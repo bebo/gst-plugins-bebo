@@ -49,3 +49,6 @@ cd ..
 @if errorlevel 1 (
   exit /b %errorlevel%
 )
+
+@echo "Uploaded artifact gst-bebo/%FILENAME%"
+
