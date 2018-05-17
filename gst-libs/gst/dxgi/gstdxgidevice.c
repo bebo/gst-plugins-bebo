@@ -60,14 +60,14 @@ _create_device_d3d11() {
   GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
   
-  //GUID myIID_ID3D112Multithread = {
-  //  0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
+  GUID myIID_ID3D112Multithread = {
+    0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
 
-  //ID3D11Multithread *mt;
-  //hr = (device)->lpVtbl->QueryInterface(device, &myIID_ID3D112Multithread,
-  //    (void**)&mt);
-  //g_assert(hr == S_OK);
-  //mt->lpVtbl->SetMultithreadProtected(mt, TRUE);
+  ID3D11Multithread *mt;
+  hr = (device)->lpVtbl->QueryInterface(device, &myIID_ID3D112Multithread,
+      (void**)&mt);
+  g_assert(hr == S_OK);
+  mt->lpVtbl->SetMultithreadProtected(mt, TRUE);
 
   return device;
 }
