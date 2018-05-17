@@ -10,6 +10,7 @@ cmake-build-debug/
 # Session
 Session.vim
 
+third_party/win7-directshow-samples/baseclasses/x64/
 # Temporary
 .netrwhist
 *~

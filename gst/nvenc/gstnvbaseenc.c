@@ -654,7 +654,7 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
   nvenc->in_bufs_pool = g_async_queue_new ();
-  nvenc->frame_queue = g_queue_new();
+  nvenc->frame_queue = g_async_queue_new ();
 
   nvenc->last_flow = GST_FLOW_OK;
   nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
@@ -746,6 +746,18 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
+
+  if (nvenc->frame_queue) {
+    GstVideoCodecFrame * frame = g_async_queue_try_pop(nvenc->frame_queue);
+    while (frame) {
+      // We don't ref the frame's buffer before putting it on the queue
+      // so this completely frees the frame.
+      gst_video_codec_frame_unref(frame);
+      frame = g_async_queue_try_pop(nvenc->frame_queue);
+    }
+    g_async_queue_unref(nvenc->frame_queue);
+    nvenc->frame_queue = NULL;
+  }
 
   gst_nv_base_enc_free_buffers (nvenc);
 
@@ -1167,6 +1179,7 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
     return TRUE;
 
   /* FIXME */
+  // FIXME: Rowan handle the queued up frames when we stop.
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
   g_async_queue_lock (nvenc->bitstream_queue);
   g_async_queue_lock (nvenc->bitstream_pool);
@@ -1233,12 +1246,15 @@ gst_nv_base_enc_free_buffers (D3DGstNvBaseEnc * nvenc)
       struct gl_input_resource *in_gl_resource = nvenc->input_bufs[i];
 
       // cuCtxPushCurrent (nvenc->cuda_ctx);
-      nv_ret =
-          NvEncUnregisterResource (nvenc->encoder,
-          in_gl_resource->nv_resource.registeredResource);
-      if (nv_ret != NV_ENC_SUCCESS)
-        GST_ERROR_OBJECT (nvenc, "Failed to unregister resource %p, ret %d",
-            in_gl_resource, nv_ret);
+      //
+
+      // We register and unregister the resource each time we handle a frame.
+      //nv_ret =
+      //    NvEncUnregisterResource (nvenc->encoder,
+      //    in_gl_resource->nv_resource.registeredResource);
+      //if (nv_ret != NV_ENC_SUCCESS)
+      //  GST_ERROR_OBJECT (nvenc, "Failed to unregister resource %p, ret %d",
+      //      in_gl_resource, nv_ret);
 
       g_free (in_gl_resource);
       //cuCtxPopCurrent (NULL);
@@ -1922,12 +1938,14 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
-  g_queue_push_tail(nvenc->frame_queue, frame);
-  if (g_queue_get_length(nvenc->frame_queue) < 5) {
+  g_async_queue_push(nvenc->frame_queue, frame);
+  if (g_async_queue_length(nvenc->frame_queue) < 5) {
     return GST_FLOW_OK;
   }
-  frame = g_queue_pop_head(nvenc->frame_queue);
-
+  frame = g_async_queue_try_pop(nvenc->frame_queue);
+  if (!frame) {
+    return GST_FLOW_EOS;
+  }
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
   GstVideoFrame vframe;
