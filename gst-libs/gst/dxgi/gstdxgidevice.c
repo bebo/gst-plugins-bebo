@@ -155,3 +155,10 @@ context_error:
     return FALSE;
   }
 }
+
+GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context) {
+  GstDXGID3D11Context *share_context;
+  share_context = (GstDXGID3D11Context*) g_object_get_data((GObject*) context, GST_GL_DXGI_D3D11_CONTEXT);
+  return share_context;
+}
+
