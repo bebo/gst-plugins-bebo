@@ -104,7 +104,7 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
   GError *error = NULL;
 
   if (*context) {
-    //FIXME check has dxgi and if not -> remove and add?
+    gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
     return TRUE;
   }
 
@@ -134,9 +134,9 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
     } while (!gst_gl_display_add_context (*display, *context));
     GST_OBJECT_UNLOCK (*display);
   }
+  gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
   GST_INFO_OBJECT(self, "context:%" GST_PTR_FORMAT, *context);
 
-  gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
 
   return TRUE;
 
