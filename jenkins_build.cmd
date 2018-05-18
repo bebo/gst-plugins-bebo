@@ -36,7 +36,7 @@ xcopy x64\Release\*.pdb .\build\gst\Release
 
 
 cd build
-set FILENAME=gst-bebo_%TAG%.zip
+set FILENAME=gst-plugins-bebo_%TAG%.zip
 "C:\Program Files\7-Zip\7z.exe" a -r ..\%FILENAME% -w .\gst\Release\* -mem=AES256
 
 @if errorlevel 1 (
@@ -44,11 +44,11 @@ set FILENAME=gst-bebo_%TAG%.zip
 )
 
 cd ..
-"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-bebo/%FILENAME% --body %FILENAME%
+"C:\Program Files\Amazon\AWSCLI\aws.exe" s3api put-object --bucket bebo-app --key repo/gst-plugins-bebo/%FILENAME% --body %FILENAME%
 
 @if errorlevel 1 (
   exit /b %errorlevel%
 )
 
-@echo "Uploaded artifact gst-bebo/%FILENAME%"
+@echo "Uploaded artifact gst-plugins-bebo/%FILENAME%"
 
