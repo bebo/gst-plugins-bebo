@@ -27,22 +27,51 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
 set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
-ADD_LIBRARY(libbebogst SHARED
-  gstbeboplugin.c
-  ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
-  ${CMAKE_SOURCE_DIR}/shared/config.h
+SET(shared_SOURCES
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
+)
+
+SET(shared_HEADERS
+  ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
+  ${CMAKE_SOURCE_DIR}/shared/config.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
-  dshowfiltersink/gstdshowsink.c
-  dshowfiltersink/gstdshowsink.h
+)
+
+SET(nvenc_SOURCES
   nvenc/gstnvbaseenc.c
-  nvenc/gstnvbaseenc.h
   nvenc/gstnvenc.c
-  nvenc/gstnvenc.h
   nvenc/gstnvh264enc.c
-  nvenc/gstnvh264enc.h
+)
+
+SET(nvenc_HEADERS
+  nvenc/gstnvbaseenc.h
+  nvenc/gstnvenc.h
+  nvenc/gstnvh264enc.h	
+)
+
+SET(gstdshowsink_SOURCES
+  dshowfiltersink/gstdshowsink.c
+)
+
+SET(gstdshowsink_HEADERS
+  dshowfiltersink/gstdshowsink.h
+)
+
+source_group("nvenc" FILES ${nvenc_SOURCES} ${nvenc_HEADERS})
+source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS})
+source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
+source_group("plugin_init" FILES gstbeboplugin.c)
+
+ADD_LIBRARY(libbebogst SHARED
+  gstbeboplugin.c
+  ${shared_SOURCES}
+  ${shared_HEADERS}
+  ${nvenc_SOURCES}
+  ${nvenc_HEADERS}
+  ${gstdshowsink_SOURCES}
+  ${gstdshowsink_HEADERS}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst
