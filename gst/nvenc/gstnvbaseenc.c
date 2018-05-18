@@ -1006,7 +1006,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
           .out_buf = out_buf,
           .encoder = nvenc->encoder
         };
-        gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)lock_bitstream_helper, &b);
+        lock_bitstream_helper(nvenc->context, &b);
 
         GST_LOG_OBJECT (nvenc, "picture type %d", lock_bs.pictureType);
 
@@ -1033,7 +1033,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         /* TODO: use lock_bs.outputTimeStamp and lock_bs.outputDuration */
         /* TODO: check pts/dts is handled properly if there are B-frames */
 
-        gst_gl_context_thread_add(nvenc->context, unlock_bitstream_helper, &b);
+        unlock_bitstream_helper(nvenc->context, &b);
 
         GST_LOG_OBJECT (nvenc, "returning bitstream buffer %p to pool",
             state->out_bufs[i]);
