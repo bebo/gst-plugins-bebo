@@ -6,9 +6,11 @@
 [._]s[a-v][a-z]
 [._]sw[a-p]
 
+cmake-build-debug/
 # Session
 Session.vim
 
+third_party/win7-directshow-samples/baseclasses/x64/
 # Temporary
 .netrwhist
 *~
@@ -28,7 +30,7 @@ tags
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
-
+third_party/
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -162,7 +164,7 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
-
+build/
 # Publish Web Output
 *.[Pp]ublish.xml
 *.azurePubxml
