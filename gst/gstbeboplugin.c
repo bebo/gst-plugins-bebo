@@ -32,11 +32,10 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
 
-  if (!load_nvenc_dlls()) {
-    return FALSE;
+  if (load_nvenc_dlls()) {
+	gst_element_register(plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
+		gst_nv_h264_enc_get_type());
   }
-  gst_element_register (plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
-      gst_nv_h264_enc_get_type ());
   gst_element_register(plugin, "dshowfiltersink",
     GST_RANK_NONE, GST_TYPE_SHM_SINK);
   return TRUE;
