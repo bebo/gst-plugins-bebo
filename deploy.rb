@@ -7,7 +7,7 @@ require 'rbconfig'
 include Open3
 
 JENKINS_HOST = 'usw1-jenkins-002.blab.im'
-JENKINS_PROJECT = 'bebo-gst-to-dshow'
+JENKINS_PROJECT = 'gst-plugins-bebo'
 
 
 JENKINS_URL = "https://#{JENKINS_HOST}/job/#{JENKINS_PROJECT}/"
