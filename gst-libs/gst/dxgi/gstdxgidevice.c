@@ -137,7 +137,6 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
   gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
   GST_INFO_OBJECT(self, "context:%" GST_PTR_FORMAT, *context);
 
-
   return TRUE;
 
 context_error:

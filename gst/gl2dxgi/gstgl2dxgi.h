@@ -53,6 +53,11 @@ struct _GstGL2DXGI
   GstGLContext *other_context; /* context and display live in the base */
   GstBufferPool *pool;
   GstGLDXGIMemoryAllocator *allocator;
+  GstVideoInfo       in_info;
+  GstVideoInfo       out_info;
+  GstCaps           *out_caps;
+  GstGLTextureTarget in_texture_target;
+  GstGLTextureTarget out_texture_target;
 
   //GstGLUpload *upload;
 };
@@ -65,6 +70,8 @@ struct _GstGL2DXGI
 struct _GstGL2DXGIClass
 {
   GstGLBaseFilterClass object_class;
+  gboolean(*set_caps)          (GstGL2DXGI* gl2dxgi, GstCaps* incaps, GstCaps* outcaps);
+
 };
 
 G_END_DECLS

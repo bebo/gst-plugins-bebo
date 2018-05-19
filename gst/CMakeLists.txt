@@ -59,8 +59,17 @@ SET(gstdshowsink_HEADERS
   dshowfiltersink/gstdshowsink.h
 )
 
+SET(gl2dxgi_SOURCES
+  gl2dxgi/gstgl2dxgi.c
+)
+
+SET(gl2dxgi_HEADERS
+  gl2dxgi/gstgl2dxgi.h
+)
+
 source_group("nvenc" FILES ${nvenc_SOURCES} ${nvenc_HEADERS})
 source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS})
+source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
 source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
 
@@ -72,6 +81,8 @@ ADD_LIBRARY(libbebogst SHARED
   ${nvenc_HEADERS}
   ${gstdshowsink_SOURCES}
   ${gstdshowsink_HEADERS}
+  ${gl2dxgi_SOURCES}
+  ${gl2dxgi_HEADERS}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst

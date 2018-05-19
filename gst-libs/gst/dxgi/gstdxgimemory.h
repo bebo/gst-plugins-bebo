@@ -22,6 +22,10 @@
  */
 #pragma once
 
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
+
 #include <gst/gst.h>
 #define _GST_GL_MEMORY_PBO_H_ // FIXME - no idea why
 #include <gst/gl/gstglmemory.h>

@@ -107,6 +107,8 @@ static gboolean gst_shm_sink_unlock (GstBaseSink * bsink);
 static gboolean gst_shm_sink_unlock_stop (GstBaseSink * bsink);
 static gboolean gst_shm_sink_propose_allocation (GstBaseSink * sink,
     GstQuery * query);
+static gboolean gst_shm_sink_set_caps (GstBaseSink * bsink,
+    GstCaps * caps);
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
@@ -135,15 +137,29 @@ gst_dshowfiltersink_set_context(GstElement *element,
 
 #define ALIGNMENT 64
 
-static void
-initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps)
+
+static gboolean 
+initialize_shared_memory(GstShmSink * self, GstVideoInfo * info)
 {
+  GST_OBJECT_LOCK (self);
+  if (self->shmem_init) {
+    GST_OBJECT_UNLOCK (self);
+    GST_INFO("shmem already initialized");
+  }
+  //FIXME This should live somewhere else.
+
+  guint width = GST_VIDEO_INFO_WIDTH(info);
+  guint height = GST_VIDEO_INFO_HEIGHT(info);
+  guint fps = GST_VIDEO_INFO_FPS_N(info)/GST_VIDEO_INFO_FPS_D(info);
+
+  GST_INFO("Initializating shared mem info to %d x %d at %d fps", width, height, fps);
   DWORD size = 0;
   DWORD header_size = ALIGN(sizeof(struct shmem), ALIGNMENT);
   self->shmem_mutex = CreateMutexW(NULL, true, BEBO_SHMEM_MUTEX);
   if (self->shmem_mutex == 0) {
     GST_ERROR_OBJECT(self, "could not create shmem mutex %d", GetLastError());
-    return;
+    GST_OBJECT_UNLOCK (self);
+    return FALSE;
   }
 
   size_t frame_size = ALIGN(sizeof(struct frame), ALIGNMENT);
@@ -153,20 +169,22 @@ initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps
     0, size, BEBO_SHMEM_NAME);
   if (!self->shmem_handle) {
     GST_ERROR_OBJECT(self, "could not create mapping %d", GetLastError());
-    return;
+    GST_OBJECT_UNLOCK (self);
+    return FALSE;
   }
 
   self->shmem = MapViewOfFile(self->shmem_handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (!self->shmem) {
     GST_ERROR_OBJECT(self, "could not map shmem %d", GetLastError());
-    return;
+    GST_OBJECT_UNLOCK (self);
+    return FALSE;
   }
 
   memset(self->shmem, 0, size);
 
   gst_video_info_set_format(&self->shmem->video_info, GST_VIDEO_FORMAT_RGBA, width, height);
-  GstVideoInfo * info = &self->shmem->video_info;
-  info->fps_n = fps;
+  GstVideoInfo * sh_info = &self->shmem->video_info;
+  sh_info->fps_n = fps;
 
   self->shmem->version = SHM_INTERFACE_VERSION;
   self->shmem->frame_offset = header_size;
@@ -177,6 +195,9 @@ initialize_shared_memory(GstShmSink * self, guint width, guint height, guint fps
   self->shmem->shmem_size = size;
 
   ReleaseMutex(self->shmem_mutex);
+  self->shmem_init = true;
+  GST_OBJECT_UNLOCK (self);
+  return TRUE;
 }
 
 static void
@@ -245,6 +266,8 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
   gstbasesink_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_shm_sink_unlock_stop);
   gstbasesink_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_shm_sink_propose_allocation);
+  gstbasesink_class->set_caps=
+      GST_DEBUG_FUNCPTR (gst_shm_sink_set_caps);
 
   gstelement_class->set_context = GST_DEBUG_FUNCPTR (gst_dshowfiltersink_set_context);
   // FIXME: should we implement gst_element_change_state();
@@ -629,44 +652,6 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
   return TRUE;
 }
 
-const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
-{
-  D3D_FEATURE_LEVEL_11_1,
-  D3D_FEATURE_LEVEL_11_0,
-  D3D_FEATURE_LEVEL_10_1
-};
-
-static ID3D11Device*
-_create_device_d3d11() {
-  ID3D11Device *device;
-
-  D3D_FEATURE_LEVEL level_used = D3D_FEATURE_LEVEL_11_1;
-
-  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-
-#ifdef _DEBUG
-  flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-  HRESULT hr = D3D11CreateDevice(
-      NULL,
-      D3D_DRIVER_TYPE_HARDWARE,
-      NULL,
-      flags,
-      d3d_feature_levels,
-      sizeof(d3d_feature_levels) / sizeof(D3D_FEATURE_LEVEL),
-      D3D11_SDK_VERSION,
-      &device,
-      &level_used,
-      NULL);
-
-  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
-      (unsigned int) level_used, (unsigned int) level_used);
-
-  return device;
-}
-
-
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
   return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
@@ -702,20 +687,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     goto invalid_caps;
 
   guint vi_size = info.size;
-
-  if (!self->shmem_init) {
-
-    //FIXME This should live somewhere else.
-    GST_INFO("Initializating shared mem info to %d x %d at %d fps",
-        GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
-        GST_VIDEO_INFO_FPS_N(&info)/GST_VIDEO_INFO_FPS_D(&info));
-
-    initialize_shared_memory(self,
-        GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info),
-        GST_VIDEO_INFO_FPS_N(&info)/GST_VIDEO_INFO_FPS_D(&info));
-
-    self->shmem_init = true;
-  }
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;
@@ -767,4 +738,18 @@ config_failed:
     GST_WARNING_OBJECT (self, "failed setting config");
     return false;
   }
+}
+
+static gboolean
+gst_shm_sink_set_caps (GstBaseSink * sink, GstCaps * caps)
+{
+  GstShmSink *self = GST_SHM_SINK (sink);
+  GST_DEBUG_OBJECT(self, "gst_shm_sink_set_caps with %" GST_PTR_FORMAT, caps);
+
+  GstVideoInfo info;
+  if (!gst_video_info_from_caps(&info, caps)) {
+    GST_ERROR("Could not get info from caps");
+    return FALSE;
+  }
+  return initialize_shared_memory(self, &info);
 }

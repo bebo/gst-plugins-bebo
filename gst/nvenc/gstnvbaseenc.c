@@ -56,6 +56,8 @@
 G_DEFINE_ABSTRACT_TYPE (D3DGstNvBaseEnc, gst_nv_base_enc, GST_TYPE_VIDEO_ENCODER);
 
 #define GST_TYPE_NV_PRESET (gst_nv_preset_get_type())
+
+static gboolean gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self);
 static GType
 gst_nv_preset_get_type (void)
 {
@@ -672,8 +674,6 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
 
   return TRUE;
 }
-
-
 
 static gboolean
 gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
@@ -1880,6 +1880,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   g_async_queue_push(nvenc->frame_queue, frame);
+  gst_buffer_ref(frame->input_buffer);  // FIXME unref somewhere
   if (g_async_queue_length(nvenc->frame_queue) < 5) {
     return GST_FLOW_OK;
   }
@@ -1983,7 +1984,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   frame->user_data = state;
   frame->user_data_destroy_notify = (GDestroyNotify) g_free;
 
-  gst_buffer_ref(frame->input_buffer);  // FIXME unref somewhere
   in_gl_resource->buf = frame->input_buffer;
 
   flow =
