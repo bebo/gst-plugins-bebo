@@ -1874,20 +1874,46 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   return GST_FLOW_OK;
 }
 
+struct MappedFrame {
+  GstVideoCodecFrame * frame;
+  GstMapInfo info;
+};
+
 static GstFlowReturn
 gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
-  g_async_queue_push(nvenc->frame_queue, frame);
-  gst_buffer_ref(frame->input_buffer);  // FIXME unref somewhere
+
+  struct MappedFrame * mf = g_new(struct MappedFrame, 1);
+  mf->frame = frame;
+
+  GstMapInfo infoin; 
+  gst_buffer_map(frame->input_buffer, &(mf->info), GST_MAP_READ);
+
+  {
+    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
+    gst_gl_sync_meta_set_sync_point(sync_meta, nvenc->context);
+  }
+
+  g_async_queue_push(nvenc->frame_queue, mf);
+  gst_buffer_ref(frame->input_buffer);
   if (g_async_queue_length(nvenc->frame_queue) < 5) {
     return GST_FLOW_OK;
   }
-  frame = g_async_queue_try_pop(nvenc->frame_queue);
-  if (!frame) {
+  mf = g_async_queue_try_pop(nvenc->frame_queue);
+  if (!mf) {
     return GST_FLOW_EOS;
   }
+  frame = mf->frame;
+
+  {
+    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
+    gst_gl_sync_meta_wait(sync_meta, nvenc->context);
+  }
+  gst_buffer_unmap(frame->input_buffer, &(mf->info));
+  g_free(mf);
+
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
   GstVideoFrame vframe;

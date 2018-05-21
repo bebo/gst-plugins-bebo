@@ -57,8 +57,8 @@ static gboolean gst_gl_2_dxgi_propose_allocation (GstBaseTransform *
 static gboolean gst_gl_2_dxgi_decide_allocation (GstBaseTransform * 
      trans, GstQuery * query); 
 /*static GstFlowReturn */
-/* gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, */
-/*     GstBuffer * buffer, GstBuffer ** outbuf); */
+gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, 
+    GstBuffer * buffer, GstBuffer ** outbuf);
 static GstFlowReturn gst_gl_2_dxgi_transform (GstBaseTransform * bt,
     GstBuffer * buffer, GstBuffer * outbuf);
 static gboolean gst_gl_2_dxgi_stop (GstBaseTransform * bt);
@@ -548,7 +548,7 @@ gst_gl_2_dxgi_set_caps(GstBaseTransform * bt, GstCaps * incaps,
   GstGLTextureTarget from_target, to_target;
 
   GstGL2DXGI *self = GST_GL_2_DXGI(bt);
-  GstGL2DXGIClass *gl2dxgi_class = GST_GL_2_DXGI_CLASS(self);
+  GstGL2DXGIClass *gl2dxgi_class = GST_GL_2_DXGI_GET_CLASS(self);
   //filter = GST_GL_FILTER(bt);
   //filter_class = GST_GL_FILTER_GET_CLASS(filter);
 
@@ -623,7 +623,7 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
 
   bt_class->filter_meta = gst_gl_2_dxgi_filter_meta;
   bt_class->get_unit_size = gst_gl_2_dxgi_get_unit_size;
-  /* bt_class->prepare_output_buffer = gst_gl_2_dxgi_prepare_output_buffer; */
+  bt_class->prepare_output_buffer = gst_gl_2_dxgi_prepare_output_buffer;
   bt_class->transform = gst_gl_2_dxgi_transform;
   bt_class->stop = gst_gl_2_dxgi_stop;
   bt_class->start = gst_gl_2_dxgi_start;
@@ -683,10 +683,12 @@ static void gst_gl_2_dxgi_set_context(GstElement * element,
 }
 
 static void
-gst_gl_2_dxgi_init (GstGL2DXGI * upload)
+gst_gl_2_dxgi_init (GstGL2DXGI * self)
 {
-  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (upload), TRUE);
+  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), TRUE);
+  self->queue = g_async_queue_new();
 }
+
 static gboolean
 gst_gl_2_dxgi_start (GstBaseTransform * bt)
 {
@@ -1043,10 +1045,34 @@ config_failed:
 /*   return gst_gl_upload_set_caps (upload->upload, in_caps, out_caps); */
 /* } */
 
-/* GstFlowReturn */
-/* gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, */
-/*     GstBuffer * buffer, GstBuffer ** outbuf) */
-/* { */
+GstFlowReturn 
+gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
+  GstBuffer * buffer, GstBuffer ** outbuf)
+{
+
+#if 0
+  GstGL2DXGI *self = GST_GL_2_DXGI(bt);
+  g_async_queue_push(self->queue, buffer);
+  gst_buffer_ref(buffer);
+
+  if (g_async_queue_length(self->queue) < 5) {
+    GstBuffer * buf = g_async_queue_try_pop(self->queue);
+    g_async_queue_push_front(self->queue, buf);
+    gst_buffer_ref(buf);
+    GST_LOG("refcnt %d", buf->mini_object.refcount);
+    *outbuf = buf;
+    return GST_FLOW_OK;
+  }
+
+  GstBuffer * buf = g_async_queue_try_pop(self->queue);
+  gst_buffer_unref(buf);
+  GST_LOG("refcnt %d", buf->mini_object.refcount);
+  *outbuf = buf;
+#else
+  *outbuf = buffer;
+#endif
+  return GST_FLOW_OK;
+}
 /*   GstGL2DXGI *upload = GST_GL_2_DXGI (bt); */
 /*   GstGLUploadReturn ret; */
 /*   GstBaseTransformClass *bclass; */
