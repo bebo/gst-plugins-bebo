@@ -591,6 +591,10 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
       GST_ERROR("No GL context.");
       return FALSE;
     }
+    else if (!params.device) {
+      GST_ERROR("No d3d11_device");
+      return FALSE;
+    }
 
     nv_ret = gl_NvEncOpenEncodeSessionEx(nvenc->context, &params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
