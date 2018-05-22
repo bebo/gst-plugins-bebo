@@ -1058,7 +1058,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
       g_assert (in_buf != NULL);
       if (nvenc->gl_input) {
         struct gl_input_resource *in_gl_resource = in_buf;
-        gst_buffer_unref(in_gl_resource->buf);
 
         struct umh u = {
           .encoder = nvenc->encoder,
@@ -1068,6 +1067,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 
         memset (&in_gl_resource->nv_mapped_resource, 0,
             sizeof (in_gl_resource->nv_mapped_resource));
+        gst_buffer_unref(in_gl_resource->buf);
       }
 
 
@@ -1876,8 +1876,13 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 
 struct MappedFrame {
   GstVideoCodecFrame * frame;
-  GstMapInfo info;
+  GstGLDXGIMemory * gl_mem;
 };
+
+static int gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
+{
+  gl_dxgi_map_d3d(gl_mem);
+}
 
 static GstFlowReturn
 gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
@@ -1887,9 +1892,15 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 
   struct MappedFrame * mf = g_new(struct MappedFrame, 1);
   mf->frame = frame;
+  // FIXME check memory type first !!!
+  mf->gl_mem = (GstGLDXGIMemory *) gst_buffer_peek_memory (frame->input_buffer, 0);
 
-  GstMapInfo infoin; 
-  gst_buffer_map(frame->input_buffer, &(mf->info), GST_MAP_READ);
+  GST_LOG("handle_frame texture_id %#010x interop_id:%#010x status:%d",
+      mf->gl_mem->mem.tex_id,
+      mf->gl_mem->interop_handle,
+      mf->gl_mem->status);
+  //GstMapInfo infoin; 
+  //gst_buffer_map(frame->input_buffer, &(mf->info), GST_MAP_READ);
 
   {
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
@@ -1911,7 +1922,12 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
     gst_gl_sync_meta_wait(sync_meta, nvenc->context);
   }
-  gst_buffer_unmap(frame->input_buffer, &(mf->info));
+  GST_LOG("handle_frame mapping to d3d texture_id %#010x interop_id:%#010x status:%d",
+      mf->gl_mem->mem.tex_id,
+      mf->gl_mem->interop_handle,
+      mf->gl_mem->status);
+  // TODO: probably use GL thread from mem?
+  gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, mf->gl_mem);
   g_free(mf);
 
   NV_ENC_OUTPUT_PTR out_buf;

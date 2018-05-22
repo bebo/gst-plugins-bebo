@@ -218,32 +218,48 @@ static gpointer
 gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
 {
   if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_LOG("wglDXLockObjectsNV texture_id %#010x interop_id:%#010x",
-      gl_mem->mem.tex_id,
-      gl_mem->interop_handle);
 
-    GstGLContext *context = gl_mem->mem.mem.context;
-    GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
-    BOOL result = share_context->wglDXLockObjectsNV(share_context->device_interop_handle,
-                                      1,
-                                      &gl_mem->interop_handle);
-    if (result == FALSE) {
-      DWORD error = GetLastError();
-      if (error == ERROR_BUSY) {
-        GST_ERROR("wglDXLockObjectsNV FAILED ERROR_BUSY texture_id %#010x interop_id:%#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else if (error == ERROR_INVALID_DATA) {
-        GST_ERROR("wglDXLockObjectsNV FAILED ERROR_INVALID_DATA texture_id %#010x interop_id:%#010x",
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      } else {
-        GST_ERROR("wglDXLockObjectsNV FAILED UNKNOWN ERROR %#010x texture_id %#010x interop_id:%#010x",
-          error,
-          gl_mem->mem.tex_id,
-          gl_mem->interop_handle);
-      }
+    GST_OBJECT_LOCK(gl_mem);
+    if (gl_mem->status == GST_DXGI_GL_LOCKED) {
+      // TODO
+      GST_OBJECT_UNLOCK(gl_mem);
+      gl_dxgi_map_d3d(gl_mem);
+      GST_OBJECT_LOCK(gl_mem);
     }
+    GST_LOG("wglDXLockObjectsNV texture_id %#010x interop_id:%#010x status:%d",
+      gl_mem->mem.tex_id,
+      gl_mem->interop_handle,
+      gl_mem->status);
+    //g_assert(gl_mem->status != GST_DXGI_D3D_MAPPED);
+    if (gl_mem->status != GST_DXGI_GL_LOCKED) {
+
+      GstGLContext *context = gl_mem->mem.mem.context;
+      GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
+      BOOL result = share_context->wglDXLockObjectsNV(share_context->device_interop_handle,
+        1,
+        &gl_mem->interop_handle);
+      if (result == FALSE) {
+        DWORD error = GetLastError();
+        if (error == ERROR_BUSY) {
+          GST_ERROR("wglDXLockObjectsNV FAILED ERROR_BUSY texture_id %#010x interop_id:%#010x",
+            gl_mem->mem.tex_id,
+            gl_mem->interop_handle);
+        }
+        else if (error == ERROR_INVALID_DATA) {
+          GST_ERROR("wglDXLockObjectsNV FAILED ERROR_INVALID_DATA texture_id %#010x interop_id:%#010x",
+            gl_mem->mem.tex_id,
+            gl_mem->interop_handle);
+        }
+        else {
+          GST_ERROR("wglDXLockObjectsNV FAILED UNKNOWN ERROR %#010x texture_id %#010x interop_id:%#010x",
+            error,
+            gl_mem->mem.tex_id,
+            gl_mem->interop_handle);
+        }
+      }
+      gl_mem->status = GST_DXGI_GL_LOCKED;
+    }
+    GST_OBJECT_UNLOCK(gl_mem);
   }
 
   GstGLMemoryAllocatorClass *alloc_class;
@@ -251,22 +267,24 @@ gl_dxgi_tex_map (GstGLDXGIMemory *gl_mem, GstMapInfo *info, gsize maxsize)
   return alloc_class->map ((GstGLBaseMemory *) gl_mem, info, maxsize);
 }
 
-static void
-gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
-{
-  GstGLMemoryAllocatorClass *alloc_class;
-  alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
-  alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
+void gl_dxgi_map_d3d(GstGLDXGIMemory * gl_mem) {
 
-  if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
-    GST_LOG("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x",
+    //g_assert(gl_mem->status != GST_DXGI_D3D_MAPPED);
+    GST_OBJECT_LOCK(gl_mem);
+    GST_LOG("wglDXUnlockObjectsNV texture_id %#010x interop_id:%#010x status:%d",
       gl_mem->mem.tex_id,
-      gl_mem->interop_handle);
+      gl_mem->interop_handle,
+      gl_mem->status);
+    if (gl_mem->status != GST_DXGI_GL_LOCKED) {
+      GST_OBJECT_UNLOCK(gl_mem);
+      return;
+    }
+
     GstGLContext *context = gl_mem->mem.mem.context;
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
     const GstGLFuncs *gl = context->gl_vtable;
 
-    gl->Flush();
+    // gl->Flush();
     BOOL result = share_context->wglDXUnlockObjectsNV(share_context->device_interop_handle,
                                         1,
                                         &gl_mem->interop_handle);
@@ -292,6 +310,25 @@ gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
           gl_mem->interop_handle);
       }
     }
+    gl_mem->status = GST_DXGI_GL_UNLOCKED;
+    GST_OBJECT_UNLOCK(gl_mem);
+}
+
+void gl_dxgi_unmap_d3d(GstGLDXGIMemory * gl_mem) {
+  GST_OBJECT_LOCK(gl_mem);
+  gl_mem->status = GST_DXGI_GL_UNLOCKED;
+  GST_OBJECT_UNLOCK(gl_mem);
+}
+
+static void
+gl_dxgi_tex_unmap (GstGLDXGIMemory * gl_mem, GstMapInfo * info)
+{
+  GstGLMemoryAllocatorClass *alloc_class;
+  alloc_class = GST_GL_MEMORY_ALLOCATOR_CLASS (parent_class);
+  alloc_class->unmap ((GstGLBaseMemory *) gl_mem, info);
+
+  if ((info->flags & GST_MAP_GL) == GST_MAP_GL) {
+    // NOOP
   }
 }
 
@@ -412,12 +449,22 @@ gl_dxgi_text_copy (GstGLDXGIMemory * src, gssize offset, gssize size)
 static void
 gl_mem_destroy (GstGLDXGIMemory * gl_mem)
 {
-  GST_DEBUG("gl_mem_destroy texture id:%u dimensions:%ux%u",
-        gl_mem->mem.tex_id, gl_mem->mem.tex_width, GL_DXGI_MEM_HEIGHT (gl_mem));
+    GST_LOG("gl_mem_destroy %#010x interop_id:%#010x status:%d",
+      gl_mem->mem.tex_id,
+      gl_mem->interop_handle,
+      gl_mem->status);
 
   if (gl_mem->interop_handle) {
     GstGLContext *context = gl_mem->mem.mem.context;
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
+
+    GST_OBJECT_LOCK(gl_mem);
+    if (gl_mem->status == GST_DXGI_GL_LOCKED) {
+      GST_OBJECT_UNLOCK(gl_mem);
+      gl_dxgi_map_d3d(gl_mem);
+    }
+    GST_OBJECT_UNLOCK(gl_mem);
+
     BOOL result = share_context->wglDXUnregisterObjectNV(
             share_context->device_interop_handle,
             gl_mem->interop_handle);
