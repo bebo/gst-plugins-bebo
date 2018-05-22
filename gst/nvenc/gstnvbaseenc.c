@@ -1924,6 +1924,8 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
     if (sync_meta) {
       gst_gl_sync_meta_wait(sync_meta, nvenc->context);
       gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
+    } else {
+      GST_ERROR("No sync_meta");
     }
     gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_mem);
 
