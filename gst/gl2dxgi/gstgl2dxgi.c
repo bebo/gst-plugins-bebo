@@ -853,7 +853,7 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
     GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
     if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
       return TRUE;
     } else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
@@ -876,7 +876,7 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
   }
 
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
 
   return TRUE;
