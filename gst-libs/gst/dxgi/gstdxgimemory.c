@@ -132,7 +132,7 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
       *d3d11texture,
       tex_id,
       target,
-      WGL_ACCESS_READ_WRITE_NV);
+      WGL_ACCESS_WRITE_DISCARD_NV);
 
 
   IDXGIResource *dxgi_res;
@@ -284,7 +284,7 @@ void gl_dxgi_map_d3d(GstGLDXGIMemory * gl_mem) {
     GstDXGID3D11Context *share_context = get_dxgi_share_context(context);
     const GstGLFuncs *gl = context->gl_vtable;
 
-    // gl->Flush();
+    //gl->Finish();
     BOOL result = share_context->wglDXUnlockObjectsNV(share_context->device_interop_handle,
                                         1,
                                         &gl_mem->interop_handle);

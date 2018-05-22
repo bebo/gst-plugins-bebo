@@ -820,6 +820,7 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
   gst_query_parse_allocation(query, &caps, &need_pool);
   GstCapsFeatures *features;
   features = gst_caps_get_features (caps, 0);
+  gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
 
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
       GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");

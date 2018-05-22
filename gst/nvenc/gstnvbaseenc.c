@@ -1907,11 +1907,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   //GstMapInfo infoin; 
   //gst_buffer_map(frame->input_buffer, &(mf->info), GST_MAP_READ);
 
-  {
-    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
-    gst_gl_sync_meta_set_sync_point(sync_meta, nvenc->context);
-  }
-
   g_async_queue_push(nvenc->frame_queue, frame);
   gst_buffer_ref(frame->input_buffer);
   if (g_async_queue_length(nvenc->frame_queue) < 5) {
@@ -1923,8 +1918,25 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   }
 
   {
+    const GstGLFuncs *gl = nvenc->context->gl_vtable;
+    gl->Flush();
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
-    gst_gl_sync_meta_wait(sync_meta, nvenc->context);
+    if (sync_meta) {
+      gst_gl_sync_meta_wait(sync_meta, nvenc->context);
+      gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
+    }
+    gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_mem);
+
+    //gst_gl_sync_meta_set_sync_point(sync_meta, nvenc->context);
+  }
+  {
+    //GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
+    //if (sync_meta) {
+    //  gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
+    //}
+    //else {
+    //  GST_ERROR("No sync_meta");
+    //}
   }
   gl_mem = (GstGLDXGIMemory *)gst_buffer_peek_memory(frame->input_buffer, 0);
   GST_LOG("handle_frame mapping to d3d texture_id %#010x interop_id:%#010x status:%d",
@@ -1932,7 +1944,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       gl_mem->interop_handle,
       gl_mem->status);
   // TODO: probably use GL thread from mem?
-  gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_mem);
 
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
@@ -2210,7 +2221,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   gst_query_parse_allocation(query, &caps, &need_pool);
   GstCapsFeatures *features;
   features = gst_caps_get_features (caps, 0);
-
+  gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
       GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
