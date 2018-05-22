@@ -561,7 +561,7 @@ static int gl_NvEncEncodePicture(GstGLContext *context,void* encoder, NV_ENC_PIC
 static gboolean
 gst_nv_base_enc_open (GstVideoEncoder * enc)
 {
-  GST_WARNING("OPEN NVENC");
+  GST_INFO("OPEN NVENC");
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   if (!gst_nv_base_enc_ensure_gl_context(nvenc)) {
     GST_ERROR("COULD NOT OPEN");
@@ -583,6 +583,15 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     params.apiVersion = NVENCAPI_VERSION;
     params.device = share_context->d3d11_device;
     params.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
+    if (!share_context) {
+      GST_ERROR("No DXGI share context.");
+      return FALSE;
+    }
+    else if (!nvenc->context) {
+      GST_ERROR("No GL context.");
+      return FALSE;
+    }
+
     nv_ret = gl_NvEncOpenEncodeSessionEx(nvenc->context, &params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
