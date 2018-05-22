@@ -1922,23 +1922,14 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
     gl->Flush();
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
     if (sync_meta) {
+      // For some reason we would get out of order frames unless we do both the
+      // normal and the CPU wait
       gst_gl_sync_meta_wait(sync_meta, nvenc->context);
       gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
     } else {
       GST_ERROR("No sync_meta");
     }
     gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_mem);
-
-    //gst_gl_sync_meta_set_sync_point(sync_meta, nvenc->context);
-  }
-  {
-    //GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
-    //if (sync_meta) {
-    //  gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
-    //}
-    //else {
-    //  GST_ERROR("No sync_meta");
-    //}
   }
   gl_mem = (GstGLDXGIMemory *)gst_buffer_peek_memory(frame->input_buffer, 0);
   GST_LOG("handle_frame mapping to d3d texture_id %#010x interop_id:%#010x status:%d",
@@ -2255,7 +2246,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
     GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
     if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
       return TRUE;
     } else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
@@ -2278,7 +2269,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   }
 
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
 
   return TRUE;
