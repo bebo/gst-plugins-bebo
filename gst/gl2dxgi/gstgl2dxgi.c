@@ -32,7 +32,7 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 22
+#define BUFFER_COUNT 50
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
 GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);

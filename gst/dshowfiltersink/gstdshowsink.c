@@ -68,7 +68,7 @@ enum
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
 #define BUFFER_COUNT 10
-#define BUFFER_POOL_SIZE BUFFER_COUNT + 2
+#define BUFFER_POOL_SIZE BUFFER_COUNT + 40
 // frame count, if the dshow side doesn't consume it in 10 frames time,
 // we're going to unref it.
 #define FRAME_UNREF_THRESHOLD 10
@@ -390,6 +390,7 @@ gst_shm_sink_start (GstBaseSink * bsink)
         (GstGLDisplay **) & self->display,
         (GstGLContext **) & self->other_context);
   self->allocator = gst_gl_dxgi_memory_allocator_new(self);
+  self->bufferqueue = g_async_queue_new();
 
   return TRUE;
 }
@@ -433,17 +434,16 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
   return TRUE;
 }
 
-static int gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
+static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
 {
   gl_dxgi_map_d3d(gl_mem);
 }
-
+int t = 0;
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
   GstShmSink *self = GST_SHM_SINK (bsink);
   GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
-
 
   if (!GST_IS_BUFFER(buf)) {
     GST_ERROR_OBJECT(self, "NOT A BUFFER???");
@@ -475,14 +475,41 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     self->first_render_time  = running_time;
   }
 
+  if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
+    GST_OBJECT_UNLOCK (self);
+    GST_DEBUG_OBJECT(self, "dropping early frame");
+    return GST_FLOW_OK;
+  }
+  t=t+1;
+  if (! (t % 3 == 0)) {
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  }
+
   /* GstMapInfo map; */
   GstMemory *memory = gst_buffer_peek_memory(buf, 0);
+#ifndef _NDEBUG
   if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
-    GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
+    GST_DEBUG_OBJECT(self, "Memory in buffer %p was not allocated by us: "
       "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
   }
-  else {
+#endif
+  gst_buffer_ref(buf);
+  g_async_queue_push(self->bufferqueue, buf);
+  if (g_async_queue_length(self->bufferqueue) < 25) {
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  }
+  buf = g_async_queue_try_pop(self->bufferqueue);
+  if (!buf) {
+    return GST_FLOW_EOS;
+  }
+
+  {
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
+    const GstGLFuncs *gl = sync_meta->context->gl_vtable;
+    gl->Flush();
+
     if (sync_meta) {
       // For some reason we would get out of order frames unless we do both the
       // normal and the CPU wait
@@ -491,12 +518,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     }
     GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *)memory;
     gst_gl_context_thread_add(sync_meta->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
-  }
-
-  if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
-    GST_OBJECT_UNLOCK (self);
-    GST_DEBUG_OBJECT(self, "dropping early frame");
-    return GST_FLOW_OK;
   }
 
   // TOGO: GST_VIDEO_INFO_FPS_N(self->video_info);
@@ -553,6 +574,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       // we shouldn't notify the other side that we dropped a frame?
       // ReleaseSemaphore(self->shmem_new_data_semaphore, 1, NULL);
       // TODO: ADD DROPPED FRAMES STATS
+      gst_buffer_unref (buf);
       return GST_FLOW_OK;
     }
 
@@ -584,7 +606,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   frame->nr = self->shmem->write_ptr;
   frame->_gst_buf_ref = buf;
   frame->ref_cnt = 1;
-  gst_buffer_ref (buf);
+  //gst_buffer_ref (buf);
 
   GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu tex_id: %#010x pts: %" GST_TIME_FORMAT " frame_offset: %d size: %d buf: %p latency: %d",
       frame->nr,
