@@ -32,7 +32,7 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 40
+#define BUFFER_COUNT 22
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
 GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);
@@ -866,7 +866,7 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
   self->pool = gst_gl_buffer_pool_new(GST_GL_BASE_FILTER(self)->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (self->pool);
-  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
+  gst_buffer_pool_config_set_params (config, caps, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
 

@@ -2256,7 +2256,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (self->pool);
-  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
+  gst_buffer_pool_config_set_params (config, caps, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
 
