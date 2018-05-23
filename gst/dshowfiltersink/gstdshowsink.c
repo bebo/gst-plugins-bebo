@@ -433,6 +433,11 @@ gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
   return TRUE;
 }
 
+static int gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
+{
+  gl_dxgi_map_d3d(gl_mem);
+}
+
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
@@ -468,6 +473,24 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   // we get bombarded with "old" frames at the beginning - drop them for now
   if (self->first_render_time == 0) {
     self->first_render_time  = running_time;
+  }
+
+  /* GstMapInfo map; */
+  GstMemory *memory = gst_buffer_peek_memory(buf, 0);
+  if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
+    GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
+      "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
+  }
+  else {
+    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
+    if (sync_meta) {
+      // For some reason we would get out of order frames unless we do both the
+      // normal and the CPU wait
+      gst_gl_sync_meta_wait(sync_meta, sync_meta->context);
+      gst_gl_sync_meta_wait_cpu(sync_meta, sync_meta->context);
+    }
+    GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *)memory;
+    gst_gl_context_thread_add(sync_meta->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
   }
 
   if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
@@ -549,15 +572,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     frame->_gst_buf_ref = NULL;
   }
 
-  /* GstMapInfo map; */
-  GstMemory *memory = gst_buffer_peek_memory(buf, 0);
-
-  if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
-    GST_ERROR_OBJECT(self, "Memory in buffer %p was not allocated by us: "
-        "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
-  }
-
-  GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *) memory;
+  GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *)memory;
 
   frame->latency = latency;
   frame->dts = buf->dts;
