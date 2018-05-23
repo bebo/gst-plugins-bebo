@@ -47,7 +47,7 @@
 
 #define N_BUFFERS_PER_FRAME 1
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
-#define BUFFER_COUNT 20
+#define BUFFER_COUNT 40
 
 /* magic pointer value we can put in the async queue to signal shut down */
 #define SHUTDOWN_COOKIE ((gpointer)GINT_TO_POINTER (1))
@@ -1381,7 +1381,6 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       return FALSE;
     }
   }
-  params->presetGUID = NV_ENC_PRESET_DEFAULT_GUID;
   nv_ret =
       NvEncGetEncodePresetConfig (nvenc->encoder,
       params->encodeGUID, params->presetGUID, &preset_config);
