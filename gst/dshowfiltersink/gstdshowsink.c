@@ -499,7 +499,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
 
   if (frame->_gst_buf_ref != NULL) {
-    if (FALSE && frame->ref_cnt > 0) {
+    if (frame->ref_cnt > 0) {
       GST_DEBUG_OBJECT(self,
           "buffer is still being referenced, dropping incoming frame. nr: %llu dxgi_handle: %llu ref_cnt: %d",
           frame->nr,
