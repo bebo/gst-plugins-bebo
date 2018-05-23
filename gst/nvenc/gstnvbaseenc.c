@@ -47,7 +47,7 @@
 
 #define N_BUFFERS_PER_FRAME 1
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
-#define BUFFER_COUNT 20
+#define BUFFER_COUNT 40
 
 /* magic pointer value we can put in the async queue to signal shut down */
 #define SHUTDOWN_COOKIE ((gpointer)GINT_TO_POINTER (1))
@@ -169,9 +169,9 @@ enum
   PROP_GOP_SIZE,
 };
 
-#define DEFAULT_PRESET GST_NV_PRESET_DEFAULT
+#define DEFAULT_PRESET GST_NV_PRESET_HQ
 #define DEFAULT_BITRATE 0
-#define DEFAULT_RC_MODE GST_NV_RC_MODE_DEFAULT
+#define DEFAULT_RC_MODE GST_NV_RC_MODE_CBR
 #define DEFAULT_QP_MIN -1
 #define DEFAULT_QP_MAX -1
 #define DEFAULT_QP_CONST -1
