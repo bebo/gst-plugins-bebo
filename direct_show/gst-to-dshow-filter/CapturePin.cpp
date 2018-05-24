@@ -949,14 +949,20 @@ HRESULT CPushPinDesktop::UnrefDxgiFrame(DxgiFrame* dxgi_frame) {
 
   auto shmFrame = GetShmFrame(dxgi_frame);
 
-  // TODO: check it is the same frame!
-  shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
-
-  debug("RELEASE shmem texture. nr: %lld dxgi_handle: %llu i: %d ref_cnt: %d",
+  if (shmFrame->nr == dxgi_frame->nr) {
+    shmFrame->ref_cnt = shmFrame->ref_cnt - 2;
+    debug("RELEASE shmem texture. nr: %lld dxgi_handle: %llu i: %d ref_cnt: %d",
       dxgi_frame->nr,
       dxgi_frame->dxgi_handle,
       dxgi_frame->index,
       shmFrame->ref_cnt);
+  } else {
+    error("CAN'T RELEASE shmem texture. nr: %lld dxgi_handle: %llu i: %d ref_cnt: %d",
+      dxgi_frame->nr,
+      dxgi_frame->dxgi_handle,
+      dxgi_frame->index,
+      shmFrame->ref_cnt);
+  }
 
   ReleaseMutex(shmem_mutex_);
 
