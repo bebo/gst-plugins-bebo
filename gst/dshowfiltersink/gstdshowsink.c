@@ -68,7 +68,8 @@ enum
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
 #define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
 #define BUFFER_COUNT 10
-#define BUFFER_POOL_SIZE BUFFER_COUNT + 40
+#define BUFFER_POOL_SIZE BUFFER_COUNT + 10
+#define BUFFER_QUEUE_SIZE 3
 // frame count, if the dshow side doesn't consume it in 10 frames time,
 // we're going to unref it.
 #define FRAME_UNREF_THRESHOLD 10
@@ -389,6 +390,11 @@ gst_shm_sink_start (GstBaseSink * bsink)
   gst_gl_ensure_element_data (GST_ELEMENT (self),
         (GstGLDisplay **) & self->display,
         (GstGLContext **) & self->other_context);
+
+  if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
+    return FALSE;
+  }
+
   self->allocator = gst_gl_dxgi_memory_allocator_new(self);
   self->bufferqueue = g_async_queue_new();
 
@@ -496,7 +502,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 #endif
   gst_buffer_ref(buf);
   g_async_queue_push(self->bufferqueue, buf);
-  if (g_async_queue_length(self->bufferqueue) < 25) {
+  if (g_async_queue_length(self->bufferqueue) < BUFFER_QUEUE_SIZE) {
     GST_OBJECT_UNLOCK (self);
     return GST_FLOW_OK;
   }
@@ -513,11 +519,18 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     if (sync_meta) {
       // For some reason we would get out of order frames unless we do both the
       // normal and the CPU wait
-      gst_gl_sync_meta_wait(sync_meta, sync_meta->context);
-      gst_gl_sync_meta_wait_cpu(sync_meta, sync_meta->context);
+      gst_gl_sync_meta_wait(sync_meta, self->context);
+      gst_gl_sync_meta_wait_cpu(sync_meta, self->context);
     }
+    GstGLSyncMeta *our_sync_meta = gst_buffer_add_gl_sync_meta(self->context, buf);
+    if (our_sync_meta) {
+      gst_gl_sync_meta_set_sync_point(our_sync_meta, self->context);
+      gst_gl_sync_meta_wait(our_sync_meta, self->context);
+      gst_gl_sync_meta_wait_cpu(our_sync_meta, self->context);
+    }
+
     GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *)memory;
-    gst_gl_context_thread_add(sync_meta->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
+    gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
   }
 
   // TOGO: GST_VIDEO_INFO_FPS_N(self->video_info);
