@@ -479,6 +479,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   // we get bombarded with "old" frames at the beginning - drop them for now
   if (self->first_render_time == 0) {
     self->first_render_time  = running_time;
+    self->last_render_time = running_time;
   }
 
   if (GST_BUFFER_DTS_OR_PTS(buf) < self->first_render_time) {
@@ -486,6 +487,13 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_DEBUG_OBJECT(self, "dropping early frame");
     return GST_FLOW_OK;
   }
+  
+  if ((GST_BUFFER_DTS_OR_PTS(buf) - self->last_render_time) < 33333330) {
+    GST_LOG("lowering fps, dropping this one %d", GST_BUFFER_DTS_OR_PTS(buf) - self->last_render_time);
+    GST_OBJECT_UNLOCK (self);
+    return GST_FLOW_OK;
+  }
+  self->last_render_time = GST_BUFFER_DTS_OR_PTS(buf);
 
   /* GstMapInfo map; */
   GstMemory *memory = gst_buffer_peek_memory(buf, 0);
