@@ -512,7 +512,8 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       gst_gl_sync_meta_wait(sync_meta, self->context);
       gst_gl_sync_meta_wait_cpu(sync_meta, self->context);
     }
-    GstGLSyncMeta *our_sync_meta = gst_buffer_add_gl_sync_meta(self->context, buf);
+    //GstGLSyncMeta *our_sync_meta = gst_buffer_add_gl_sync_meta(self->context, buf);
+    GstGLSyncMeta *our_sync_meta = sync_meta;
     if (our_sync_meta) {
       gst_gl_sync_meta_set_sync_point(our_sync_meta, self->context);
       gst_gl_sync_meta_wait(our_sync_meta, self->context);
