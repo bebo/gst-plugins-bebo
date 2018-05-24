@@ -32,7 +32,7 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 60
+#define BUFFER_COUNT 40
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
 GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);
@@ -974,6 +974,12 @@ config_failed:
 static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
 {
   gl_dxgi_map_d3d(gl_mem);
+  //context->gl_vtable->Flush();
+}
+
+static void gl_run_gl_flush(GstGLContext *context, void * reserved)
+{
+  context->gl_vtable->Flush();
 }
 
 GstFlowReturn 
@@ -983,6 +989,17 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstGL2DXGI *self = GST_GL_2_DXGI(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
+
+  {
+    GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
+    gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_gl_flush, NULL);
+    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buffer);
+    if (sync_meta) {
+      gst_gl_sync_meta_set_sync_point(sync_meta, context);
+    } else {
+      GST_ERROR("NO SYNC META");
+    }
+  }
 
   if (g_async_queue_length(self->queue) < 5) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
@@ -998,6 +1015,8 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     if (sync_meta) {
       gst_gl_sync_meta_wait(sync_meta, context);
       gst_gl_sync_meta_wait_cpu(sync_meta, context);
+    } else {
+      GST_ERROR("NO SYNC META");
     }
     gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
   }
