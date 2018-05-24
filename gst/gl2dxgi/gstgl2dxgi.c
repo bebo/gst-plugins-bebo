@@ -976,15 +976,6 @@ static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
   gl_dxgi_map_d3d(gl_mem);
 }
 
-/* static gboolean */
-/* _gst_gl_2_dxgi_set_caps (GstBaseTransform * bt, GstCaps * in_caps, */
-/*     GstCaps * out_caps) */
-/* { */
-/*   GstGL2DXGI *upload = GST_GL_2_DXGI (bt); */
-
-/*   return gst_gl_upload_set_caps (upload->upload, in_caps, out_caps); */
-/* } */
-int t = 0;
 GstFlowReturn 
 gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
