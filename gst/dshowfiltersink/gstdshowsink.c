@@ -444,7 +444,7 @@ static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
 {
   gl_dxgi_map_d3d(gl_mem);
 }
-int t = 0;
+
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
@@ -486,11 +486,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_DEBUG_OBJECT(self, "dropping early frame");
     return GST_FLOW_OK;
   }
-  t=t+1;
-  if (! (t % 3 == 0)) {
-    GST_OBJECT_UNLOCK (self);
-    return GST_FLOW_OK;
-  }
 
   /* GstMapInfo map; */
   GstMemory *memory = gst_buffer_peek_memory(buf, 0);
@@ -513,12 +508,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
   {
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
-    const GstGLFuncs *gl = sync_meta->context->gl_vtable;
-    gl->Flush();
-
     if (sync_meta) {
-      // For some reason we would get out of order frames unless we do both the
-      // normal and the CPU wait
       gst_gl_sync_meta_wait(sync_meta, self->context);
       gst_gl_sync_meta_wait_cpu(sync_meta, self->context);
     }
