@@ -692,7 +692,7 @@ gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
 {
   return gst_dxgi_device_ensure_gl_context((GstElement *) self,
     (GstGLContext **) &self->context,
-    &self->other_context,
+    (GstGLContext **) &self->other_context,
     (GstGLDisplay **) &self->display);
 }
 
@@ -939,14 +939,14 @@ unmap_helper(GstGLContext *ctx, struct umh *u) {
     NvEncUnmapInputResource(u->encoder,
       u->in_gl_resource->nv_mapped_resource.mappedResource);
   if (nv_ret != NV_ENC_SUCCESS) {
-    GST_ERROR_OBJECT("Failed to unmap input resource %p, ret %d",
+    GST_ERROR("Failed to unmap input resource %" GST_PTR_FORMAT ", ret %d",
       u->in_gl_resource, nv_ret);
   }
   nv_ret =
     NvEncUnregisterResource(u->encoder,
       u->in_gl_resource->nv_resource.registeredResource);
   if (nv_ret != NV_ENC_SUCCESS)
-    GST_ERROR_OBJECT("Failed to unregister resource %p, ret %d",
+    GST_ERROR("Failed to unregister resource %" GST_PTR_FORMAT ", ret %d",
       u->in_gl_resource, nv_ret);
 }
 
@@ -955,7 +955,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 {
   GstVideoEncoder *enc = user_data;
   D3DGstNvBaseEnc *nvenc = user_data;
-  NVENCSTATUS nv_ret;
   GstDXGID3D11Context * ctx = get_dxgi_share_context(nvenc->context);
 
   /* overview of operation:
@@ -1147,7 +1146,7 @@ static void
 gst_nv_base_enc_reset_queues (D3DGstNvBaseEnc * nvenc, gboolean refill)
 {
   gpointer ptr;
-  gint i;
+  guint i;
 
   GST_INFO_OBJECT (nvenc, "clearing queues");
 
@@ -1257,7 +1256,7 @@ static inline gsize
 _get_frame_data_height (GstVideoInfo * info)
 {
   gsize ret = 0;
-  gint i;
+  guint i;
 
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (info); i++) {
     ret += _get_plane_height (info, i);
@@ -1359,8 +1358,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     gst_nv_base_enc_set_max_encode_size (nvenc, params->maxEncodeWidth,
         params->maxEncodeHeight);
   } else {
-    guint max_width, max_height;
-
+    gint max_width, max_height;
     gst_nv_base_enc_get_max_encode_size (nvenc, &max_width, &max_height);
 
     if (GST_VIDEO_INFO_WIDTH (info) > max_width
@@ -1805,7 +1803,7 @@ _acquire_input_buffer (D3DGstNvBaseEnc * nvenc, gpointer * input)
 
 static GstFlowReturn
 _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
-    GstVideoInfo * info, void *inputBuffer, void *inputBufferPtr,
+    void *inputBuffer, void *inputBufferPtr,
     NV_ENC_BUFFER_FORMAT bufferFormat, void *outputBufferPtr)
 {
   D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (nvenc);
@@ -1894,7 +1892,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
-  GstVideoFrame vframe;
   GstVideoInfo *info = &nvenc->input_state->info;
   GstFlowReturn flow = GST_FLOW_OK;
   GstMapFlags in_map_flags = GST_MAP_READ;
@@ -1979,7 +1976,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   in_gl_resource->buf = frame->input_buffer;
 
   flow =
-    _submit_input_buffer(nvenc, frame, &info, in_gl_resource,
+    _submit_input_buffer(nvenc, frame, in_gl_resource,
       in_gl_resource->nv_mapped_resource.mappedResource,
       in_gl_resource->nv_mapped_resource.mappedBufferFmt, out_buf);
 
@@ -2162,7 +2159,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
 
-  guint vi_size = info.size;
+  guint vi_size = (guint) info.size;
 
   if (!gst_nv_base_enc_ensure_gl_context(self)) {
     return FALSE;
