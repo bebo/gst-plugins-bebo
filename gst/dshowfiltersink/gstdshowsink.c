@@ -94,6 +94,7 @@ static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
 G_DEFINE_TYPE (GstShmSink, gst_shm_sink, GST_TYPE_BASE_SINK);
 
 static void gst_shm_sink_finalize (GObject * object);
+static gboolean gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self);
 static void gst_shm_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_shm_sink_get_property (GObject * object, guint prop_id,
@@ -396,7 +397,6 @@ gst_shm_sink_start (GstBaseSink * bsink)
   }
 
   self->allocator = gst_gl_dxgi_memory_allocator_new(self);
-  self->bufferqueue = g_async_queue_new();
 
   return TRUE;
 }
@@ -496,33 +496,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   }
 #endif
   gst_buffer_ref(buf);
-  g_async_queue_push(self->bufferqueue, buf);
-  if (g_async_queue_length(self->bufferqueue) < BUFFER_QUEUE_SIZE) {
-    GST_OBJECT_UNLOCK (self);
-    return GST_FLOW_OK;
-  }
-  buf = g_async_queue_try_pop(self->bufferqueue);
-  if (!buf) {
-    return GST_FLOW_EOS;
-  }
-
-  {
-    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
-    if (sync_meta) {
-      gst_gl_sync_meta_wait(sync_meta, self->context);
-      gst_gl_sync_meta_wait_cpu(sync_meta, self->context);
-    }
-    //GstGLSyncMeta *our_sync_meta = gst_buffer_add_gl_sync_meta(self->context, buf);
-    GstGLSyncMeta *our_sync_meta = sync_meta;
-    if (our_sync_meta) {
-      gst_gl_sync_meta_set_sync_point(our_sync_meta, self->context);
-      gst_gl_sync_meta_wait(our_sync_meta, self->context);
-      gst_gl_sync_meta_wait_cpu(our_sync_meta, self->context);
-    }
-
-    GstGLDXGIMemory * gl_dxgi_mem = (GstGLDXGIMemory *)memory;
-    gst_gl_context_thread_add(self->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
-  }
 
   // TOGO: GST_VIDEO_INFO_FPS_N(self->video_info);
   DWORD rc = WaitForSingleObject(self->shmem_mutex, 16);
@@ -556,8 +529,8 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
       self->shmem->write_ptr--;
 
-      static int last_frame_nr = 0;
-      static int same_frame_counter = 0;
+      static uint64_t last_frame_nr = 0;
+      static uint64_t  same_frame_counter = 0;
 
       if (last_frame_nr == frame->nr) {
         same_frame_counter++;
@@ -695,7 +668,7 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
-  return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self, &self->context, &self->other_context, &self->display);
 }
 
 static gboolean
@@ -727,7 +700,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
 
-  guint vi_size = info.size;
+  guint vi_size = (guint) info.size;
 
   if (!gst_dshow_filter_sink_ensure_gl_context(self)) {
     return FALSE;

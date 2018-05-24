@@ -669,7 +669,6 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
   nvenc->in_bufs_pool = g_async_queue_new ();
-  nvenc->frame_queue = g_async_queue_new ();
 
   nvenc->last_flow = GST_FLOW_OK;
   nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
@@ -691,7 +690,10 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
 static gboolean
 gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
 {
-  return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self,
+    (GstGLContext **) &self->context,
+    &self->other_context,
+    (GstGLDisplay **) &self->display);
 }
 
 static gboolean
@@ -700,19 +702,6 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
-
-  if (nvenc->frame_queue) {
-    GstVideoCodecFrame *frame = g_async_queue_try_pop(nvenc->frame_queue);
-    while (frame) {
-      // We don't ref the frame's buffer before putting it on the queue
-      // so this completely frees the frame.
-      gst_video_codec_frame_unref(frame);
-      frame = g_async_queue_try_pop(nvenc->frame_queue);
-    }
-    g_async_queue_unref(nvenc->frame_queue);
-    nvenc->frame_queue = NULL;
-  }
-
   gst_nv_base_enc_free_buffers (nvenc);
 
   if (nvenc->bitstream_pool) {
@@ -1898,42 +1887,10 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   GstGLDXGIMemory *gl_mem = (GstGLDXGIMemory *) gst_buffer_peek_memory (frame->input_buffer, 0);
-
   GST_LOG("handle_frame texture_id %#010x interop_id:%#010x status:%d",
       gl_mem->mem.tex_id,
       gl_mem->interop_handle,
       gl_mem->status);
-  //GstMapInfo infoin; 
-  //gst_buffer_map(frame->input_buffer, &(mf->info), GST_MAP_READ);
-
-  g_async_queue_push(nvenc->frame_queue, frame);
-  gst_buffer_ref(frame->input_buffer);
-  if (g_async_queue_length(nvenc->frame_queue) < 5) {
-    return GST_FLOW_OK;
-  }
-  frame = g_async_queue_try_pop(nvenc->frame_queue);
-  if (!frame) {
-    return GST_FLOW_EOS;
-  }
-
-  {
-    const GstGLFuncs *gl = nvenc->context->gl_vtable;
-    gl->Flush();
-    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(frame->input_buffer);
-    if (sync_meta) {
-      // For some reason we would get out of order frames unless we do both the
-      // normal and the CPU wait
-      gst_gl_sync_meta_wait(sync_meta, nvenc->context);
-      gst_gl_sync_meta_wait_cpu(sync_meta, nvenc->context);
-    }
-    gst_gl_context_thread_add(nvenc->context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_mem);
-  }
-  gl_mem = (GstGLDXGIMemory *)gst_buffer_peek_memory(frame->input_buffer, 0);
-  GST_LOG("handle_frame mapping to d3d texture_id %#010x interop_id:%#010x status:%d",
-      gl_mem->mem.tex_id,
-      gl_mem->interop_handle,
-      gl_mem->status);
-  // TODO: probably use GL thread from mem?
 
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
@@ -1944,21 +1901,12 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   struct frame_state *state = NULL;
   guint frame_n = 0;
   g_assert (nvenc->encoder != NULL);
+  gst_buffer_ref(frame->input_buffer);
 
   if (g_atomic_int_compare_and_exchange (&nvenc->reconfig, TRUE, FALSE)) {
     if (!gst_nv_base_enc_set_format (enc, nvenc->input_state))
       return GST_FLOW_ERROR;
   }
-  /*
-#if HAVE_NVENC_GST_GL
-  if (nvenc->gl_input)
-    in_map_flags |= GST_MAP_GL;
-#endif
-  
-    */
-  // DON"T MAP GL ! in_map_flags |= GST_MAP_GL;
-  //if (!gst_video_frame_map (&vframe, info, frame->input_buffer, in_map_flags))
-  //  return GST_FLOW_ERROR;
 
   /* make sure our thread that waits for output to be ready is started */
   if (nvenc->bitstream_thread == NULL) {
@@ -1991,8 +1939,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 //  data.info = &vframe.info;
   data.in_gl_resource = in_gl_resource;
 
-  //gst_gl_context_thread_add (in_gl_resource->gl_mem[0]->mem.context,
-  //    (GstGLContextThreadFunc) _map_gl_input_buffer, &data);
   in_gl_resource->nv_resource.resourceToRegister =
     ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d11texture;
   nv_ret =
@@ -2003,7 +1949,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       in_gl_resource, nv_ret);
     return GST_FLOW_ERROR;
   }
-#if 1
+
   in_gl_resource->nv_mapped_resource.version = NV_ENC_MAP_INPUT_RESOURCE_VER;
   in_gl_resource->nv_mapped_resource.registeredResource =
       in_gl_resource->nv_resource.registeredResource;
@@ -2017,7 +1963,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
         in_gl_resource, nv_ret);
     goto error;
   }
-#endif
 
   out_buf = g_async_queue_try_pop (nvenc->bitstream_pool);
   if (out_buf == NULL) {
@@ -2049,8 +1994,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   flow = g_atomic_int_get (&nvenc->last_flow);
 
 out:
-
-  //gst_video_frame_unmap (&vframe);
 
   return flow;
 
@@ -2102,16 +2045,6 @@ gst_nv_base_enc_finish (GstVideoEncoder * enc)
 
   return GST_FLOW_OK;
 }
-
-#if 0
-static gboolean
-gst_nv_base_enc_flush (GstVideoEncoder * enc)
-{
-  GstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
-  GST_INFO_OBJECT (nvenc, "done flushing encoder");
-  return TRUE;
-}
-#endif
 
 static void
 gst_nv_base_enc_schedule_reconfig (D3DGstNvBaseEnc * nvenc)

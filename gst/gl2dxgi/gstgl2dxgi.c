@@ -32,7 +32,7 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 50
+#define BUFFER_COUNT 60
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
 GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);
@@ -56,8 +56,7 @@ static gboolean gst_gl_2_dxgi_propose_allocation (GstBaseTransform *
     bt, GstQuery * decide_query, GstQuery * query);
 static gboolean gst_gl_2_dxgi_decide_allocation (GstBaseTransform * 
      trans, GstQuery * query); 
-/*static GstFlowReturn */
-gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, 
+static GstFlowReturn gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, 
     GstBuffer * buffer, GstBuffer ** outbuf);
 static GstFlowReturn gst_gl_2_dxgi_transform (GstBaseTransform * bt,
     GstBuffer * buffer, GstBuffer * outbuf);
@@ -607,10 +606,6 @@ wrong_caps:
     GST_WARNING("Wrong caps - could not understand input or output caps");
     return FALSE;
   }
-error:
-  {
-    return FALSE;
-  }
 }
 
 static void
@@ -633,7 +628,6 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
   bt_class->set_caps = gst_gl_2_dxgi_set_caps;
   bt_class->propose_allocation = gst_gl_2_dxgi_propose_allocation;
   bt_class->decide_allocation = gst_gl_2_dxgi_decide_allocation;
-
   bt_class->passthrough_on_same_caps = FALSE; // FIXME - should I touch this?
   klass->set_caps = NULL;
   gl_class->gl_set_caps = gst_gl_2_dxgi_gl_set_caps;
@@ -897,66 +891,7 @@ static gboolean
 gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
     GstQuery * query)
 {
-#if 0
-  GstGLContext *context;
-  GstBufferPool *pool = NULL;
-  GstStructure *config;
-  GstCaps *caps;
-  guint min, max, size;
-  gboolean update_pool;
-
-  gst_query_parse_allocation(query, &caps, NULL);
-  if (!caps)
-    return FALSE;
-
-  /* get gl context */
-  if (!GST_BASE_TRANSFORM_CLASS(parent_class)->decide_allocation(trans,
-    query))
-    return FALSE;
-
-  context = GST_GL_BASE_FILTER(trans)->context;
-
-  if (gst_query_get_n_allocation_pools(query) > 0) {
-    gst_query_parse_nth_allocation_pool(query, 0, &pool, &size, &min, &max);
-
-    update_pool = TRUE;
-  } else {
-    GstVideoInfo vinfo;
-
-    gst_video_info_init(&vinfo);
-    gst_video_info_from_caps(&vinfo, caps);
-    size = vinfo.size;
-    min = max = 0;
-    update_pool = FALSE;
-  }
-
-  if (!pool || !GST_IS_GL_BUFFER_POOL(pool)) {
-    if (pool)
-      gst_object_unref(pool);
-    pool = gst_gl_buffer_pool_new(context);
-  }
-
-  config = gst_buffer_pool_get_config(pool);
-
-  gst_buffer_pool_config_set_params(config, caps, size, min, max);
-  gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-  if (gst_query_find_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, NULL))
-    gst_buffer_pool_config_add_option(config,
-      GST_BUFFER_POOL_OPTION_GL_SYNC_META);
-
-  gst_buffer_pool_set_config(pool, config);
-
-  if (update_pool)
-    gst_query_set_nth_allocation_pool(query, 0, pool, size, min, max);
-  else
-    gst_query_add_allocation_pool(query, pool, size, min, max);
-
-  gst_object_unref(pool);
-
-  return TRUE;
-#endif
   GstGL2DXGI *self = GST_GL_2_DXGI(trans);
-  GST_ERROR_OBJECT(self, "gst_decide");
   GST_LOG_OBJECT(self, "propose_allocation");
 
   GstCaps *caps;
@@ -1036,6 +971,10 @@ config_failed:
   }
 }
 
+static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
+{
+  gl_dxgi_map_d3d(gl_mem);
+}
 
 /* static gboolean */
 /* _gst_gl_2_dxgi_set_caps (GstBaseTransform * bt, GstCaps * in_caps, */
@@ -1045,13 +984,11 @@ config_failed:
 
 /*   return gst_gl_upload_set_caps (upload->upload, in_caps, out_caps); */
 /* } */
-
+int t = 0;
 GstFlowReturn 
 gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
 {
-
-#if 0
   GstGL2DXGI *self = GST_GL_2_DXGI(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
@@ -1059,57 +996,24 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   if (g_async_queue_length(self->queue) < 5) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
     g_async_queue_push_front(self->queue, buf);
-    gst_buffer_ref(buf);
-    GST_LOG("refcnt %d", buf->mini_object.refcount);
-    *outbuf = buf;
-    return GST_FLOW_OK;
+    *outbuf = gst_buffer_copy(buffer);
+    return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
-
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
-  gst_buffer_unref(buf);
-  GST_LOG("refcnt %d", buf->mini_object.refcount);
+  {
+    GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
+    GstGLDXGIMemory *gl_dxgi_mem = (GstGLDXGIMemory *)gst_buffer_peek_memory(buf, 0);
+    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
+    if (sync_meta) {
+      gst_gl_sync_meta_wait(sync_meta, context);
+      gst_gl_sync_meta_wait_cpu(sync_meta, context);
+    }
+    gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
+  }
+  // We can't unref the buffer - because it seems to be already unrefed
   *outbuf = buf;
-#else
-  *outbuf = buffer;
-#endif
   return GST_FLOW_OK;
 }
-/*   GstGL2DXGI *upload = GST_GL_2_DXGI (bt); */
-/*   GstGLUploadReturn ret; */
-/*   GstBaseTransformClass *bclass; */
-
-/*   bclass = GST_BASE_TRANSFORM_GET_CLASS (bt); */
-
-/*   if (gst_base_transform_is_passthrough (bt)) { */
-/*     *outbuf = buffer; */
-/*     return GST_FLOW_OK; */
-/*   } */
-
-/*   if (!upload->upload) */
-/*     return GST_FLOW_NOT_NEGOTIATED; */
-
-/*   ret = gst_gl_upload_perform_with_buffer (upload->upload, buffer, outbuf); */
-/*   if (ret == GST_GL_UPLOAD_RECONFIGURE) { */
-/*     gst_base_transform_reconfigure_src (bt); */
-/*     return GST_FLOW_OK; */
-/*   } */
-
-/*   if (ret != GST_GL_UPLOAD_DONE || *outbuf == NULL) { */
-/*     GST_ELEMENT_ERROR (bt, RESOURCE, NOT_FOUND, ("%s", */
-/*             "Failed to upload buffer"), (NULL)); */
-/*     if (*outbuf) */
-/*       gst_buffer_unref (*outbuf); */
-/*     return GST_FLOW_ERROR; */
-/*   } */
-
-/*   /1* basetransform doesn't unref if they're the same *1/ */
-/*   if (buffer == *outbuf) */
-/*     gst_buffer_unref (*outbuf); */
-/*   else */
-/*     bclass->copy_metadata (bt, buffer, *outbuf); */
-
-/*   return GST_FLOW_OK; */
-/* } */
 
 static GstFlowReturn
 gst_gl_2_dxgi_transform (GstBaseTransform * bt, GstBuffer * buffer,

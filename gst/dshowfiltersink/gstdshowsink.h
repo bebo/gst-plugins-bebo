@@ -69,7 +69,6 @@ struct _GstShmSink
 
   GstBufferPool *pool;
   gboolean shmem_init;
-  GAsyncQueue *bufferqueue;
 
 
   GstGLDXGIMemoryAllocator *allocator;
