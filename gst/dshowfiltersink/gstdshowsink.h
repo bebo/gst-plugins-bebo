@@ -37,17 +37,17 @@ G_BEGIN_DECLS
 #define GST_TYPE_SHM_SINK \
   (gst_shm_sink_get_type())
 #define GST_SHM_SINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHM_SINK,GstShmSink))
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHM_SINK,GstDirectShowSink))
 #define GST_SHM_SINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK,GstShmSinkClass))
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHM_SINK,GstDirectShowSinkClass))
 #define GST_IS_SHM_SINK(obj) \
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHM_SINK))
 #define GST_IS_SHM_SINK_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHM_SINK))
-typedef struct _GstShmSink GstShmSink;
-typedef struct _GstShmSinkClass GstShmSinkClass;
+typedef struct _GstDirectShowSink GstDirectShowSink;
+typedef struct _GstDirectShowSinkClass GstDirectShowSinkClass;
 
-struct _GstShmSink
+struct _GstDirectShowSink
 {
   GstBaseSink element;
   GstGLContext *context;
@@ -77,7 +77,7 @@ struct _GstShmSink
   gint64 latency;
 };
 
-struct _GstShmSinkClass
+struct _GstDirectShowSinkClass
 {
   GstBaseSinkClass parent_class;
 };

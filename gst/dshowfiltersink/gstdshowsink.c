@@ -91,10 +91,10 @@ static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_STATIC_CAPS (GST_GL_SINK_CAPS));
 
 #define parent_class gst_shm_sink_parent_class
-G_DEFINE_TYPE (GstShmSink, gst_shm_sink, GST_TYPE_BASE_SINK);
+G_DEFINE_TYPE (GstDirectShowSink, gst_shm_sink, GST_TYPE_BASE_SINK);
 
 static void gst_shm_sink_finalize (GObject * object);
-static gboolean gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self);
+static gboolean gst_dshow_filter_sink_ensure_gl_context(GstDirectShowSink * self);
 static void gst_shm_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_shm_sink_get_property (GObject * object, guint prop_id,
@@ -117,7 +117,7 @@ static guint signals[LAST_SIGNAL] = { 0 };
 static void
 gst_dshowfiltersink_set_context(GstElement *element,
     GstContext *context) {
-  GstShmSink *self = GST_SHM_SINK (element);
+  GstDirectShowSink *self = GST_SHM_SINK (element);
 
   gst_gl_handle_set_context(element, context,
       &self->display, &self->other_context);
@@ -141,7 +141,7 @@ gst_dshowfiltersink_set_context(GstElement *element,
 
 
 static gboolean 
-initialize_shared_memory(GstShmSink * self, GstVideoInfo * info)
+initialize_shared_memory(GstDirectShowSink * self, GstVideoInfo * info)
 {
   GST_OBJECT_LOCK (self);
   if (self->shmem_init) {
@@ -203,7 +203,7 @@ initialize_shared_memory(GstShmSink * self, GstVideoInfo * info)
 }
 
 static void
-clean_shmem_frame_with_max_ref_count(GstShmSink * self, int max_ref_cnt)
+clean_shmem_frame_with_max_ref_count(GstDirectShowSink * self, int max_ref_cnt)
 {
   // Caller expected to be responsible of holding locks!
   for (int i = 0; i < self->shmem->count; i++) {
@@ -228,7 +228,7 @@ clean_shmem_frame_with_max_ref_count(GstShmSink * self, int max_ref_cnt)
 }
 
 static void
-gst_shm_sink_init (GstShmSink * self)
+gst_shm_sink_init (GstDirectShowSink * self)
 {
   self->first_render_time = 0;
   self->latency = -1;
@@ -246,7 +246,7 @@ gst_shm_sink_init (GstShmSink * self)
 }
 
 static void
-gst_shm_sink_class_init (GstShmSinkClass * klass)
+gst_shm_sink_class_init (GstDirectShowSinkClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS(klass);
@@ -315,7 +315,7 @@ gst_shm_sink_class_init (GstShmSinkClass * klass)
 static void
 gst_shm_sink_finalize (GObject * object)
 {
-  GstShmSink *self = GST_SHM_SINK (object);
+  GstDirectShowSink *self = GST_SHM_SINK (object);
 
   g_cond_clear (&self->cond);
 
@@ -329,7 +329,7 @@ static void
 gst_shm_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstShmSink *self = GST_SHM_SINK (object);
+  GstDirectShowSink *self = GST_SHM_SINK (object);
   int ret = 0;
 
   switch (prop_id) {
@@ -357,7 +357,7 @@ static void
 gst_shm_sink_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstShmSink *self = GST_SHM_SINK (object);
+  GstDirectShowSink *self = GST_SHM_SINK (object);
 
   GST_OBJECT_LOCK (object);
 
@@ -383,7 +383,7 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
 static gboolean
 gst_shm_sink_start (GstBaseSink * bsink)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
   GError *err = NULL;
 
   self->stop = FALSE;
@@ -405,7 +405,7 @@ gst_shm_sink_start (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_stop (GstBaseSink * bsink)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
   // FIXME unref gl context
 
   GST_DEBUG_OBJECT (self, "Stopping");
@@ -432,7 +432,7 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 }
 
 static gboolean
-gst_shm_sink_can_render (GstShmSink * self, GstClockTime time)
+gst_shm_sink_can_render (GstDirectShowSink * self, GstClockTime time)
 {
   if (time == GST_CLOCK_TIME_NONE || self->buffer_time == GST_CLOCK_TIME_NONE)
     return TRUE;
@@ -448,7 +448,7 @@ static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
 static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
   GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
 
   if (!GST_IS_BUFFER(buf)) {
@@ -628,7 +628,7 @@ free_buffer_locked (GstBuffer * buffer, void *data)
 static gboolean
 gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_EOS:
@@ -652,7 +652,7 @@ gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
 static gboolean
 gst_shm_sink_unlock (GstBaseSink * bsink)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
 
   GST_OBJECT_LOCK (self);
   self->unlock = TRUE;
@@ -665,7 +665,7 @@ gst_shm_sink_unlock (GstBaseSink * bsink)
 static gboolean
 gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 {
-  GstShmSink *self = GST_SHM_SINK (bsink);
+  GstDirectShowSink *self = GST_SHM_SINK (bsink);
 
   GST_OBJECT_LOCK (self);
   self->unlock = FALSE;
@@ -675,14 +675,14 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 }
 
 static gboolean
-gst_dshow_filter_sink_ensure_gl_context(GstShmSink * self) {
+gst_dshow_filter_sink_ensure_gl_context(GstDirectShowSink * self) {
   return gst_dxgi_device_ensure_gl_context((GstElement *) self, &self->context, &self->other_context, &self->display);
 }
 
 static gboolean
 gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 {
-  GstShmSink *self = GST_SHM_SINK (sink);
+  GstDirectShowSink *self = GST_SHM_SINK (sink);
   GST_LOG_OBJECT(self, "gst_shm_sink_propose_allocation");
 
   GstCaps *caps;
@@ -765,7 +765,7 @@ config_failed:
 static gboolean
 gst_shm_sink_set_caps (GstBaseSink * sink, GstCaps * caps)
 {
-  GstShmSink *self = GST_SHM_SINK (sink);
+  GstDirectShowSink *self = GST_SHM_SINK (sink);
   GST_DEBUG_OBJECT(self, "gst_shm_sink_set_caps with %" GST_PTR_FORMAT, caps);
 
   GstVideoInfo info;
