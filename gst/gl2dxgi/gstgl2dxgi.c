@@ -32,7 +32,8 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 40
+#define BUFFER_COUNT 25
+#define INTERNAL_QUEUE_SIZE 4
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
 GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);
@@ -1001,7 +1002,7 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     }
   }
 
-  if (g_async_queue_length(self->queue) < 5) {
+  if (g_async_queue_length(self->queue) < INTERNAL_QUEUE_SIZE) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
     g_async_queue_push_front(self->queue, buf);
     *outbuf = gst_buffer_copy(buffer);
