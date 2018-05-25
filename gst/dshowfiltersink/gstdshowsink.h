@@ -63,12 +63,14 @@ struct _GstShmSink
   gboolean stop;
   gboolean unlock;
   GstClockTime first_render_time;
+  GstClockTime last_render_time;
   GstClockTimeDiff buffer_time;
 
   GCond cond;
 
   GstBufferPool *pool;
   gboolean shmem_init;
+
 
   GstGLDXGIMemoryAllocator *allocator;
   /* GstAllocationParams params; */

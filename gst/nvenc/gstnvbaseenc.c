@@ -47,7 +47,7 @@
 
 #define N_BUFFERS_PER_FRAME 1
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
-#define BUFFER_COUNT 20
+#define BUFFER_COUNT 50
 
 /* magic pointer value we can put in the async queue to signal shut down */
 #define SHUTDOWN_COOKIE ((gpointer)GINT_TO_POINTER (1))
@@ -56,6 +56,8 @@
 G_DEFINE_ABSTRACT_TYPE (D3DGstNvBaseEnc, gst_nv_base_enc, GST_TYPE_VIDEO_ENCODER);
 
 #define GST_TYPE_NV_PRESET (gst_nv_preset_get_type())
+
+static gboolean gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self);
 static GType
 gst_nv_preset_get_type (void)
 {
@@ -559,7 +561,7 @@ static int gl_NvEncEncodePicture(GstGLContext *context,void* encoder, NV_ENC_PIC
 static gboolean
 gst_nv_base_enc_open (GstVideoEncoder * enc)
 {
-  GST_WARNING("OPEN NVENC");
+  GST_INFO("OPEN NVENC");
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   if (!gst_nv_base_enc_ensure_gl_context(nvenc)) {
     GST_ERROR("COULD NOT OPEN");
@@ -581,6 +583,19 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     params.apiVersion = NVENCAPI_VERSION;
     params.device = share_context->d3d11_device;
     params.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
+    if (!share_context) {
+      GST_ERROR("No DXGI share context.");
+      return FALSE;
+    }
+    else if (!nvenc->context) {
+      GST_ERROR("No GL context.");
+      return FALSE;
+    }
+    else if (!params.device) {
+      GST_ERROR("No d3d11_device");
+      return FALSE;
+    }
+
     nv_ret = gl_NvEncOpenEncodeSessionEx(nvenc->context, &params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
@@ -654,7 +669,6 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
   nvenc->in_bufs_pool = g_async_queue_new ();
-  nvenc->frame_queue = g_async_queue_new ();
 
   nvenc->last_flow = GST_FLOW_OK;
   nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
@@ -673,12 +687,13 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   return TRUE;
 }
 
-
-
 static gboolean
 gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
 {
-  return gst_dxgi_device_ensure_gl_context(self, &self->context, &self->other_context, &self->display);
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self,
+    (GstGLContext **) &self->context,
+    (GstGLContext **) &self->other_context,
+    (GstGLDisplay **) &self->display);
 }
 
 static gboolean
@@ -687,19 +702,6 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
-
-  if (nvenc->frame_queue) {
-    GstVideoCodecFrame * frame = g_async_queue_try_pop(nvenc->frame_queue);
-    while (frame) {
-      // We don't ref the frame's buffer before putting it on the queue
-      // so this completely frees the frame.
-      gst_video_codec_frame_unref(frame);
-      frame = g_async_queue_try_pop(nvenc->frame_queue);
-    }
-    g_async_queue_unref(nvenc->frame_queue);
-    nvenc->frame_queue = NULL;
-  }
-
   gst_nv_base_enc_free_buffers (nvenc);
 
   if (nvenc->bitstream_pool) {
@@ -937,14 +939,14 @@ unmap_helper(GstGLContext *ctx, struct umh *u) {
     NvEncUnmapInputResource(u->encoder,
       u->in_gl_resource->nv_mapped_resource.mappedResource);
   if (nv_ret != NV_ENC_SUCCESS) {
-    GST_ERROR_OBJECT("Failed to unmap input resource %p, ret %d",
+    GST_ERROR("Failed to unmap input resource %" GST_PTR_FORMAT ", ret %d",
       u->in_gl_resource, nv_ret);
   }
   nv_ret =
     NvEncUnregisterResource(u->encoder,
       u->in_gl_resource->nv_resource.registeredResource);
   if (nv_ret != NV_ENC_SUCCESS)
-    GST_ERROR_OBJECT("Failed to unregister resource %p, ret %d",
+    GST_ERROR("Failed to unregister resource %" GST_PTR_FORMAT ", ret %d",
       u->in_gl_resource, nv_ret);
 }
 
@@ -953,7 +955,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 {
   GstVideoEncoder *enc = user_data;
   D3DGstNvBaseEnc *nvenc = user_data;
-  NVENCSTATUS nv_ret;
   GstDXGID3D11Context * ctx = get_dxgi_share_context(nvenc->context);
 
   /* overview of operation:
@@ -1058,7 +1059,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
       g_assert (in_buf != NULL);
       if (nvenc->gl_input) {
         struct gl_input_resource *in_gl_resource = in_buf;
-        gst_buffer_unref(in_gl_resource->buf);
 
         struct umh u = {
           .encoder = nvenc->encoder,
@@ -1068,6 +1068,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 
         memset (&in_gl_resource->nv_mapped_resource, 0,
             sizeof (in_gl_resource->nv_mapped_resource));
+        gst_buffer_unref(in_gl_resource->buf);
       }
 
 
@@ -1145,7 +1146,7 @@ static void
 gst_nv_base_enc_reset_queues (D3DGstNvBaseEnc * nvenc, gboolean refill)
 {
   gpointer ptr;
-  gint i;
+  guint i;
 
   GST_INFO_OBJECT (nvenc, "clearing queues");
 
@@ -1255,7 +1256,7 @@ static inline gsize
 _get_frame_data_height (GstVideoInfo * info)
 {
   gsize ret = 0;
-  gint i;
+  guint i;
 
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (info); i++) {
     ret += _get_plane_height (info, i);
@@ -1357,8 +1358,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     gst_nv_base_enc_set_max_encode_size (nvenc, params->maxEncodeWidth,
         params->maxEncodeHeight);
   } else {
-    guint max_width, max_height;
-
+    gint max_width, max_height;
     gst_nv_base_enc_get_max_encode_size (nvenc, &max_width, &max_height);
 
     if (GST_VIDEO_INFO_WIDTH (info) > max_width
@@ -1368,7 +1368,6 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       return FALSE;
     }
   }
-  params->presetGUID = NV_ENC_PRESET_DEFAULT_GUID;
   nv_ret =
       NvEncGetEncodePresetConfig (nvenc->encoder,
       params->encodeGUID, params->presetGUID, &preset_config);
@@ -1804,7 +1803,7 @@ _acquire_input_buffer (D3DGstNvBaseEnc * nvenc, gpointer * input)
 
 static GstFlowReturn
 _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
-    GstVideoInfo * info, void *inputBuffer, void *inputBufferPtr,
+    void *inputBuffer, void *inputBufferPtr,
     NV_ENC_BUFFER_FORMAT bufferFormat, void *outputBufferPtr)
 {
   D3DGstNvBaseEncClass *nvenc_class = GST_D3D_NV_BASE_ENC_GET_CLASS (nvenc);
@@ -1874,43 +1873,37 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   return GST_FLOW_OK;
 }
 
+static int gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
+{
+  gl_dxgi_map_d3d(gl_mem);
+}
+
 static GstFlowReturn
 gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 {
   gpointer input_buffer = NULL;
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
-  g_async_queue_push(nvenc->frame_queue, frame);
-  if (g_async_queue_length(nvenc->frame_queue) < 5) {
-    return GST_FLOW_OK;
-  }
-  frame = g_async_queue_try_pop(nvenc->frame_queue);
-  if (!frame) {
-    return GST_FLOW_EOS;
-  }
+
+  GstGLDXGIMemory *gl_mem = (GstGLDXGIMemory *) gst_buffer_peek_memory (frame->input_buffer, 0);
+  GST_LOG("handle_frame texture_id %#010x interop_id:%#010x status:%d",
+      gl_mem->mem.tex_id,
+      gl_mem->interop_handle,
+      gl_mem->status);
+
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
-  GstVideoFrame vframe;
   GstVideoInfo *info = &nvenc->input_state->info;
   GstFlowReturn flow = GST_FLOW_OK;
   GstMapFlags in_map_flags = GST_MAP_READ;
   struct frame_state *state = NULL;
   guint frame_n = 0;
   g_assert (nvenc->encoder != NULL);
+  gst_buffer_ref(frame->input_buffer);
 
   if (g_atomic_int_compare_and_exchange (&nvenc->reconfig, TRUE, FALSE)) {
     if (!gst_nv_base_enc_set_format (enc, nvenc->input_state))
       return GST_FLOW_ERROR;
   }
-  /*
-#if HAVE_NVENC_GST_GL
-  if (nvenc->gl_input)
-    in_map_flags |= GST_MAP_GL;
-#endif
-  
-    */
-  // DON"T MAP GL ! in_map_flags |= GST_MAP_GL;
-  //if (!gst_video_frame_map (&vframe, info, frame->input_buffer, in_map_flags))
-  //  return GST_FLOW_ERROR;
 
   /* make sure our thread that waits for output to be ready is started */
   if (nvenc->bitstream_thread == NULL) {
@@ -1943,8 +1936,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
 //  data.info = &vframe.info;
   data.in_gl_resource = in_gl_resource;
 
-  //gst_gl_context_thread_add (in_gl_resource->gl_mem[0]->mem.context,
-  //    (GstGLContextThreadFunc) _map_gl_input_buffer, &data);
   in_gl_resource->nv_resource.resourceToRegister =
     ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d11texture;
   nv_ret =
@@ -1955,7 +1946,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       in_gl_resource, nv_ret);
     return GST_FLOW_ERROR;
   }
-#if 1
+
   in_gl_resource->nv_mapped_resource.version = NV_ENC_MAP_INPUT_RESOURCE_VER;
   in_gl_resource->nv_mapped_resource.registeredResource =
       in_gl_resource->nv_resource.registeredResource;
@@ -1969,7 +1960,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
         in_gl_resource, nv_ret);
     goto error;
   }
-#endif
 
   out_buf = g_async_queue_try_pop (nvenc->bitstream_pool);
   if (out_buf == NULL) {
@@ -1983,11 +1973,10 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   frame->user_data = state;
   frame->user_data_destroy_notify = (GDestroyNotify) g_free;
 
-  gst_buffer_ref(frame->input_buffer);  // FIXME unref somewhere
   in_gl_resource->buf = frame->input_buffer;
 
   flow =
-    _submit_input_buffer(nvenc, frame, &info, in_gl_resource,
+    _submit_input_buffer(nvenc, frame, in_gl_resource,
       in_gl_resource->nv_mapped_resource.mappedResource,
       in_gl_resource->nv_mapped_resource.mappedBufferFmt, out_buf);
 
@@ -2002,8 +1991,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   flow = g_atomic_int_get (&nvenc->last_flow);
 
 out:
-
-  //gst_video_frame_unmap (&vframe);
 
   return flow;
 
@@ -2055,16 +2042,6 @@ gst_nv_base_enc_finish (GstVideoEncoder * enc)
 
   return GST_FLOW_OK;
 }
-
-#if 0
-static gboolean
-gst_nv_base_enc_flush (GstVideoEncoder * enc)
-{
-  GstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
-  GST_INFO_OBJECT (nvenc, "done flushing encoder");
-  return TRUE;
-}
-#endif
 
 static void
 gst_nv_base_enc_schedule_reconfig (D3DGstNvBaseEnc * nvenc)
@@ -2164,7 +2141,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   gst_query_parse_allocation(query, &caps, &need_pool);
   GstCapsFeatures *features;
   features = gst_caps_get_features (caps, 0);
-
+  gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
       GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
@@ -2182,7 +2159,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
 
-  guint vi_size = info.size;
+  guint vi_size = (guint) info.size;
 
   if (!gst_nv_base_enc_ensure_gl_context(self)) {
     return FALSE;
@@ -2196,7 +2173,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
     GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
     if (size == vi_size) {
       GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, 0);
+      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
       return TRUE;
     } else {
       GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
@@ -2209,7 +2186,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (self->pool);
-  gst_buffer_pool_config_set_params (config, caps, vi_size, 0, 0);
+  gst_buffer_pool_config_set_params (config, caps, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
   gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
 
@@ -2219,7 +2196,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   }
 
   /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, 0);
+  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
   GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
 
   return TRUE;

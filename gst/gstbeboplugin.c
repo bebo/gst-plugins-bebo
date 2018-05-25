@@ -26,6 +26,7 @@
 #include "dshowfiltersink/gstdshowsink.h"
 #include "nvenc/gstnvh264enc.h"
 #include "nvenc/gstnvenc.h"
+#include "gl2dxgi/gstgl2dxgi.h"
 
 
 static gboolean
@@ -38,6 +39,8 @@ plugin_init (GstPlugin * plugin)
   }
   gst_element_register(plugin, "dshowfiltersink",
     GST_RANK_NONE, GST_TYPE_SHM_SINK);
+  gst_element_register(plugin, "gl2dxgi",
+    GST_RANK_NONE, GST_TYPE_GL_2_DXGI);
   return TRUE;
 }
 

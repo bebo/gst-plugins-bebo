@@ -465,16 +465,10 @@ gst_nv_h264_enc_getcaps (GstVideoEncoder * enc, GstCaps * filter)
   GST_OBJECT_LOCK (nvenc);
 
   if (input_formats != NULL) {
-    GValue *val;
 
     template_caps = gst_pad_get_pad_template_caps (enc->sinkpad);
     supported_incaps = gst_caps_copy (template_caps);
     // gst_caps_set_value (supported_incaps, "format", input_formats);
-    /*
-    val = _get_interlace_modes (nvenc);
-    gst_caps_set_value (supported_incaps, "interlace-mode", val);
-    g_free (val); 
-    */
     GST_LOG_OBJECT (enc, "codec input caps %" GST_PTR_FORMAT, supported_incaps);
     GST_LOG_OBJECT (enc, "   template caps %" GST_PTR_FORMAT, template_caps);
     caps = gst_caps_intersect (template_caps, supported_incaps);
