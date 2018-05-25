@@ -22,6 +22,10 @@
  */
 #pragma once
 
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
+
 #include <gst/gst.h>
 #define _GST_GL_MEMORY_PBO_H_ // FIXME - no idea why
 #include <gst/gl/gstglmemory.h>
@@ -46,12 +50,19 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_DXGI_MEMORY_ALLOCATOR, \
       GstGLDXGIMemoryAllocatorClass))
 
+typedef enum {
+  GST_DXGI_GL_UNLOCKED,
+  GST_DXGI_GL_LOCKED,
+//  GST_DXGI_D3D_MAPPED,
+} GLDXGILockStatus;
+
 typedef struct _GstGLDXGIMemory
 {
   GstGLMemory mem;
   HANDLE interop_handle;
   HANDLE dxgi_handle;
   ID3D11Texture2D * d3d11texture;
+  GLDXGILockStatus status;
   gpointer    _padding[GST_PADDING];
 } GstGLDXGIMemory;
 
@@ -66,6 +77,9 @@ typedef struct _GstGLDXGIMemoryAllocatorClass
   GstGLMemoryAllocatorClass parent_class;
   GstGLBaseMemoryAllocatorAllocFunction orig_alloc;
 } GstGLDXGIMemoryAllocatorClass;
+
+void gl_dxgi_map_d3d(GstGLDXGIMemory * gl_mem);
+void gl_dxgi_unmap_d3d(GstGLDXGIMemory * gl_mem);
 
 GType gst_gl_dxgi_memory_allocator_get_type(void);
 GstGLDXGIMemoryAllocator * gst_gl_dxgi_memory_allocator_new();
