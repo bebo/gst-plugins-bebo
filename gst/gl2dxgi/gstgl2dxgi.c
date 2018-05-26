@@ -709,6 +709,15 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
   GstGL2DXGI *self = GST_GL_2_DXGI (bt);
   GST_ERROR_OBJECT (self, "Stopping");
 
+  if (self->queue) {
+    GstBuffer * buf = g_async_queue_try_pop(self->queue);
+    while (buf) {
+      gst_buffer_unref(buf);
+      buf = g_async_queue_try_pop(self->queue);
+    }
+    g_async_queue_unref(self->queue);
+  }
+
   if (self->pool)
     gst_object_unref (self->pool);
   self->pool = NULL;
