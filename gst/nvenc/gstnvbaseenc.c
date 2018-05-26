@@ -1069,6 +1069,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         memset (&in_gl_resource->nv_mapped_resource, 0,
             sizeof (in_gl_resource->nv_mapped_resource));
         gst_buffer_unref(in_gl_resource->buf);
+        in_gl_resource->buf = NULL;
       }
 
 
@@ -1125,10 +1126,10 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
   g_async_queue_lock (nvenc->bitstream_queue);
   g_async_queue_lock (nvenc->bitstream_pool);
-  while ((out_buf = g_async_queue_try_pop_unlocked (nvenc->bitstream_queue))) {
-    GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
-    g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
-  }
+  //while ((out_buf = g_async_queue_try_pop_unlocked (nvenc->bitstream_queue))) {
+  //  GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
+  //  g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
+  //}
   g_async_queue_push_unlocked (nvenc->bitstream_queue, SHUTDOWN_COOKIE);
   g_async_queue_unlock (nvenc->bitstream_pool);
   g_async_queue_unlock (nvenc->bitstream_queue);
