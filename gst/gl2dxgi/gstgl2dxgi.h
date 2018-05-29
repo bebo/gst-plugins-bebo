@@ -59,6 +59,11 @@ struct _GstGL2DXGI
   GstCaps           *out_caps;
   GstGLTextureTarget in_texture_target;
   GstGLTextureTarget out_texture_target;
+  uint64_t max_latency;
+  uint64_t latency;
+  uint64_t delay;
+  uint64_t max_delay;
+
 
   //GstGLUpload *upload;
 };
