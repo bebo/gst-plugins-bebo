@@ -45,6 +45,15 @@ G_DEFINE_TYPE_WITH_CODE (GstGL2DXGI, gst_gl_2_dxgi,
     GST_DEBUG_CATEGORY_INIT (gst_gl_2_dxgi_debug, "gl2dxgi", 0,
         "gl2dxgi Element"););
 
+enum
+{
+  PROP_0 = 0x0,
+  PROP_LATENCY = 0x1 << 1,
+  PROP_MAX_LATENCY = 0x1 << 2,
+  PROP_DELAY = 0x1 << 3,
+  PROP_MAX_DELAY = 0x1 << 4
+};
+
 /* static gboolean gst_gl_2_dxgi_get_unit_size (GstBaseTransform * trans, */
 /*     GstCaps * caps, gsize * size); */
 /* static GstCaps *_gst_gl_2_dxgi_transform_caps (GstBaseTransform * bt, */
@@ -65,6 +74,11 @@ static gboolean gst_gl_2_dxgi_stop (GstBaseTransform * bt);
 static gboolean gst_gl_2_dxgi_start (GstBaseTransform * bt);
 static void gst_gl_2_dxgi_set_context (GstElement * element,
     GstContext * context);
+
+static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
+  const GValue * value, GParamSpec * pspec);
+static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
+  GValue * value, GParamSpec * pspec);
 
 
 static GstStaticPadTemplate gst_gl_2_dxgi_src_pad_template =
@@ -103,6 +117,49 @@ gst_gl_2_dxgi_finalize (GObject * object)
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
+
+static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
+  const GValue * value, GParamSpec * pspec) {
+
+  GstGL2DXGI *self = GST_GL_2_DXGI(object);
+
+  switch (prop_id) {
+  default:
+    G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+    break;
+  }
+}
+
+static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
+  GValue * value, GParamSpec * pspec) {
+
+  GstGL2DXGI *self = GST_GL_2_DXGI(object);
+  GST_OBJECT_LOCK(self);
+
+  switch (prop_id) {
+    case PROP_LATENCY:
+      g_value_set_uint64(value, self->latency);
+      break;
+    case PROP_MAX_LATENCY:
+      g_value_set_uint64(value, self->max_latency);
+      self->max_latency = 0;
+      break;
+    case PROP_DELAY:
+      g_value_set_uint64(value, self->delay);
+      break;
+    case PROP_MAX_DELAY:
+      g_value_set_uint64(value, self->max_delay);
+      self->max_delay = 0;
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+      break;
+  }
+  GST_OBJECT_UNLOCK(self);
+
+}
+
+
 static GstCaps *
 gst_gl_2_dxgi_fixate_caps(GstBaseTransform * bt,
   GstPadDirection direction, GstCaps * caps, GstCaps * othercaps)
@@ -658,6 +715,49 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
   element_class->set_context = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_set_context);
 
   gobject_class->finalize = gst_gl_2_dxgi_finalize;
+  gobject_class->set_property = gst_gl_2_dxgi_set_property;
+  gobject_class->get_property = gst_gl_2_dxgi_get_property;
+
+  g_object_class_install_property(gobject_class,
+    PROP_LATENCY,
+    g_param_spec_ulong("latency",
+      "latency",
+      "latency to element in ns",
+      0,
+      G_MAXULONG,
+      0,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property(gobject_class,
+    PROP_MAX_LATENCY,
+    g_param_spec_ulong("max-latency",
+      "maximum latency",
+      "maximum latency to element in ns since last get",
+      0,
+      G_MAXULONG,
+      0,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property(gobject_class,
+    PROP_DELAY,
+    g_param_spec_ulong("delay",
+      "delay",
+      "time we wait for gl to sync in ns",
+      0,
+      G_MAXULONG,
+      0,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property(gobject_class,
+    PROP_MAX_DELAY,
+    g_param_spec_ulong("max-delay",
+      "maximum delay",
+      "maximum time we wait for gl to sync in ns since last get",
+      0,
+      G_MAXULONG,
+      0,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
 }
 
 static void gst_gl_2_dxgi_set_context(GstElement * element,
