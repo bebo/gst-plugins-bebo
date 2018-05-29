@@ -138,17 +138,17 @@ static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_LATENCY:
-      g_value_set_uint64(value, self->latency);
+      g_value_set_uint64(value, self->latency / 1000000);
       break;
     case PROP_MAX_LATENCY:
-      g_value_set_uint64(value, self->max_latency);
+      g_value_set_uint64(value, self->max_latency / 1000000);
       self->max_latency = 0;
       break;
     case PROP_DELAY:
-      g_value_set_uint64(value, self->delay);
+      g_value_set_uint64(value, self->delay / 1000000);
       break;
     case PROP_MAX_DELAY:
-      g_value_set_uint64(value, self->max_delay);
+      g_value_set_uint64(value, self->max_delay / 1000000);
       self->max_delay = 0;
       break;
     default:
@@ -720,7 +720,7 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
 
   g_object_class_install_property(gobject_class,
     PROP_LATENCY,
-    g_param_spec_ulong("latency",
+    g_param_spec_uint64("latency",
       "latency",
       "latency to element in ns",
       0,
@@ -730,7 +730,7 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
 
   g_object_class_install_property(gobject_class,
     PROP_MAX_LATENCY,
-    g_param_spec_ulong("max-latency",
+    g_param_spec_uint64("max-latency",
       "maximum latency",
       "maximum latency to element in ns since last get",
       0,
@@ -740,7 +740,7 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
 
   g_object_class_install_property(gobject_class,
     PROP_DELAY,
-    g_param_spec_ulong("delay",
+    g_param_spec_uint64("delay",
       "delay",
       "time we wait for gl to sync in ns",
       0,
@@ -750,7 +750,7 @@ gst_gl_2_dxgi_class_init (GstGL2DXGIClass * klass)
 
   g_object_class_install_property(gobject_class,
     PROP_MAX_DELAY,
-    g_param_spec_ulong("max-delay",
+    g_param_spec_uint64("max-delay",
       "maximum delay",
       "maximum time we wait for gl to sync in ns since last get",
       0,
@@ -1153,11 +1153,13 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     GstClockTime running_time = gst_clock_get_time(clock) - base_time;
     latency = running_time - buf->pts;
 
+    GST_OBJECT_LOCK(self);
     self->latency = latency;
     self->max_latency = max(self->max_latency, latency);
 
     self->delay = running_time - start_running_time;
     self->max_delay = max(self->max_delay, self->delay);
+    GST_OBJECT_UNLOCK(self);
 
     GST_LOG("Measured gl2dxgi latency to %d , max_latency: %d, delay: %d max_delay: %d",
       self->latency / 1000000,
