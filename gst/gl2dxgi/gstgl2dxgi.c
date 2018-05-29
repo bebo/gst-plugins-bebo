@@ -1011,6 +1011,21 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     }
   }
 
+  GstClockTime start_running_time = 0;
+  GstClockTime latency = 0;
+  GstClockTime base_time = 0;
+
+  GstClock *clock = GST_ELEMENT_CLOCK (self);
+  if (clock != NULL) {
+    gst_object_ref (clock);
+  }
+
+  if (clock != NULL) {
+    /* The time according to the current clock */
+    base_time = GST_ELEMENT_CAST (self)->base_time;
+    start_running_time = gst_clock_get_time(clock) - base_time;
+  }
+
   if (g_async_queue_length(self->queue) < INTERNAL_QUEUE_SIZE) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
     g_async_queue_push_front(self->queue, buf);
@@ -1031,6 +1046,28 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     }
     gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
   }
+
+  if (clock != NULL) {
+    /* The time according to the current clock */
+
+    GstClockTime running_time = gst_clock_get_time(clock) - base_time;
+    latency = running_time - buf->pts;
+
+    self->latency = latency;
+    self->max_latency = max(self->max_latency, latency);
+
+    self->delay = running_time - start_running_time;
+    self->max_delay = max(self->max_delay, self->delay);
+
+    GST_LOG("Measured gl2dxgi latency to %d , max_latency: %d, delay: %d max_delay: %d",
+      self->latency / 1000000,
+      self->max_latency / 1000000,
+      self->delay / 1000000,
+      self->max_delay / 1000000);
+    gst_object_unref (clock);
+    clock = NULL;
+  }
+
   // We can't unref the buffer - because it seems to be already unrefed
   *outbuf = buf;
   return GST_FLOW_OK;
