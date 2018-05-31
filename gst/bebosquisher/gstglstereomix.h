@@ -28,41 +28,41 @@ G_BEGIN_DECLS
 
 #define GST_TYPE_GL_STEREO_MIX (gst_gl_stereo_mix_get_type())
 #define GST_GL_STEREO_MIX(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_STEREO_MIX, GstGLStereoMix))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_STEREO_MIX, GstGLStereoMixBebo))
 #define GST_GL_STEREO_MIX_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_STEREO_MIX, GstGLStereoMixClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_STEREO_MIX, GstGLStereoMixBeboClass))
 #define GST_IS_GL_STEREO_MIX(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_STEREO_MIX))
 #define GST_IS_GL_STEREO_MIX_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_STEREO_MIX))
 #define GST_GL_STEREO_MIX_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_STEREO_MIX,GstGLStereoMixClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_STEREO_MIX,GstGLStereoMixBeboClass))
 
-typedef struct _GstGLStereoMix GstGLStereoMix;
-typedef struct _GstGLStereoMixClass GstGLStereoMixClass;
-typedef struct _GstGLStereoMixPad GstGLStereoMixPad;
-typedef struct _GstGLStereoMixPadClass GstGLStereoMixPadClass;
+typedef struct _GstGLStereoMixBebo GstGLStereoMixBebo;
+typedef struct _GstGLStereoMixBeboClass GstGLStereoMixBeboClass;
+typedef struct _GstGLStereoMixPadBebo GstGLStereoMixPadBebo;
+typedef struct _GstGLStereoMixPadBeboClass GstGLStereoMixPadBeboClass;
 
-struct _GstGLStereoMixPad
+struct _GstGLStereoMixPadBebo
 {
-  GstGLMixerPad mixer_pad;
+  GstGLMixerPadBebo mixer_pad;
 
   gboolean mapped;
   GstBuffer *current_buffer;
 };
 
-struct _GstGLStereoMixPadClass
+struct _GstGLStereoMixPadBeboClass
 {
-  GstGLMixerPadClass mixer_pad_class;
+  GstGLMixerPadBeboClass mixer_pad_class;
 };
 
 #define GST_TYPE_GL_STEREO_MIX_PAD (gst_gl_stereo_mix_pad_get_type ())
 GType gst_gl_stereo_mix_pad_get_type (void);
 
 
-struct _GstGLStereoMix
+struct _GstGLStereoMixBebo
 {
-  GstGLMixer mixer;
+  GstGLMixerBebo mixer;
 
   GLuint out_tex_id;
 
@@ -76,9 +76,9 @@ struct _GstGLStereoMix
   GstBuffer *auxilliary_out;
 };
 
-struct _GstGLStereoMixClass
+struct _GstGLStereoMixBeboClass
 {
-    GstGLMixerClass mixer_class;
+    GstGLMixerBeboClass mixer_class;
 };
 
 GType gst_gl_stereo_mix_get_type(void);

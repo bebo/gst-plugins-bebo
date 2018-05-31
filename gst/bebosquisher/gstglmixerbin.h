@@ -30,21 +30,21 @@ G_BEGIN_DECLS
 GType gst_gl_mixer_bin_get_type(void);
 #define GST_TYPE_GL_MIXER_BIN (gst_gl_mixer_bin_get_type())
 #define GST_GL_MIXER_BIN(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER_BIN, GstGLMixerBin))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER_BIN, GstGLMixerBinBebo))
 #define GST_GL_MIXER_BIN_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER_BIN, GstGLMixerBinClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER_BIN, GstGLMixerBinBeboClass))
 #define GST_IS_GL_MIXER_BIN(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_MIXER_BIN))
 #define GST_IS_GL_MIXER_BIN_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_MIXER_BIN))
 #define GST_GL_MIXER_BIN_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER_BIN,GstGLMixerBinClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER_BIN,GstGLMixerBinBeboClass))
 
-typedef struct _GstGLMixerBin GstGLMixerBin;
-typedef struct _GstGLMixerBinClass GstGLMixerBinClass;
-typedef struct _GstGLMixerBinPrivate GstGLMixerBinPrivate;
+typedef struct _GstGLMixerBinBebo GstGLMixerBinBebo;
+typedef struct _GstGLMixerBinBeboClass GstGLMixerBinBeboClass;
+typedef struct _GstGLMixerBinPrivateBebo GstGLMixerBinPrivateBebo;
 
-struct _GstGLMixerBin
+struct _GstGLMixerBinBebo
 {
   GstBin parent;
 
@@ -53,19 +53,19 @@ struct _GstGLMixerBin
   GstElement *download;
   GstPad *srcpad;
 
-  GstGLMixerBinPrivate *priv;
+  GstGLMixerBinPrivateBebo *priv;
 };
 
-struct _GstGLMixerBinClass
+struct _GstGLMixerBinBeboClass
 {
   GstBinClass parent_class;
 
   GstElement * (*create_element) (void);
-  GstGhostPad * (*create_input_pad) (GstGLMixerBin * self, GstPad * mixer_pad);
+  GstGhostPad * (*create_input_pad) (GstGLMixerBinBebo * self, GstPad * mixer_pad);
 };
 
-void gst_gl_mixer_bin_finish_init (GstGLMixerBin * self);
-void gst_gl_mixer_bin_finish_init_with_element (GstGLMixerBin * self,
+void gst_gl_mixer_bin_finish_init (GstGLMixerBinBebo * self);
+void gst_gl_mixer_bin_finish_init_with_element (GstGLMixerBinBebo * self,
     GstElement * element);
 
 G_END_DECLS

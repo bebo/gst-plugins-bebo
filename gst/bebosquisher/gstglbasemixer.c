@@ -29,9 +29,9 @@
 #include "gstglbasemixer.h"
 
 #define gst_gl_base_mixer_parent_class parent_class
-G_DEFINE_ABSTRACT_TYPE (GstGLBaseMixer, gst_gl_base_mixer,
+G_DEFINE_ABSTRACT_TYPE (GstGLBaseMixerBebo, gst_gl_base_mixer,
     GST_TYPE_VIDEO_AGGREGATOR);
-static gboolean gst_gl_base_mixer_do_bufferpool (GstGLBaseMixer * mix,
+static gboolean gst_gl_base_mixer_do_bufferpool (GstGLBaseMixerBebo * mix,
     GstCaps * outcaps);
 
 #define GST_CAT_DEFAULT gst_gl_base_mixer_debug
@@ -53,9 +53,9 @@ enum
 };
 
 #define GST_GL_BASE_MIXER_GET_PRIVATE(obj)  \
-    (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_GL_BASE_MIXER, GstGLBaseMixerPrivate))
+    (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_GL_BASE_MIXER, GstGLBaseMixerPrivateBebo))
 
-struct _GstGLBaseMixerPrivate
+struct _GstGLBaseMixerPrivateBebo
 {
   gboolean negotiated;
 
@@ -67,11 +67,11 @@ struct _GstGLBaseMixerPrivate
   GstQuery *query;
 };
 
-G_DEFINE_TYPE (GstGLBaseMixerPad, gst_gl_base_mixer_pad,
+G_DEFINE_TYPE (GstGLBaseMixerPadBebo, gst_gl_base_mixer_pad,
     GST_TYPE_VIDEO_AGGREGATOR_PAD);
 
 static void
-gst_gl_base_mixer_pad_class_init (GstGLBaseMixerPadClass * klass)
+gst_gl_base_mixer_pad_class_init (GstGLBaseMixerPadBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstVideoAggregatorPadClass *vaggpad_class =
@@ -110,13 +110,13 @@ gst_gl_base_mixer_pad_set_property (GObject * object, guint prop_id,
 static gboolean
 _negotiated_caps (GstVideoAggregator * vagg, GstCaps * caps)
 {
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (vagg);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (vagg);
 
   return gst_gl_base_mixer_do_bufferpool (mix, caps);
 }
 
 static gboolean
-_default_propose_allocation (GstGLBaseMixer * mix, GstGLBaseMixerPad * pad,
+_default_propose_allocation (GstGLBaseMixerBebo * mix, GstGLBaseMixerPadBebo * pad,
     GstQuery * decide_query, GstQuery * query)
 {
   return TRUE;
@@ -126,7 +126,7 @@ static gboolean
 gst_gl_base_mixer_sink_event (GstAggregator * agg, GstAggregatorPad * bpad,
     GstEvent * event)
 {
-  GstGLBaseMixerPad *pad = GST_GL_BASE_MIXER_PAD (bpad);
+  GstGLBaseMixerPadBebo *pad = GST_GL_BASE_MIXER_PAD_BEBO (bpad);
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CAPS:
@@ -143,7 +143,7 @@ gst_gl_base_mixer_sink_event (GstAggregator * agg, GstAggregatorPad * bpad,
 }
 
 static gboolean
-_find_local_gl_context (GstGLBaseMixer * mix)
+_find_local_gl_context (GstGLBaseMixerBebo * mix)
 {
   if (gst_gl_query_local_gl_context (GST_ELEMENT (mix), GST_PAD_SRC,
           &mix->context))
@@ -155,9 +155,9 @@ _find_local_gl_context (GstGLBaseMixer * mix)
 }
 
 static gboolean
-_get_gl_context (GstGLBaseMixer * mix)
+_get_gl_context (GstGLBaseMixerBebo * mix)
 {
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
   GError *error = NULL;
 
   if (!gst_gl_ensure_element_data (mix, &mix->display,
@@ -225,9 +225,9 @@ gst_gl_base_mixer_sink_query (GstAggregator * agg, GstAggregatorPad * bpad,
     GstQuery * query)
 {
   gboolean ret = FALSE;
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (agg);
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
-  GstGLBaseMixerPad *pad = GST_GL_BASE_MIXER_PAD (bpad);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (agg);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerPadBebo *pad = GST_GL_BASE_MIXER_PAD_BEBO (bpad);
 
   GST_TRACE ("QUERY %" GST_PTR_FORMAT, query);
 
@@ -282,7 +282,7 @@ gst_gl_base_mixer_sink_query (GstAggregator * agg, GstAggregatorPad * bpad,
 }
 
 static void
-gst_gl_base_mixer_pad_init (GstGLBaseMixerPad * mixerpad)
+gst_gl_base_mixer_pad_init (GstGLBaseMixerPadBebo * mixerpad)
 {
 }
 
@@ -313,14 +313,14 @@ static void gst_gl_base_mixer_set_property (GObject * object, guint prop_id,
 static void gst_gl_base_mixer_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_gl_base_mixer_decide_allocation (GstGLBaseMixer * mix,
+static gboolean gst_gl_base_mixer_decide_allocation (GstGLBaseMixerBebo * mix,
     GstQuery * query);
-static gboolean gst_gl_base_mixer_set_allocation (GstGLBaseMixer * mix,
+static gboolean gst_gl_base_mixer_set_allocation (GstGLBaseMixerBebo * mix,
     GstBufferPool * pool, GstAllocator * allocator,
     GstAllocationParams * params, GstQuery * query);
 
 static void
-gst_gl_base_mixer_class_init (GstGLBaseMixerClass * klass)
+gst_gl_base_mixer_class_init (GstGLBaseMixerBeboClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *element_class;
@@ -334,7 +334,7 @@ gst_gl_base_mixer_class_init (GstGLBaseMixerClass * klass)
   gobject_class = (GObjectClass *) klass;
   element_class = GST_ELEMENT_CLASS (klass);
 
-  g_type_class_add_private (klass, sizeof (GstGLBaseMixerPrivate));
+  g_type_class_add_private (klass, sizeof (GstGLBaseMixerPrivateBebo));
 
   gobject_class->get_property = gst_gl_base_mixer_get_property;
   gobject_class->set_property = gst_gl_base_mixer_set_property;
@@ -343,7 +343,7 @@ gst_gl_base_mixer_class_init (GstGLBaseMixerClass * klass)
       GST_DEBUG_FUNCPTR (gst_gl_base_mixer_set_context);
   element_class->change_state = gst_gl_base_mixer_change_state;
 
-  agg_class->sinkpads_type = GST_TYPE_GL_BASE_MIXER_PAD;
+  agg_class->sinkpads_type = GST_TYPE_GL_BASE_MIXER_PAD_BEBO;
   agg_class->sink_query = gst_gl_base_mixer_sink_query;
   agg_class->sink_event = gst_gl_base_mixer_sink_event;
   agg_class->src_query = gst_gl_base_mixer_src_query;
@@ -362,7 +362,7 @@ gst_gl_base_mixer_class_init (GstGLBaseMixerClass * klass)
           GST_TYPE_GL_CONTEXT, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /* Register the pad class */
-  g_type_class_ref (GST_TYPE_GL_BASE_MIXER_PAD);
+  g_type_class_ref (GST_TYPE_GL_BASE_MIXER_PAD_BEBO);
 
   klass->supported_gl_api = GST_GL_API_ANY;
 }
@@ -371,7 +371,7 @@ static gboolean
 _reset_pad (GstAggregator * self, GstAggregatorPad * base_pad,
     gpointer user_data)
 {
-  GstGLBaseMixerPad *mix_pad = GST_GL_BASE_MIXER_PAD (base_pad);
+  GstGLBaseMixerPadBebo *mix_pad = GST_GL_BASE_MIXER_PAD_BEBO (base_pad);
 
   mix_pad->negotiated = FALSE;
 
@@ -379,7 +379,7 @@ _reset_pad (GstAggregator * self, GstAggregatorPad * base_pad,
 }
 
 static void
-gst_gl_base_mixer_reset (GstGLBaseMixer * mix)
+gst_gl_base_mixer_reset (GstGLBaseMixerBebo * mix)
 {
   /* clean up collect data */
 
@@ -388,7 +388,7 @@ gst_gl_base_mixer_reset (GstGLBaseMixer * mix)
 }
 
 static void
-gst_gl_base_mixer_init (GstGLBaseMixer * mix)
+gst_gl_base_mixer_init (GstGLBaseMixerBebo * mix)
 {
   mix->priv = GST_GL_BASE_MIXER_GET_PRIVATE (mix);
 
@@ -398,8 +398,8 @@ gst_gl_base_mixer_init (GstGLBaseMixer * mix)
 static void
 gst_gl_base_mixer_set_context (GstElement * element, GstContext * context)
 {
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (element);
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (element);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
 
   gst_gl_handle_set_context (element, context, &mix->display,
       &mix->priv->other_context);
@@ -411,9 +411,9 @@ gst_gl_base_mixer_set_context (GstElement * element, GstContext * context)
 }
 
 static gboolean
-gst_gl_base_mixer_activate (GstGLBaseMixer * mix, gboolean active)
+gst_gl_base_mixer_activate (GstGLBaseMixerBebo * mix, gboolean active)
 {
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
   gboolean result = TRUE;
 
   if (active) {
@@ -431,7 +431,7 @@ static gboolean
 gst_gl_base_mixer_src_activate_mode (GstAggregator * aggregator,
     GstPadMode mode, gboolean active)
 {
-  GstGLBaseMixer *mix;
+  GstGLBaseMixerBebo *mix;
   gboolean result = FALSE;
 
   mix = GST_GL_BASE_MIXER (aggregator);
@@ -451,7 +451,7 @@ gst_gl_base_mixer_src_activate_mode (GstAggregator * aggregator,
 static gboolean
 gst_gl_base_mixer_src_query (GstAggregator * agg, GstQuery * query)
 {
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (agg);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (agg);
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONTEXT:
@@ -469,9 +469,9 @@ gst_gl_base_mixer_src_query (GstAggregator * agg, GstQuery * query)
 }
 
 static gboolean
-gst_gl_base_mixer_decide_allocation (GstGLBaseMixer * mix, GstQuery * query)
+gst_gl_base_mixer_decide_allocation (GstGLBaseMixerBebo * mix, GstQuery * query)
 {
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
 
   if (!_get_gl_context (mix))
     return FALSE;
@@ -485,14 +485,14 @@ gst_gl_base_mixer_decide_allocation (GstGLBaseMixer * mix, GstQuery * query)
 
 /* takes ownership of the pool, allocator and query */
 static gboolean
-gst_gl_base_mixer_set_allocation (GstGLBaseMixer * mix,
+gst_gl_base_mixer_set_allocation (GstGLBaseMixerBebo * mix,
     GstBufferPool * pool, GstAllocator * allocator,
     GstAllocationParams * params, GstQuery * query)
 {
   GstAllocator *oldalloc;
   GstBufferPool *oldpool;
   GstQuery *oldquery;
-  GstGLBaseMixerPrivate *priv = mix->priv;
+  GstGLBaseMixerPrivateBebo *priv = mix->priv;
 
   GST_DEBUG ("storing allocation query");
 
@@ -527,7 +527,7 @@ gst_gl_base_mixer_set_allocation (GstGLBaseMixer * mix,
 }
 
 static gboolean
-gst_gl_base_mixer_do_bufferpool (GstGLBaseMixer * mix, GstCaps * outcaps)
+gst_gl_base_mixer_do_bufferpool (GstGLBaseMixerBebo * mix, GstCaps * outcaps)
 {
   GstQuery *query;
   gboolean result = TRUE;
@@ -582,7 +582,7 @@ no_decide_allocation:
 }
 
 GstBufferPool *
-gst_gl_base_mixer_get_buffer_pool (GstGLBaseMixer * mix)
+gst_gl_base_mixer_get_buffer_pool (GstGLBaseMixerBebo * mix)
 {
   GstBufferPool *pool;
 
@@ -599,7 +599,7 @@ static void
 gst_gl_base_mixer_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec)
 {
-  GstGLBaseMixer *mixer = GST_GL_BASE_MIXER (object);
+  GstGLBaseMixerBebo *mixer = GST_GL_BASE_MIXER (object);
 
   switch (prop_id) {
     case PROP_CONTEXT:
@@ -631,7 +631,7 @@ gst_gl_base_mixer_start (GstAggregator * agg)
 static gboolean
 gst_gl_base_mixer_stop (GstAggregator * agg)
 {
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (agg);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (agg);
 
   if (mix->priv->query) {
     gst_query_unref (mix->priv->query);
@@ -656,8 +656,8 @@ gst_gl_base_mixer_stop (GstAggregator * agg)
 static GstStateChangeReturn
 gst_gl_base_mixer_change_state (GstElement * element, GstStateChange transition)
 {
-  GstGLBaseMixer *mix = GST_GL_BASE_MIXER (element);
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
+  GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (element);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_GET_CLASS (mix);
   GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
 
   GST_DEBUG_OBJECT (mix, "changing state: %s => %s",

@@ -24,7 +24,7 @@
  *
  * Composites a number of streams into a single output scene using OpenGL in
  * a similar fashion to compositor and videomixer. See the compositor plugin
- * for documentation about the #GstGLVideoMixerPad properties.
+ * for documentation about the #GstGLVideoMixerPadBebo properties.
  *
  * ## Examples
  * |[
@@ -70,7 +70,7 @@ gst_gl_video_mixer_background_get_type (void)
 
   if (!mixer_background_type) {
     mixer_background_type =
-        g_enum_register_static ("GstGLVideoMixerBackground", mixer_background);
+        g_enum_register_static ("GstGLVideoMixerBackgroundBebo", mixer_background);
   }
   return mixer_background_type;
 }
@@ -328,7 +328,7 @@ gst_gl_video_mixer_input_set_property (GObject * object, guint prop_id,
 }
 
 static GstGhostPad *
-_create_video_mixer_input (GstGLMixerBin * self, GstPad * mixer_pad)
+_create_video_mixer_input (GstGLMixerBinBebo * self, GstPad * mixer_pad)
 {
   GstGLVideoMixerInput *input =
       g_object_new (gst_gl_video_mixer_input_get_type (), "name",
@@ -378,25 +378,25 @@ static void gst_gl_video_mixer_bin_get_property (GObject * object,
 static void gst_gl_video_mixer_bin_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec);
 
-typedef GstGLMixerBin GstGLVideoMixerBin;
-typedef GstGLMixerBinClass GstGLVideoMixerBinClass;
+typedef GstGLMixerBinBebo GstGLVideoMixerBinBebo;
+typedef GstGLMixerBinBeboClass GstGLVideoMixerBinBeboClass;
 
-G_DEFINE_TYPE (GstGLVideoMixerBin, gst_gl_video_mixer_bin,
+G_DEFINE_TYPE (GstGLVideoMixerBinBebo, gst_gl_video_mixer_bin,
     GST_TYPE_GL_MIXER_BIN);
 
 static void
-gst_gl_video_mixer_bin_init (GstGLVideoMixerBin * self)
+gst_gl_video_mixer_bin_init (GstGLVideoMixerBinBebo * self)
 {
-  GstGLMixerBin *mix_bin = GST_GL_MIXER_BIN (self);
+  GstGLMixerBinBebo *mix_bin = GST_GL_MIXER_BIN (self);
 
   gst_gl_mixer_bin_finish_init_with_element (mix_bin,
       g_object_new (GST_TYPE_GL_VIDEO_MIXER, NULL));
 }
 
 static void
-gst_gl_video_mixer_bin_class_init (GstGLVideoMixerBinClass * klass)
+gst_gl_video_mixer_bin_class_init (GstGLVideoMixerBinBeboClass * klass)
 {
-  GstGLMixerBinClass *mixer_class = GST_GL_MIXER_BIN_CLASS (klass);
+  GstGLMixerBinBeboClass *mixer_class = GST_GL_MIXER_BIN_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
@@ -419,7 +419,7 @@ static void
 gst_gl_video_mixer_bin_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (object);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (object);
 
   if (self->mixer)
     g_object_get_property (G_OBJECT (self->mixer), pspec->name, value);
@@ -429,7 +429,7 @@ static void
 gst_gl_video_mixer_bin_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (object);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (object);
 
   if (self->mixer)
     g_object_set_property (G_OBJECT (self->mixer), pspec->name, value);
@@ -445,7 +445,7 @@ enum
     GST_DEBUG_CATEGORY_INIT (gst_gl_video_mixer_debug, "glvideomixer", 0, "glvideomixer element");
 
 #define gst_gl_video_mixer_parent_class parent_class
-G_DEFINE_TYPE_WITH_CODE (GstGLVideoMixer, gst_gl_video_mixer, GST_TYPE_GL_MIXER,
+G_DEFINE_TYPE_WITH_CODE (GstGLVideoMixerBebo, gst_gl_video_mixer, GST_TYPE_GL_MIXER,
     DEBUG_INIT);
 
 static void gst_gl_video_mixer_set_property (GObject * object, guint prop_id,
@@ -456,14 +456,14 @@ static void gst_gl_video_mixer_get_property (GObject * object, guint prop_id,
 static GstCaps *_update_caps (GstVideoAggregator * vagg, GstCaps * caps,
     GstCaps * filter);
 static GstCaps *_fixate_caps (GstVideoAggregator * vagg, GstCaps * caps);
-static gboolean gst_gl_video_mixer_propose_allocation (GstGLBaseMixer *
-    base_mix, GstGLBaseMixerPad * base_pad, GstQuery * decide_query,
+static gboolean gst_gl_video_mixer_propose_allocation (GstGLBaseMixerBebo *
+    base_mix, GstGLBaseMixerPadBebo * base_pad, GstQuery * decide_query,
     GstQuery * query);
-static void gst_gl_video_mixer_reset (GstGLMixer * mixer);
-static gboolean gst_gl_video_mixer_init_shader (GstGLMixer * mixer,
+static void gst_gl_video_mixer_reset (GstGLMixerBebo * mixer);
+static gboolean gst_gl_video_mixer_init_shader (GstGLMixerBebo * mixer,
     GstCaps * outcaps);
 
-static gboolean gst_gl_video_mixer_process_textures (GstGLMixer * mixer,
+static gboolean gst_gl_video_mixer_process_textures (GstGLMixerBebo * mixer,
     GstGLMemory * out_tex);
 static gboolean gst_gl_video_mixer_callback (gpointer stuff);
 
@@ -517,26 +517,26 @@ static const gchar *checker_f_src =
 
 #define GST_TYPE_GL_VIDEO_MIXER_PAD (gst_gl_video_mixer_pad_get_type())
 #define GST_GL_VIDEO_MIXER_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_VIDEO_MIXER_PAD, GstGLVideoMixerPad))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_VIDEO_MIXER_PAD, GstGLVideoMixerPadBebo))
 #define GST_GL_VIDEO_MIXER_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_VIDEO_MIXER_PAD, GstGLVideoMixerPadClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_VIDEO_MIXER_PAD, GstGLVideoMixerPadBeboClass))
 #define GST_IS_GL_VIDEO_MIXER_PAD(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_VIDEO_MIXER_PAD))
 #define GST_IS_GL_VIDEO_MIXER_PAD_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_VIDEO_MIXER_PAD))
 
-typedef struct _GstGLVideoMixerPad GstGLVideoMixerPad;
-typedef struct _GstGLVideoMixerPadClass GstGLVideoMixerPadClass;
-typedef struct _GstGLVideoMixerCollect GstGLVideoMixerCollect;
+typedef struct _GstGLVideoMixerPadBebo GstGLVideoMixerPadBebo;
+typedef struct _GstGLVideoMixerPadBeboClass GstGLVideoMixerPadBeboClass;
+typedef struct _GstGLVideoMixerCollectBebo GstGLVideoMixerCollectBebo;
 
 /**
- * GstGLVideoMixerPad:
+ * GstGLVideoMixerPadBebo:
  *
- * The opaque #GstGLVideoMixerPad structure.
+ * The opaque #GstGLVideoMixerPadBebo structure.
  */
-struct _GstGLVideoMixerPad
+struct _GstGLVideoMixerPadBebo
 {
-  GstGLMixerPad parent;
+  GstGLMixerPadBebo parent;
 
   /* < private > */
   /* properties */
@@ -559,13 +559,13 @@ struct _GstGLVideoMixerPad
   GLuint vertex_buffer;
 };
 
-struct _GstGLVideoMixerPadClass
+struct _GstGLVideoMixerPadBeboClass
 {
-  GstGLMixerPadClass parent_class;
+  GstGLMixerPadBeboClass parent_class;
 };
 
 GType gst_gl_video_mixer_pad_get_type (void);
-G_DEFINE_TYPE (GstGLVideoMixerPad, gst_gl_video_mixer_pad,
+G_DEFINE_TYPE (GstGLVideoMixerPadBebo, gst_gl_video_mixer_pad,
     GST_TYPE_GL_MIXER_PAD);
 
 static void gst_gl_video_mixer_pad_set_property (GObject * object,
@@ -594,7 +594,7 @@ enum
 };
 
 static void
-gst_gl_video_mixer_pad_init (GstGLVideoMixerPad * pad)
+gst_gl_video_mixer_pad_init (GstGLVideoMixerPadBebo * pad)
 {
   pad->alpha = DEFAULT_PAD_ALPHA;
   pad->blend_equation_rgb = DEFAULT_PAD_BLEND_EQUATION_RGB;
@@ -606,7 +606,7 @@ gst_gl_video_mixer_pad_init (GstGLVideoMixerPad * pad)
 }
 
 static void
-gst_gl_video_mixer_pad_class_init (GstGLVideoMixerPadClass * klass)
+gst_gl_video_mixer_pad_class_init (GstGLVideoMixerPadBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
 
@@ -704,7 +704,7 @@ static void
 gst_gl_video_mixer_pad_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstGLVideoMixerPad *pad = GST_GL_VIDEO_MIXER_PAD (object);
+  GstGLVideoMixerPadBebo *pad = GST_GL_VIDEO_MIXER_PAD (object);
 
   switch (prop_id) {
     case PROP_PAD_XPOS:
@@ -762,8 +762,8 @@ static void
 gst_gl_video_mixer_pad_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstGLVideoMixerPad *pad = GST_GL_VIDEO_MIXER_PAD (object);
-  GstGLMixer *mix = GST_GL_MIXER (gst_pad_get_parent (GST_PAD (pad)));
+  GstGLVideoMixerPadBebo *pad = GST_GL_VIDEO_MIXER_PAD (object);
+  GstGLMixerBebo *mix = GST_GL_MIXER (gst_pad_get_parent (GST_PAD (pad)));
 
   switch (prop_id) {
     case PROP_PAD_XPOS:
@@ -832,9 +832,9 @@ _del_buffer (GstGLContext * context, GLuint * pBuffer)
 static void
 gst_gl_video_mixer_release_pad (GstElement * element, GstPad * p)
 {
-  GstGLVideoMixerPad *pad = GST_GL_VIDEO_MIXER_PAD (p);
+  GstGLVideoMixerPadBebo *pad = GST_GL_VIDEO_MIXER_PAD (p);
   if (pad->vertex_buffer) {
-    GstGLBaseMixer *mix = GST_GL_BASE_MIXER (element);
+    GstGLBaseMixerBebo *mix = GST_GL_BASE_MIXER (element);
     gst_gl_context_thread_add (mix->context, (GstGLContextThreadFunc)
         _del_buffer, &pad->vertex_buffer);
     pad->vertex_buffer = 0;
@@ -844,13 +844,13 @@ gst_gl_video_mixer_release_pad (GstElement * element, GstPad * p)
 }
 
 static void
-gst_gl_video_mixer_class_init (GstGLVideoMixerClass * klass)
+gst_gl_video_mixer_class_init (GstGLVideoMixerBeboClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *element_class;
   GstAggregatorClass *agg_class = (GstAggregatorClass *) klass;
   GstVideoAggregatorClass *vagg_class = (GstVideoAggregatorClass *) klass;
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_CLASS (klass);
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_CLASS (klass);
 
   gobject_class = (GObjectClass *) klass;
   element_class = GST_ELEMENT_CLASS (klass);
@@ -885,7 +885,7 @@ gst_gl_video_mixer_class_init (GstGLVideoMixerClass * klass)
 }
 
 static void
-gst_gl_video_mixer_init (GstGLVideoMixer * video_mixer)
+gst_gl_video_mixer_init (GstGLVideoMixerBebo * video_mixer)
 {
   video_mixer->background = DEFAULT_BACKGROUND;
   video_mixer->shader = NULL;
@@ -895,7 +895,7 @@ static void
 gst_gl_video_mixer_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstGLVideoMixer *mixer = GST_GL_VIDEO_MIXER (object);
+  GstGLVideoMixerBebo *mixer = GST_GL_VIDEO_MIXER (object);
 
   switch (prop_id) {
     case PROP_BACKGROUND:
@@ -911,7 +911,7 @@ static void
 gst_gl_video_mixer_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstGLVideoMixer *mixer = GST_GL_VIDEO_MIXER (object);
+  GstGLVideoMixerBebo *mixer = GST_GL_VIDEO_MIXER (object);
 
   switch (prop_id) {
     case PROP_BACKGROUND:
@@ -924,8 +924,8 @@ gst_gl_video_mixer_get_property (GObject * object, guint prop_id,
 }
 
 static gboolean
-gst_gl_video_mixer_propose_allocation (GstGLBaseMixer * base_mix,
-    GstGLBaseMixerPad * base_pad, GstQuery * decide_query, GstQuery * query)
+gst_gl_video_mixer_propose_allocation (GstGLBaseMixerBebo * base_mix,
+    GstGLBaseMixerPadBebo * base_pad, GstQuery * decide_query, GstQuery * query)
 {
   if (!GST_GL_BASE_MIXER_CLASS (parent_class)->propose_allocation (base_mix,
           base_pad, decide_query, query))
@@ -938,8 +938,8 @@ gst_gl_video_mixer_propose_allocation (GstGLBaseMixer * base_mix,
 }
 
 static void
-_mixer_pad_get_output_size (GstGLVideoMixer * mix,
-    GstGLVideoMixerPad * mix_pad, gint out_par_n, gint out_par_d, gint * width,
+_mixer_pad_get_output_size (GstGLVideoMixerBebo * mix,
+    GstGLVideoMixerPadBebo * mix_pad, gint out_par_n, gint out_par_d, gint * width,
     gint * height)
 {
   GstVideoAggregatorPad *vagg_pad = GST_VIDEO_AGGREGATOR_PAD (mix_pad);
@@ -1026,7 +1026,7 @@ _update_caps (GstVideoAggregator * vagg, GstCaps * caps, GstCaps * filter)
 static GstCaps *
 _fixate_caps (GstVideoAggregator * vagg, GstCaps * caps)
 {
-  GstGLVideoMixer *mix = GST_GL_VIDEO_MIXER (vagg);
+  GstGLVideoMixerBebo *mix = GST_GL_VIDEO_MIXER (vagg);
   gint best_width = 0, best_height = 0;
   gint best_fps_n = 0, best_fps_d = 0;
   gint par_n, par_d;
@@ -1048,7 +1048,7 @@ _fixate_caps (GstVideoAggregator * vagg, GstCaps * caps)
   GST_OBJECT_LOCK (vagg);
   for (l = GST_ELEMENT (vagg)->sinkpads; l; l = l->next) {
     GstVideoAggregatorPad *vaggpad = l->data;
-    GstGLVideoMixerPad *mixer_pad = GST_GL_VIDEO_MIXER_PAD (vaggpad);
+    GstGLVideoMixerPadBebo *mixer_pad = GST_GL_VIDEO_MIXER_PAD (vaggpad);
     gint this_width, this_height;
     gint width, height;
     gint fps_n, fps_d;
@@ -1102,7 +1102,7 @@ static gboolean
 _reset_pad_gl (GstAggregator * agg, GstAggregatorPad * aggpad, gpointer udata)
 {
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (agg)->context->gl_vtable;
-  GstGLVideoMixerPad *pad = GST_GL_VIDEO_MIXER_PAD (aggpad);
+  GstGLVideoMixerPadBebo *pad = GST_GL_VIDEO_MIXER_PAD (aggpad);
 
   if (pad->vertex_buffer) {
     gl->DeleteBuffers (1, &pad->vertex_buffer);
@@ -1113,7 +1113,7 @@ _reset_pad_gl (GstAggregator * agg, GstAggregatorPad * aggpad, gpointer udata)
 }
 
 static void
-_reset_gl (GstGLContext * context, GstGLVideoMixer * video_mixer)
+_reset_gl (GstGLContext * context, GstGLVideoMixerBebo * video_mixer)
 {
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (video_mixer)->context->gl_vtable;
 
@@ -1137,9 +1137,9 @@ _reset_gl (GstGLContext * context, GstGLVideoMixer * video_mixer)
 }
 
 static void
-gst_gl_video_mixer_reset (GstGLMixer * mixer)
+gst_gl_video_mixer_reset (GstGLMixerBebo * mixer)
 {
-  GstGLVideoMixer *video_mixer = GST_GL_VIDEO_MIXER (mixer);
+  GstGLVideoMixerBebo *video_mixer = GST_GL_VIDEO_MIXER (mixer);
   GstGLContext *context = GST_GL_BASE_MIXER (mixer)->context;
 
   GST_DEBUG_OBJECT (mixer, "context:%p", context);
@@ -1158,9 +1158,9 @@ gst_gl_video_mixer_reset (GstGLMixer * mixer)
 }
 
 static gboolean
-gst_gl_video_mixer_init_shader (GstGLMixer * mixer, GstCaps * outcaps)
+gst_gl_video_mixer_init_shader (GstGLMixerBebo * mixer, GstCaps * outcaps)
 {
-  GstGLVideoMixer *video_mixer = GST_GL_VIDEO_MIXER (mixer);
+  GstGLVideoMixerBebo *video_mixer = GST_GL_VIDEO_MIXER (mixer);
 
   if (video_mixer->shader)
     gst_object_unref (video_mixer->shader);
@@ -1171,18 +1171,18 @@ gst_gl_video_mixer_init_shader (GstGLMixer * mixer, GstCaps * outcaps)
 }
 
 static void
-_video_mixer_process_gl (GstGLContext * context, GstGLVideoMixer * video_mixer)
+_video_mixer_process_gl (GstGLContext * context, GstGLVideoMixerBebo * video_mixer)
 {
-  GstGLMixer *mixer = GST_GL_MIXER (video_mixer);
+  GstGLMixerBebo *mixer = GST_GL_MIXER (video_mixer);
 
   gst_gl_framebuffer_draw_to_texture (mixer->fbo, video_mixer->out_tex,
       gst_gl_video_mixer_callback, video_mixer);
 }
 
 static gboolean
-gst_gl_video_mixer_process_textures (GstGLMixer * mix, GstGLMemory * out_tex)
+gst_gl_video_mixer_process_textures (GstGLMixerBebo * mix, GstGLMemory * out_tex)
 {
-  GstGLVideoMixer *video_mixer = GST_GL_VIDEO_MIXER (mix);
+  GstGLVideoMixerBebo *video_mixer = GST_GL_VIDEO_MIXER (mix);
   GstGLContext *context = GST_GL_BASE_MIXER (mix)->context;
 
   video_mixer->out_tex = out_tex;
@@ -1196,7 +1196,7 @@ gst_gl_video_mixer_process_textures (GstGLMixer * mix, GstGLMemory * out_tex)
 static const GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
 static void
-_init_vbo_indices (GstGLVideoMixer * mixer)
+_init_vbo_indices (GstGLVideoMixerBebo * mixer)
 {
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (mixer)->context->gl_vtable;
 
@@ -1209,9 +1209,9 @@ _init_vbo_indices (GstGLVideoMixer * mixer)
 }
 
 static gboolean
-_draw_checker_background (GstGLVideoMixer * video_mixer)
+_draw_checker_background (GstGLVideoMixerBebo * video_mixer)
 {
-  GstGLMixer *mixer = GST_GL_MIXER (video_mixer);
+  GstGLMixerBebo *mixer = GST_GL_MIXER (video_mixer);
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (mixer)->context->gl_vtable;
   gint attr_position_loc = 0;
 
@@ -1261,9 +1261,9 @@ _draw_checker_background (GstGLVideoMixer * video_mixer)
 }
 
 static gboolean
-_draw_background (GstGLVideoMixer * video_mixer)
+_draw_background (GstGLVideoMixerBebo * video_mixer)
 {
-  GstGLMixer *mixer = GST_GL_MIXER (video_mixer);
+  GstGLMixerBebo *mixer = GST_GL_MIXER (video_mixer);
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (mixer)->context->gl_vtable;
 
   switch (video_mixer->background) {
@@ -1346,7 +1346,7 @@ _blend_function_to_gl (GstGLVideoMixerBlendFunction equation)
 }
 
 static gboolean
-_set_blend_state (GstGLVideoMixer * video_mixer, GstGLVideoMixerPad * mix_pad)
+_set_blend_state (GstGLVideoMixerBebo * video_mixer, GstGLVideoMixerPadBebo * mix_pad)
 {
   const GstGLFuncs *gl = GST_GL_BASE_MIXER (video_mixer)->context->gl_vtable;
   gboolean require_separate = FALSE;
@@ -1410,9 +1410,9 @@ _set_blend_state (GstGLVideoMixer * video_mixer, GstGLVideoMixerPad * mix_pad)
 static gboolean
 gst_gl_video_mixer_callback (gpointer stuff)
 {
-  GstGLVideoMixer *video_mixer = GST_GL_VIDEO_MIXER (stuff);
+  GstGLVideoMixerBebo *video_mixer = GST_GL_VIDEO_MIXER (stuff);
   GstVideoAggregator *vagg = GST_VIDEO_AGGREGATOR (stuff);
-  GstGLMixer *mixer = GST_GL_MIXER (video_mixer);
+  GstGLMixerBebo *mixer = GST_GL_MIXER (video_mixer);
   GstGLFuncs *gl = GST_GL_BASE_MIXER (mixer)->context->gl_vtable;
   GLint attr_position_loc = 0;
   GLint attr_texture_loc = 0;
@@ -1449,8 +1449,8 @@ gst_gl_video_mixer_callback (gpointer stuff)
   GST_OBJECT_LOCK (video_mixer);
   walk = GST_ELEMENT (video_mixer)->sinkpads;
   while (walk) {
-    GstGLMixerPad *mix_pad = walk->data;
-    GstGLVideoMixerPad *pad = walk->data;
+    GstGLMixerPadBebo *mix_pad = walk->data;
+    GstGLVideoMixerPadBebo *pad = walk->data;
     GstVideoAggregatorPad *vagg_pad = walk->data;
     GstVideoInfo *v_info;
     guint in_tex;

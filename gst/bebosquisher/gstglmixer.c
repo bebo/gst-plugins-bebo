@@ -29,7 +29,7 @@
 #include "gstglmixer.h"
 
 #define gst_gl_mixer_parent_class parent_class
-G_DEFINE_ABSTRACT_TYPE (GstGLMixer, gst_gl_mixer, GST_TYPE_GL_BASE_MIXER);
+G_DEFINE_ABSTRACT_TYPE (GstGLMixerBebo, gst_gl_mixer, GST_TYPE_GL_BASE_MIXER);
 
 #define GST_CAT_DEFAULT gst_gl_mixer_debug
 GST_DEBUG_CATEGORY (gst_gl_mixer_debug);
@@ -47,7 +47,7 @@ enum
 #define GST_GL_MIXER_GET_PRIVATE(obj)  \
     (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_GL_MIXER, GstGLMixerPrivate))
 
-struct _GstGLMixerPrivate
+struct _GstGLMixerPrivateBebo
 {
   gboolean negotiated;
 
@@ -56,10 +56,10 @@ struct _GstGLMixerPrivate
   GCond gl_resource_cond;
 };
 
-G_DEFINE_TYPE (GstGLMixerPad, gst_gl_mixer_pad, GST_TYPE_GL_BASE_MIXER_PAD);
+G_DEFINE_TYPE (GstGLMixerPadBebo, gst_gl_mixer_pad, GST_TYPE_GL_BASE_MIXER_PAD_BEBO);
 
 static void
-gst_gl_mixer_pad_class_init (GstGLMixerPadClass * klass)
+gst_gl_mixer_pad_class_init (GstGLMixerPadBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstVideoAggregatorPadClass *vaggpad_class =
@@ -98,7 +98,7 @@ gst_gl_mixer_pad_set_property (GObject * object, guint prop_id,
 static gboolean
 _negotiated_caps (GstVideoAggregator * vagg, GstCaps * caps)
 {
-  GstGLMixer *mix = GST_GL_MIXER (vagg);
+  GstGLMixerBebo *mix = GST_GL_MIXER (vagg);
   gboolean ret;
 
   mix->priv->negotiated = TRUE;
@@ -131,10 +131,10 @@ _find_best_format (GstVideoAggregator * vagg, GstCaps * downstream_caps,
 }
 
 static gboolean
-gst_gl_mixer_propose_allocation (GstGLBaseMixer * base_mix,
-    GstGLBaseMixerPad * base_pad, GstQuery * decide_query, GstQuery * query)
+gst_gl_mixer_propose_allocation (GstGLBaseMixerBebo * base_mix,
+    GstGLBaseMixerPadBebo * base_pad, GstQuery * decide_query, GstQuery * query)
 {
-  GstGLMixer *mix = GST_GL_MIXER (base_mix);
+  GstGLMixerBebo *mix = GST_GL_MIXER (base_mix);
   GstGLContext *context = base_mix->context;
   GstBufferPool *pool = NULL;
   GstStructure *config;
@@ -196,7 +196,7 @@ config_failed:
 }
 
 static gboolean
-gst_gl_mixer_pad_sink_acceptcaps (GstPad * pad, GstGLMixer * mix,
+gst_gl_mixer_pad_sink_acceptcaps (GstPad * pad, GstGLMixerBebo * mix,
     GstCaps * caps)
 {
   gboolean ret;
@@ -239,7 +239,7 @@ _update_caps (GstVideoAggregator * vagg, GstCaps * caps, GstCaps * filter)
 }
 
 static GstCaps *
-gst_gl_mixer_pad_sink_getcaps (GstPad * pad, GstGLMixer * mix, GstCaps * filter)
+gst_gl_mixer_pad_sink_getcaps (GstPad * pad, GstGLMixerBebo * mix, GstCaps * filter)
 {
   GstCaps *sinkcaps;
   GstCaps *template_caps;
@@ -277,7 +277,7 @@ gst_gl_mixer_sink_query (GstAggregator * agg, GstAggregatorPad * bpad,
     GstQuery * query)
 {
   gboolean ret = FALSE;
-  GstGLMixer *mix = GST_GL_MIXER (agg);
+  GstGLMixerBebo *mix = GST_GL_MIXER (agg);
 
   GST_TRACE ("QUERY %" GST_PTR_FORMAT, query);
 
@@ -312,7 +312,7 @@ gst_gl_mixer_sink_query (GstAggregator * agg, GstAggregatorPad * bpad,
 }
 
 static void
-gst_gl_mixer_pad_init (GstGLMixerPad * mixerpad)
+gst_gl_mixer_pad_init (GstGLMixerPadBebo * mixerpad)
 {
 }
 
@@ -359,20 +359,20 @@ static void gst_gl_mixer_set_property (GObject * object, guint prop_id,
 static void gst_gl_mixer_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_gl_mixer_decide_allocation (GstGLBaseMixer * mix,
+static gboolean gst_gl_mixer_decide_allocation (GstGLBaseMixerBebo * mix,
     GstQuery * query);
 
 static void gst_gl_mixer_finalize (GObject * object);
 
 static void
-gst_gl_mixer_class_init (GstGLMixerClass * klass)
+gst_gl_mixer_class_init (GstGLMixerBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstVideoAggregatorClass *videoaggregator_class =
       (GstVideoAggregatorClass *) klass;
   GstAggregatorClass *agg_class = (GstAggregatorClass *) klass;
-  GstGLBaseMixerClass *mix_class = GST_GL_BASE_MIXER_CLASS (klass);;
+  GstGLBaseMixerBeboClass *mix_class = GST_GL_BASE_MIXER_CLASS (klass);;
 
   GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "glmixer", 0, "OpenGL mixer");
 
@@ -408,13 +408,13 @@ gst_gl_mixer_class_init (GstGLMixerClass * klass)
 }
 
 static void
-gst_gl_mixer_reset (GstGLMixer * mix)
+gst_gl_mixer_reset (GstGLMixerBebo * mix)
 {
   mix->priv->negotiated = FALSE;
 }
 
 static void
-gst_gl_mixer_init (GstGLMixer * mix)
+gst_gl_mixer_init (GstGLMixerBebo * mix)
 {
   mix->priv = GST_GL_MIXER_GET_PRIVATE (mix);
 
@@ -428,7 +428,7 @@ gst_gl_mixer_init (GstGLMixer * mix)
 static void
 gst_gl_mixer_finalize (GObject * object)
 {
-  GstGLMixer *mix = GST_GL_MIXER (object);
+  GstGLMixerBebo *mix = GST_GL_MIXER (object);
   GstGLMixerPrivate *priv = mix->priv;
 
   if (mix->out_caps)
@@ -493,7 +493,7 @@ static GstFlowReturn
 gst_gl_mixer_get_output_buffer (GstVideoAggregator * videoaggregator,
     GstBuffer ** outbuf)
 {
-  GstGLMixer *mix = GST_GL_MIXER (videoaggregator);
+  GstGLMixerBebo *mix = GST_GL_MIXER (videoaggregator);
   GstBufferPool *pool;
   GstFlowReturn ret;
 
@@ -518,7 +518,7 @@ gst_gl_mixer_get_output_buffer (GstVideoAggregator * videoaggregator,
 }
 
 static void
-_mixer_create_fbo (GstGLContext * context, GstGLMixer * mix)
+_mixer_create_fbo (GstGLContext * context, GstGLMixerBebo * mix)
 {
   GstVideoAggregator *vagg = GST_VIDEO_AGGREGATOR (mix);
   guint out_width = GST_VIDEO_INFO_WIDTH (&vagg->info);
@@ -530,10 +530,10 @@ _mixer_create_fbo (GstGLContext * context, GstGLMixer * mix)
 }
 
 static gboolean
-gst_gl_mixer_decide_allocation (GstGLBaseMixer * base_mix, GstQuery * query)
+gst_gl_mixer_decide_allocation (GstGLBaseMixerBebo * base_mix, GstQuery * query)
 {
-  GstGLMixer *mix = GST_GL_MIXER (base_mix);
-  GstGLMixerClass *mixer_class = GST_GL_MIXER_GET_CLASS (mix);
+  GstGLMixerBebo *mix = GST_GL_MIXER (base_mix);
+  GstGLMixerBeboClass *mixer_class = GST_GL_MIXER_GET_CLASS (mix);
   GstGLContext *context = base_mix->context;
   GstBufferPool *pool = NULL;
   GstStructure *config;
@@ -607,8 +607,8 @@ _upload_frames (GstAggregator * agg, GstAggregatorPad * agg_pad,
     gpointer user_data)
 {
   GstVideoAggregatorPad *vaggpad = GST_VIDEO_AGGREGATOR_PAD (agg_pad);
-  GstGLMixerPad *pad = GST_GL_MIXER_PAD (agg_pad);
-  GstGLMixer *mix = GST_GL_MIXER (agg);
+  GstGLMixerPadBebo *pad = GST_GL_MIXER_PAD (agg_pad);
+  GstGLMixerBebo *mix = GST_GL_MIXER (agg);
 
   pad->current_texture = 0;
   if (vaggpad->buffer != NULL) {
@@ -639,13 +639,13 @@ _upload_frames (GstAggregator * agg, GstAggregatorPad * agg_pad,
 }
 
 gboolean
-gst_gl_mixer_process_textures (GstGLMixer * mix, GstBuffer * outbuf)
+gst_gl_mixer_process_textures (GstGLMixerBebo * mix, GstBuffer * outbuf)
 {
   GstGLMemory *out_tex;
   gboolean res = TRUE;
   GstVideoFrame out_frame;
   GstVideoAggregator *vagg = GST_VIDEO_AGGREGATOR (mix);
-  GstGLMixerClass *mix_class = GST_GL_MIXER_GET_CLASS (mix);
+  GstGLMixerBeboClass *mix_class = GST_GL_MIXER_GET_CLASS (mix);
   GstGLMixerPrivate *priv = mix->priv;
 
   GST_TRACE ("Processing buffers");
@@ -684,9 +684,9 @@ out:
 }
 
 static gboolean
-gst_gl_mixer_process_buffers (GstGLMixer * mix, GstBuffer * outbuf)
+gst_gl_mixer_process_buffers (GstGLMixerBebo * mix, GstBuffer * outbuf)
 {
-  GstGLMixerClass *mix_class = GST_GL_MIXER_GET_CLASS (mix);
+  GstGLMixerBeboClass *mix_class = GST_GL_MIXER_GET_CLASS (mix);
 
   return mix_class->process_buffers (mix, outbuf);
 }
@@ -695,8 +695,8 @@ static GstFlowReturn
 gst_gl_mixer_aggregate_frames (GstVideoAggregator * vagg, GstBuffer * outbuf)
 {
   gboolean res = FALSE;
-  GstGLMixer *mix = GST_GL_MIXER (vagg);
-  GstGLMixerClass *mix_class = GST_GL_MIXER_GET_CLASS (vagg);
+  GstGLMixerBebo *mix = GST_GL_MIXER (vagg);
+  GstGLMixerBeboClass *mix_class = GST_GL_MIXER_GET_CLASS (vagg);
   GstGLContext *context = GST_GL_BASE_MIXER (mix)->context;
   GstGLSyncMeta *sync_meta;
 
@@ -743,8 +743,8 @@ gst_gl_mixer_start (GstAggregator * agg)
 static gboolean
 gst_gl_mixer_stop (GstAggregator * agg)
 {
-  GstGLMixer *mix = GST_GL_MIXER (agg);
-  GstGLMixerClass *mixer_class = GST_GL_MIXER_GET_CLASS (mix);
+  GstGLMixerBebo *mix = GST_GL_MIXER (agg);
+  GstGLMixerBeboClass *mixer_class = GST_GL_MIXER_GET_CLASS (mix);
 
   if (mixer_class->reset)
     mixer_class->reset (mix);
