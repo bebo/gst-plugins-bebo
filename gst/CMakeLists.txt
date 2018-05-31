@@ -48,7 +48,7 @@ SET(nvenc_SOURCES
 SET(nvenc_HEADERS
   nvenc/gstnvbaseenc.h
   nvenc/gstnvenc.h
-  nvenc/gstnvh264enc.h	
+  nvenc/gstnvh264enc.h
 )
 
 SET(gstdshowsink_SOURCES
@@ -67,11 +67,31 @@ SET(gl2dxgi_HEADERS
   gl2dxgi/gstgl2dxgi.h
 )
 
+SET(bebosquisher_SOURCES
+  bebosquisher/gstglbasemixer.c
+  bebosquisher/gstglmixerbin.c
+  bebosquisher/gstglmixer.c
+  bebosquisher/gstglvideomixer.c
+  bebosquisher/gstglstereomix.c
+  bebosquisher/gstglutils.c
+)
+
+SET(bebosquisher_HEADERS
+  bebosquisher/gstglbasemixer.h
+  bebosquisher/gstglmixerbin.h
+  bebosquisher/gstglmixer.h
+  bebosquisher/gstglvideomixer.h
+  bebosquisher/gstglstereomix.h
+  bebosquisher/gstglutils.h
+)
+
 source_group("nvenc" FILES ${nvenc_SOURCES} ${nvenc_HEADERS})
 source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS})
 source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
 source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
+source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
+
 
 ADD_LIBRARY(libbebogst SHARED
   gstbeboplugin.c
@@ -83,6 +103,8 @@ ADD_LIBRARY(libbebogst SHARED
   ${gstdshowsink_HEADERS}
   ${gl2dxgi_SOURCES}
   ${gl2dxgi_HEADERS}
+  ${bebosquisher_SOURCES}
+  ${bebosquisher_HEADERS}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst
@@ -98,7 +120,14 @@ TARGET_LINK_LIBRARIES(libbebogst
   winmm
   D3D11
   opengl32
+  gstallocators-1.0
+  gstbadallocators-1.0
+  gstbadbase-1.0
+  gstbadvideo-1.0
+  gstpbutils-1.0
+  gstcontroller-1.0
 )
+
 INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/include
   ${GST_INSTALL_BASE}/include/gstreamer-1.0
