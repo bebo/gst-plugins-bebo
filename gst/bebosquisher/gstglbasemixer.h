@@ -28,30 +28,30 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_GL_BASE_MIXER_PAD (gst_gl_base_mixer_pad_get_type())
-#define GST_GL_BASE_MIXER_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_BASE_MIXER_PAD, GstGLBaseMixerPad))
+#define GST_TYPE_GL_BASE_MIXER_PAD_BEBO (gst_gl_base_mixer_pad_get_type())
+#define GST_GL_BASE_MIXER_PAD_BEBO(obj) \
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_BASE_MIXER_PAD_BEBO, GstGLBaseMixerPadBebo))
 #define GST_GL_BASE_MIXER_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_BASE_MIXER_PAD, GstGLBaseMixerPadClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_BASE_MIXER_PAD_BEBO, GstGLBaseMixerPadBeboClass))
 #define GST_IS_GL_BASE_MIXER_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_BASE_MIXER_PAD))
+        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_BASE_MIXER_PAD_BEBO))
 #define GST_IS_GL_BASE_MIXER_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_BASE_MIXER_PAD))
+        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_BASE_MIXER_PAD_BEBO))
 #define GST_GL_BASE_MIXER_PAD_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_BASE_MIXER_PAD,GstGLBaseMixerPadClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_BASE_MIXER_PAD_BEBO,GstGLBaseMixerPadBeboClass))
 
-typedef struct _GstGLBaseMixerPad GstGLBaseMixerPad;
-typedef struct _GstGLBaseMixerPadClass GstGLBaseMixerPadClass;
+typedef struct _GstGLBaseMixerPadBebo GstGLBaseMixerPadBebo;
+typedef struct _GstGLBaseMixerPadClassBebo GstGLBaseMixerPadBeboClass;
 
 /* all information needed for one video stream */
-struct _GstGLBaseMixerPad
+struct _GstGLBaseMixerPadBebo
 {
   GstVideoAggregatorPad parent;                /* subclass the pad */
 
   gboolean negotiated;
 };
 
-struct _GstGLBaseMixerPadClass
+struct _GstGLBaseMixerPadClassBebo
 {
   GstVideoAggregatorPadClass parent_class;
 };
@@ -60,21 +60,21 @@ GType gst_gl_base_mixer_pad_get_type (void);
 
 #define GST_TYPE_GL_BASE_MIXER (gst_gl_base_mixer_get_type())
 #define GST_GL_BASE_MIXER(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_BASE_MIXER, GstGLBaseMixer))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_BASE_MIXER, GstGLBaseMixerBebo))
 #define GST_GL_BASE_MIXER_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_BASE_MIXER, GstGLBaseMixerClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_BASE_MIXER, GstGLBaseMixerBeboClass))
 #define GST_IS_GL_BASE_MIXER(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_BASE_MIXER))
 #define GST_IS_GL_BASE_MIXER_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_BASE_MIXER))
 #define GST_GL_BASE_MIXER_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_BASE_MIXER,GstGLBaseMixerClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_BASE_MIXER,GstGLBaseMixerBeboClass))
 
-typedef struct _GstGLBaseMixer GstGLBaseMixer;
-typedef struct _GstGLBaseMixerClass GstGLBaseMixerClass;
-typedef struct _GstGLBaseMixerPrivate GstGLBaseMixerPrivate;
+typedef struct _GstGLBaseMixerBebo GstGLBaseMixerBebo;
+typedef struct _GstGLBaseMixerBeboClass GstGLBaseMixerBeboClass;
+typedef struct _GstGLBaseMixerPrivateBebo GstGLBaseMixerPrivateBebo;
 
-struct _GstGLBaseMixer
+struct _GstGLBaseMixerBebo
 {
   GstVideoAggregator     vaggregator;
 
@@ -83,23 +83,23 @@ struct _GstGLBaseMixer
 
   gpointer _padding[GST_PADDING];
 
-  GstGLBaseMixerPrivate *priv;
+  GstGLBaseMixerPrivateBebo *priv;
 };
 
-struct _GstGLBaseMixerClass
+struct _GstGLBaseMixerBeboClass
 {
   GstVideoAggregatorClass parent_class;
   GstGLAPI supported_gl_api;
 
-  gboolean (*propose_allocation) (GstGLBaseMixer * mix, GstGLBaseMixerPad * pad, GstQuery * decide_query, GstQuery *query);
-  gboolean (*decide_allocation) (GstGLBaseMixer * mix, GstQuery * decide_query);
+  gboolean (*propose_allocation) (GstGLBaseMixerBebo * mix, GstGLBaseMixerPadBebo * pad, GstQuery * decide_query, GstQuery *query);
+  gboolean (*decide_allocation) (GstGLBaseMixerBebo * mix, GstQuery * decide_query);
 
   gpointer _padding[GST_PADDING];
 };
 
 GType gst_gl_base_mixer_get_type(void);
 
-GstBufferPool *gst_gl_base_mixer_get_buffer_pool (GstGLBaseMixer * mix);
+GstBufferPool *gst_gl_base_mixer_get_buffer_pool (GstGLBaseMixerBebo * mix);
 
 G_END_DECLS
 #endif /* __GST_GL_BASE_MIXER_H__ */

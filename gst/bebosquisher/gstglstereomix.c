@@ -66,27 +66,27 @@
 #define GST_CAT_DEFAULT gst_gl_stereo_mix_debug
 GST_DEBUG_CATEGORY (gst_gl_stereo_mix_debug);
 
-G_DEFINE_TYPE (GstGLStereoMixPad, gst_gl_stereo_mix_pad, GST_TYPE_GL_MIXER_PAD);
+G_DEFINE_TYPE (GstGLStereoMixPadBebo, gst_gl_stereo_mix_pad, GST_TYPE_GL_MIXER_PAD);
 
 static void
-gst_gl_stereo_mix_pad_class_init (GstGLStereoMixPadClass * klass)
+gst_gl_stereo_mix_pad_class_init (GstGLStereoMixPadBeboClass * klass)
 {
 }
 
 static void
-gst_gl_stereo_mix_pad_init (GstGLStereoMixPad * pad)
+gst_gl_stereo_mix_pad_init (GstGLStereoMixPadBebo * pad)
 {
 }
 
 #define gst_gl_stereo_mix_parent_class parent_class
-G_DEFINE_TYPE (GstGLStereoMix, gst_gl_stereo_mix, GST_TYPE_GL_MIXER);
+G_DEFINE_TYPE (GstGLStereoMixBebo, gst_gl_stereo_mix, GST_TYPE_GL_MIXER);
 
 static GstCaps *_update_caps (GstVideoAggregator * vagg, GstCaps * caps,
     GstCaps * filter);
 static gboolean _negotiated_caps (GstVideoAggregator * videoaggregator,
     GstCaps * caps);
-gboolean gst_gl_stereo_mix_make_output (GstGLStereoMix * mix);
-static gboolean gst_gl_stereo_mix_process_frames (GstGLStereoMix * mixer);
+gboolean gst_gl_stereo_mix_make_output (GstGLStereoMixBebo * mix);
+static gboolean gst_gl_stereo_mix_process_frames (GstGLStereoMixBebo * mixer);
 
 #define DEFAULT_DOWNMIX GST_GL_STEREO_DOWNMIX_ANAGLYPH_GREEN_MAGENTA_DUBOIS
 
@@ -154,14 +154,14 @@ gst_gl_stereo_mix_aggregate_frames (GstVideoAggregator * vagg,
     GstBuffer * outbuffer);
 
 static void
-gst_gl_stereo_mix_class_init (GstGLStereoMixClass * klass)
+gst_gl_stereo_mix_class_init (GstGLStereoMixBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstVideoAggregatorClass *videoaggregator_class =
       (GstVideoAggregatorClass *) klass;
   GstAggregatorClass *agg_class = (GstAggregatorClass *) klass;
-  GstGLBaseMixerClass *base_mix_class = (GstGLBaseMixerClass *) klass;
+  GstGLBaseMixerBeboClass *base_mix_class = (GstGLBaseMixerBeboClass *) klass;
 
   GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "glstereomixer", 0,
       "opengl stereoscopic mixer");
@@ -200,14 +200,14 @@ gst_gl_stereo_mix_class_init (GstGLStereoMixClass * klass)
 }
 
 static void
-gst_gl_stereo_mix_init (GstGLStereoMix * mix)
+gst_gl_stereo_mix_init (GstGLStereoMixBebo * mix)
 {
 }
 
 static void
 gst_gl_stereo_mix_finalize (GObject * object)
 {
-  //GstGLStereoMix *mix = GST_GL_STEREO_MIX (object);
+  //GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (object);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -253,7 +253,7 @@ static GstFlowReturn
 gst_gl_stereo_mix_get_output_buffer (GstVideoAggregator * videoaggregator,
     GstBuffer ** outbuf)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (videoaggregator);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (videoaggregator);
   GstFlowReturn ret = GST_FLOW_OK;
 
 #if 0
@@ -289,7 +289,7 @@ gst_gl_stereo_mix_get_output_buffer (GstVideoAggregator * videoaggregator,
 }
 
 gboolean
-gst_gl_stereo_mix_make_output (GstGLStereoMix * mix)
+gst_gl_stereo_mix_make_output (GstGLStereoMixBebo * mix)
 {
   GList *walk;
   gboolean res = FALSE;
@@ -302,7 +302,7 @@ gst_gl_stereo_mix_make_output (GstGLStereoMix * mix)
   walk = element->sinkpads;
   while (walk) {
     GstVideoAggregatorPad *vaggpad = walk->data;
-    GstGLStereoMixPad *pad = walk->data;
+    GstGLStereoMixPadBebo *pad = walk->data;
 
     GST_LOG_OBJECT (mix, "Checking pad %" GST_PTR_FORMAT, vaggpad);
 
@@ -346,7 +346,7 @@ static GstFlowReturn
 gst_gl_stereo_mix_aggregate_frames (GstVideoAggregator * vagg,
     GstBuffer * outbuf)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (vagg);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (vagg);
   /* If we're operating in frame-by-frame mode, push
    * the primary view now, and let the parent class
    * push the remaining auxilliary view */
@@ -369,7 +369,7 @@ static void
 gst_gl_stereo_mix_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (object);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (object);
 
   switch (prop_id) {
     case PROP_DOWNMIX_MODE:
@@ -385,7 +385,7 @@ static void
 gst_gl_stereo_mix_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (object);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (object);
 
   switch (prop_id) {
     case PROP_DOWNMIX_MODE:
@@ -403,7 +403,7 @@ gst_gl_stereo_mix_set_property (GObject * object,
 static gboolean
 gst_gl_stereo_mix_start (GstAggregator * agg)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (agg);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (agg);
 
   if (!GST_AGGREGATOR_CLASS (parent_class)->start (agg))
     return FALSE;
@@ -420,7 +420,7 @@ gst_gl_stereo_mix_start (GstAggregator * agg)
 static gboolean
 gst_gl_stereo_mix_stop (GstAggregator * agg)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (agg);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (agg);
 
   if (!GST_AGGREGATOR_CLASS (parent_class)->stop (agg))
     return FALSE;
@@ -435,7 +435,7 @@ gst_gl_stereo_mix_stop (GstAggregator * agg)
 
 /* Convert to caps that can be accepted by this element... */
 static GstCaps *
-get_converted_caps (GstGLStereoMix * mix, GstCaps * caps)
+get_converted_caps (GstGLStereoMixBebo * mix, GstCaps * caps)
 {
 #if 0
   GstGLContext *context = GST_GL_BASE_MIXER (mix)->context;
@@ -472,7 +472,7 @@ get_converted_caps (GstGLStereoMix * mix, GstCaps * caps)
 static GstCaps *
 _update_caps (GstVideoAggregator * vagg, GstCaps * caps, GstCaps * filter)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (vagg);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (vagg);
   GList *l;
   gint best_width = -1, best_height = -1;
   gdouble best_fps = -1, cur_fps;
@@ -565,7 +565,7 @@ _update_caps (GstVideoAggregator * vagg, GstCaps * caps, GstCaps * filter)
 static gboolean
 _negotiated_caps (GstVideoAggregator * vagg, GstCaps * caps)
 {
-  GstGLStereoMix *mix = GST_GL_STEREO_MIX (vagg);
+  GstGLStereoMixBebo *mix = GST_GL_STEREO_MIX (vagg);
   GstCaps *in_caps;
 
   GST_LOG_OBJECT (mix, "Configured output caps %" GST_PTR_FORMAT, caps);
@@ -594,7 +594,7 @@ _negotiated_caps (GstVideoAggregator * vagg, GstCaps * caps)
 
 /* called with the object lock held */
 static gboolean
-gst_gl_stereo_mix_process_frames (GstGLStereoMix * mixer)
+gst_gl_stereo_mix_process_frames (GstGLStereoMixBebo * mixer)
 {
   GstVideoAggregator *vagg = GST_VIDEO_AGGREGATOR (mixer);
   GstBuffer *converted_buffer, *inbuf;
@@ -609,7 +609,7 @@ gst_gl_stereo_mix_process_frames (GstGLStereoMix * mixer)
   inbuf = gst_buffer_new ();
   walk = GST_ELEMENT (mixer)->sinkpads;
   while (walk) {
-    GstGLStereoMixPad *pad = walk->data;
+    GstGLStereoMixPadBebo *pad = walk->data;
     GstMemory *in_mem;
 
     GST_LOG_OBJECT (mixer, "Handling frame %d", valid_views);

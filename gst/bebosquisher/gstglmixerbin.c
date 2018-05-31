@@ -39,7 +39,7 @@ typedef enum
   GST_GL_MIXER_BIN_START_TIME_SELECTION_ZERO,
   GST_GL_MIXER_BIN_START_TIME_SELECTION_FIRST,
   GST_GL_MIXER_BIN_START_TIME_SELECTION_SET
-} GstGLMixerBinStartTimeSelection;
+} GstGLMixerBinStartTimeSelectionBebo;
 
 static GType
 gst_gl_mixer_bin_start_time_selection_get_type (void)
@@ -53,18 +53,18 @@ gst_gl_mixer_bin_start_time_selection_get_type (void)
       {GST_GL_MIXER_BIN_START_TIME_SELECTION_FIRST,
           "Start at first observed input running time", "first"},
       {GST_GL_MIXER_BIN_START_TIME_SELECTION_SET,
-          "Set start time with start-time property", "set"},
+          "Set start time with start-time proPerty", "set"},
       {0, NULL, NULL}
     };
 
-    gtype = g_enum_register_static ("GstGLMixerBinStartTimeSelection", values);
+    gtype = g_enum_register_static ("GstGLMixerBinStartTimeSelectionBebo", values);
   }
   return gtype;
 }
 
 struct input_chain
 {
-  GstGLMixerBin *self;
+  GstGLMixerBinBebo *self;
   GstGhostPad *ghost_pad;
   GstElement *upload;
   GstElement *in_convert;
@@ -100,7 +100,7 @@ _free_input_chain (struct input_chain *chain)
   g_free (chain);
 }
 
-struct _GstGLMixerBinPrivate
+struct _GstGLMixerBinPrivateBebo
 {
   gboolean running;
 
@@ -127,8 +127,8 @@ static void gst_gl_mixer_bin_child_proxy_init (gpointer g_iface,
     gpointer iface_data);
 
 #define GST_GL_MIXER_BIN_GET_PRIVATE(o)					\
-  (G_TYPE_INSTANCE_GET_PRIVATE((o), GST_TYPE_GL_MIXER_BIN, GstGLMixerBinPrivate))
-G_DEFINE_TYPE_WITH_CODE (GstGLMixerBin, gst_gl_mixer_bin, GST_TYPE_BIN,
+  (G_TYPE_INSTANCE_GET_PRIVATE((o), GST_TYPE_GL_MIXER_BIN, GstGLMixerBinPrivateBebo))
+G_DEFINE_TYPE_WITH_CODE (GstGLMixerBinBebo, gst_gl_mixer_bin, GST_TYPE_BIN,
     G_IMPLEMENT_INTERFACE (GST_TYPE_CHILD_PROXY,
         gst_gl_mixer_bin_child_proxy_init));
 
@@ -153,13 +153,13 @@ static GstStateChangeReturn gst_gl_mixer_bin_change_state (GstElement *
     element, GstStateChange transition);
 
 static void
-gst_gl_mixer_bin_class_init (GstGLMixerBinClass * klass)
+gst_gl_mixer_bin_class_init (GstGLMixerBinBeboClass * klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstCaps *upload_caps;
 
-  g_type_class_add_private (klass, sizeof (GstGLMixerBinPrivate));
+  g_type_class_add_private (klass, sizeof (GstGLMixerBinPrivateBebo));
 
   GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "glmixerbin", 0,
       "opengl mixer bin");
@@ -228,7 +228,7 @@ gst_gl_mixer_bin_class_init (GstGLMixerBinClass * klass)
 }
 
 static void
-gst_gl_mixer_bin_init (GstGLMixerBin * self)
+gst_gl_mixer_bin_init (GstGLMixerBinBebo * self)
 {
   gboolean res = TRUE;
   GstPad *pad;
@@ -260,7 +260,7 @@ gst_gl_mixer_bin_init (GstGLMixerBin * self)
 static void
 gst_gl_mixer_bin_dispose (GObject * object)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (object);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (object);
   GList *l = self->priv->input_chains;
 
   while (l) {
@@ -282,10 +282,10 @@ gst_gl_mixer_bin_dispose (GObject * object)
 }
 
 static gboolean
-_create_input_chain (GstGLMixerBin * self, struct input_chain *chain,
+_create_input_chain (GstGLMixerBinBebo * self, struct input_chain *chain,
     GstPad * mixer_pad)
 {
-  GstGLMixerBinClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
+  GstGLMixerBinBeboClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
   GstPad *pad;
   gboolean res = TRUE;
   gchar *name;
@@ -366,7 +366,7 @@ _find_element_pad_template (GstElement * element,
 }
 
 static gboolean
-_connect_mixer_element (GstGLMixerBin * self)
+_connect_mixer_element (GstGLMixerBinBebo * self)
 {
   gboolean res = TRUE;
 
@@ -386,7 +386,7 @@ _connect_mixer_element (GstGLMixerBin * self)
 }
 
 void
-gst_gl_mixer_bin_finish_init_with_element (GstGLMixerBin * self,
+gst_gl_mixer_bin_finish_init_with_element (GstGLMixerBinBebo * self,
     GstElement * element)
 {
   g_return_if_fail (GST_IS_ELEMENT (element));
@@ -400,9 +400,9 @@ gst_gl_mixer_bin_finish_init_with_element (GstGLMixerBin * self,
 }
 
 void
-gst_gl_mixer_bin_finish_init (GstGLMixerBin * self)
+gst_gl_mixer_bin_finish_init (GstGLMixerBinBebo * self)
 {
-  GstGLMixerBinClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
+  GstGLMixerBinBeboClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
   GstElement *element = NULL;
 
   if (klass->create_element)
@@ -416,7 +416,7 @@ static void
 gst_gl_mixer_bin_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (object);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (object);
 
   switch (prop_id) {
     case PROP_MIXER:
@@ -433,7 +433,7 @@ static void
 gst_gl_mixer_bin_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (object);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (object);
 
   switch (prop_id) {
     case PROP_MIXER:
@@ -459,7 +459,7 @@ static GstPad *
 gst_gl_mixer_bin_request_new_pad (GstElement * element, GstPadTemplate * templ,
     const gchar * req_name, const GstCaps * caps)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (element);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (element);
   GstPadTemplate *mixer_templ;
   struct input_chain *chain;
   GstPad *mixer_pad;
@@ -493,7 +493,7 @@ gst_gl_mixer_bin_request_new_pad (GstElement * element, GstPadTemplate * templ,
 static void
 gst_gl_mixer_bin_release_pad (GstElement * element, GstPad * pad)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (element);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (element);
   GList *l = self->priv->input_chains;
   gboolean released = FALSE;
 
@@ -519,8 +519,8 @@ gst_gl_mixer_bin_release_pad (GstElement * element, GstPad * pad)
 static GstStateChangeReturn
 gst_gl_mixer_bin_change_state (GstElement * element, GstStateChange transition)
 {
-  GstGLMixerBin *self = GST_GL_MIXER_BIN (element);
-  GstGLMixerBinClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
+  GstGLMixerBinBebo *self = GST_GL_MIXER_BIN (element);
+  GstGLMixerBinBeboClass *klass = GST_GL_MIXER_BIN_GET_CLASS (self);
   GstStateChangeReturn ret;
 
   switch (transition) {
@@ -574,7 +574,7 @@ static GObject *
 gst_gl_mixer_bin_child_proxy_get_child_by_index (GstChildProxy * child_proxy,
     guint index)
 {
-  GstGLMixerBin *mixer = GST_GL_MIXER_BIN (child_proxy);
+  GstGLMixerBinBebo *mixer = GST_GL_MIXER_BIN (child_proxy);
   GstBin *bin = GST_BIN_CAST (child_proxy);
   GObject *res = NULL;
 
@@ -599,7 +599,7 @@ gst_gl_mixer_bin_child_proxy_get_child_by_index (GstChildProxy * child_proxy,
 static guint
 gst_gl_mixer_bin_child_proxy_get_children_count (GstChildProxy * child_proxy)
 {
-  GstGLMixerBin *mixer = GST_GL_MIXER_BIN (child_proxy);
+  GstGLMixerBinBebo *mixer = GST_GL_MIXER_BIN (child_proxy);
   GstBin *bin = GST_BIN_CAST (child_proxy);
   guint num;
 

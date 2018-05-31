@@ -28,61 +28,61 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstGLMixer GstGLMixer;
-typedef struct _GstGLMixerClass GstGLMixerClass;
-typedef struct _GstGLMixerPrivate GstGLMixerPrivate;
+typedef struct _GstGLMixerBebo GstGLMixerBebo;
+typedef struct _GstGLMixerBeboClass GstGLMixerBeboClass;
+typedef struct _GstGLMixerPrivateBebo GstGLMixerPrivate;
 
 #define GST_TYPE_GL_MIXER_PAD (gst_gl_mixer_pad_get_type())
 #define GST_GL_MIXER_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER_PAD, GstGLMixerPad))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER_PAD, GstGLMixerPadBebo))
 #define GST_GL_MIXER_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER_PAD, GstGLMixerPadClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER_PAD, GstGLMixerPadBeboClass))
 #define GST_IS_GL_MIXER_PAD(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_MIXER_PAD))
 #define GST_IS_GL_MIXER_PAD_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_MIXER_PAD))
 #define GST_GL_MIXER_PAD_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER_PAD,GstGLMixerPadClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER_PAD,GstGLMixerPadBeboClass))
 
-typedef struct _GstGLMixerPad GstGLMixerPad;
-typedef struct _GstGLMixerPadClass GstGLMixerPadClass;
+typedef struct _GstGLMixerPad GstGLMixerPadBebo;
+typedef struct _GstGLMixerPadClass GstGLMixerPadBeboClass;
 
 /* all information needed for one video stream */
 struct _GstGLMixerPad
 {
-  GstGLBaseMixerPad parent;
+  GstGLBaseMixerPadBebo parent;
 
   guint current_texture;
 };
 
 struct _GstGLMixerPadClass
 {
-  GstGLBaseMixerPadClass parent_class;
+  GstGLBaseMixerPadBeboClass parent_class;
 };
 
 GType gst_gl_mixer_pad_get_type (void);
 
 #define GST_TYPE_GL_MIXER (gst_gl_mixer_get_type())
 #define GST_GL_MIXER(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER, GstGLMixer))
+        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_MIXER, GstGLMixerBebo))
 #define GST_GL_MIXER_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER, GstGLMixerClass))
+        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_MIXER, GstGLMixerBeboClass))
 #define GST_IS_GL_MIXER(obj) \
         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_MIXER))
 #define GST_IS_GL_MIXER_CLASS(klass) \
         (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_MIXER))
 #define GST_GL_MIXER_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER,GstGLMixerClass))
+        (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_GL_MIXER,GstGLMixerBeboClass))
 
-typedef gboolean (*GstGLMixerSetCaps) (GstGLMixer* mixer,
+typedef gboolean (*GstGLMixerSetCaps) (GstGLMixerBebo* mixer,
   GstCaps* outcaps);
-typedef void (*GstGLMixerReset) (GstGLMixer *mixer);
-typedef gboolean (*GstGLMixerProcessFunc) (GstGLMixer *mix, GstBuffer *outbuf);
-typedef gboolean (*GstGLMixerProcessTextures) (GstGLMixer *mix, GstGLMemory *out_tex);
+typedef void (*GstGLMixerReset) (GstGLMixerBebo *mixer);
+typedef gboolean (*GstGLMixerProcessFunc) (GstGLMixerBebo *mix, GstBuffer *outbuf);
+typedef gboolean (*GstGLMixerProcessTextures) (GstGLMixerBebo *mix, GstGLMemory *out_tex);
 
-struct _GstGLMixer
+struct _GstGLMixerBebo
 {
-  GstGLBaseMixer vaggregator;
+  GstGLBaseMixerBebo vaggregator;
 
   GstGLFramebuffer *fbo;
 
@@ -91,9 +91,9 @@ struct _GstGLMixer
   GstGLMixerPrivate *priv;
 };
 
-struct _GstGLMixerClass
+struct _GstGLMixerBeboClass
 {
-  GstGLBaseMixerClass parent_class;
+  GstGLBaseMixerBeboClass parent_class;
 
   GstGLMixerSetCaps set_caps;
   GstGLMixerReset reset;
@@ -103,7 +103,7 @@ struct _GstGLMixerClass
 
 GType gst_gl_mixer_get_type(void);
 
-gboolean gst_gl_mixer_process_textures (GstGLMixer * mix, GstBuffer * outbuf);
+gboolean gst_gl_mixer_process_textures (GstGLMixerBebo * mix, GstBuffer * outbuf);
 
 G_END_DECLS
 #endif /* __GST_GL_MIXER_H__ */

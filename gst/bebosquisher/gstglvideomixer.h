@@ -26,17 +26,17 @@
 G_BEGIN_DECLS
 
 #define GST_TYPE_GL_VIDEO_MIXER            (gst_gl_video_mixer_get_type())
-#define GST_GL_VIDEO_MIXER(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixer))
+#define GST_GL_VIDEO_MIXER(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixerBebo))
 #define GST_IS_GL_VIDEO_MIXER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_VIDEO_MIXER))
-#define GST_GL_VIDEO_MIXER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixerClass))
+#define GST_GL_VIDEO_MIXER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixerBeboClass))
 #define GST_IS_GL_VIDEO_MIXER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_GL_VIDEO_MIXER))
-#define GST_GL_VIDEO_MIXER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixerClass))
+#define GST_GL_VIDEO_MIXER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_GL_VIDEO_MIXER,GstGLVideoMixerBeboClass))
 
-typedef struct _GstGLVideoMixer GstGLVideoMixer;
-typedef struct _GstGLVideoMixerClass GstGLVideoMixerClass;
+typedef struct _GstGLVideoMixer GstGLVideoMixerBebo;
+typedef struct _GstGLVideoMixerClass GstGLVideoMixerBeboClass;
 
 /**
- * GstGLVideoMixerBackground:
+ * GstGLVideoMixerBackgroundBebo:
  * @GST_GL_VIDEO_MIXER_BACKGROUND_CHECKER: checker pattern background
  * @GST_GL_VIDEO_MIXER_BACKGROUND_BLACK: solid color black background
  * @GST_GL_VIDEO_MIXER_BACKGROUND_WHITE: solid color white background
@@ -51,7 +51,7 @@ typedef enum
   GST_GL_VIDEO_MIXER_BACKGROUND_WHITE,
   GST_GL_VIDEO_MIXER_BACKGROUND_TRANSPARENT,
 }
-GstGLVideoMixerBackground;
+GstGLVideoMixerBackgroundBebo;
 
 /**
  * GstGLVideoMixerBlendEquation:
@@ -115,9 +115,9 @@ GstGLVideoMixerBlendFunction;
 
 struct _GstGLVideoMixer
 {
-    GstGLMixer mixer;
+    GstGLMixerBebo mixer;
 
-    GstGLVideoMixerBackground background;
+    GstGLVideoMixerBackgroundBebo background;
 
     GstGLShader *shader;
     GstGLShader *checker;
@@ -130,7 +130,7 @@ struct _GstGLVideoMixer
 
 struct _GstGLVideoMixerClass
 {
-    GstGLMixerClass mixer_class;
+    GstGLMixerBeboClass mixer_class;
 };
 
 GType gst_gl_video_mixer_get_type (void);

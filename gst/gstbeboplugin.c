@@ -44,20 +44,20 @@ plugin_init (GstPlugin * plugin)
     GST_RANK_NONE, GST_TYPE_SHM_SINK);
   gst_element_register(plugin, "gl2dxgi",
     GST_RANK_NONE, GST_TYPE_GL_2_DXGI);
-  if (!gst_element_register(plugin, "glmixerbin",
+  if (!gst_element_register(plugin, "beboglmixerbin",
     GST_RANK_NONE, GST_TYPE_GL_MIXER_BIN)) {
     return FALSE;
   }
-  if (!gst_element_register(plugin, "glvideomixer",
+  if (!gst_element_register(plugin, "beboglvideomixer",
     GST_RANK_NONE, gst_gl_video_mixer_bin_get_type())) {
     return FALSE;
   }
 
-  if (!gst_element_register(plugin, "glvideomixerelement",
+  if (!gst_element_register(plugin, "beboglvideomixerelement",
     GST_RANK_NONE, gst_gl_video_mixer_get_type())) {
     return FALSE;
   }
-  if (!gst_element_register(plugin, "glstereomix",
+  if (!gst_element_register(plugin, "beboglstereomix",
     GST_RANK_NONE, GST_TYPE_GL_STEREO_MIX)) {
     return FALSE;
   }
