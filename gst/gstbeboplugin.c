@@ -27,6 +27,9 @@
 #include "nvenc/gstnvh264enc.h"
 #include "nvenc/gstnvenc.h"
 #include "gl2dxgi/gstgl2dxgi.h"
+#include "bebosquisher/gstglmixerbin.h"
+#include "bebosquisher/gstglvideomixer.h"
+#include "bebosquisher/gstglstereomix.h"
 
 
 static gboolean
@@ -41,6 +44,24 @@ plugin_init (GstPlugin * plugin)
     GST_RANK_NONE, GST_TYPE_SHM_SINK);
   gst_element_register(plugin, "gl2dxgi",
     GST_RANK_NONE, GST_TYPE_GL_2_DXGI);
+  if (!gst_element_register(plugin, "glmixerbin",
+    GST_RANK_NONE, GST_TYPE_GL_MIXER_BIN)) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "glvideomixer",
+    GST_RANK_NONE, gst_gl_video_mixer_bin_get_type())) {
+    return FALSE;
+  }
+
+  if (!gst_element_register(plugin, "glvideomixerelement",
+    GST_RANK_NONE, gst_gl_video_mixer_get_type())) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "glstereomix",
+    GST_RANK_NONE, GST_TYPE_GL_STEREO_MIX)) {
+    return FALSE;
+  }
+
   return TRUE;
 }
 
