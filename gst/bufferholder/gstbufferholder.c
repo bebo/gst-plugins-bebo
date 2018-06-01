@@ -213,8 +213,7 @@ gst_buffer_holder_prepare_output_buffer(GstBaseTransform * bt,
     return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
-
-  // We can't unref the buffer - because it seems to be already unrefed
+  gst_buffer_unref(buf);
   *outbuf = buf;
   return GST_FLOW_OK;
 }
