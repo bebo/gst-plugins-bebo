@@ -59,6 +59,7 @@ typedef enum {
   GST_NV_RC_MODE_CBR,
   GST_NV_RC_MODE_VBR,
   GST_NV_RC_MODE_VBR_MINQP,
+  GST_NV_RC_MODE_CBR_HQ
 } D3DGstNvRCMode;
 
 typedef struct {

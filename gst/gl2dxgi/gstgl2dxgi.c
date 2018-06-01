@@ -788,7 +788,7 @@ static gboolean
 gst_gl_2_dxgi_start (GstBaseTransform * bt)
 {
   GstGL2DXGI *self = GST_GL_2_DXGI (bt);
-  GST_ERROR_OBJECT (self, "Starting");
+  GST_INFO_OBJECT (self, "Starting");
 
   /* if (upload->upload) { */
   /*   gst_object_unref (upload->upload); */
@@ -807,7 +807,7 @@ static gboolean
 gst_gl_2_dxgi_stop (GstBaseTransform * bt)
 {
   GstGL2DXGI *self = GST_GL_2_DXGI (bt);
-  GST_ERROR_OBJECT (self, "Stopping");
+  GST_INFO_OBJECT (self, "Stopping");
 
   if (self->queue) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
@@ -916,7 +916,7 @@ static gboolean
 gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_query, GstQuery * query)
 {
   GstGL2DXGI *self = GST_GL_2_DXGI(sink);
-  GST_ERROR_OBJECT(self, "gst_shm_sink_propose_allocation");
+  GST_INFO_OBJECT(self, "gst_shm_sink_propose_allocation");
   GST_LOG_OBJECT(self, "propose_allocation");
 
   GstCaps *caps;
@@ -927,7 +927,7 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
   gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
 
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
-      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
+      GST_INFO_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
 
   // offer our custom allocator
@@ -1011,7 +1011,7 @@ gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
   features = gst_caps_get_features (caps, 0);
 
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
-      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
+      GST_INFO_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
 
   // offer our custom allocator

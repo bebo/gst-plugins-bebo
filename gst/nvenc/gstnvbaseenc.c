@@ -117,6 +117,7 @@ gst_nv_rc_mode_get_type (void)
     {GST_NV_RC_MODE_CONSTQP, "Constant Quantization", "constqp"},
     {GST_NV_RC_MODE_CBR, "Constant Bit Rate", "cbr"},
     {GST_NV_RC_MODE_VBR, "Variable Bit Rate", "vbr"},
+    {GST_NV_RC_MODE_CBR_HQ, "Constant Bit Rate High Quality", "cbrhq" },
     {GST_NV_RC_MODE_VBR_MINQP,
           "Variable Bit Rate (with minimum quantization parameter)",
         "vbr-minqp"},
@@ -140,6 +141,7 @@ _rc_mode_to_nv (D3DGstNvRCMode mode)
       CASE (CBR, CBR);
       CASE (VBR, VBR);
       CASE (VBR_MINQP, VBR_MINQP);
+      CASE (CBR_HQ, CBR_HQ);
 #undef CASE
     default:
       return -1;
