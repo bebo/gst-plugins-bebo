@@ -47,26 +47,18 @@ G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_buffer_holder,
 
 enum
 {
-  PROP_0 = 0x0,
-  PROP_LATENCY = 0x1 << 1,
-  PROP_MAX_LATENCY = 0x1 << 2,
-  PROP_DELAY = 0x1 << 3,
-  PROP_MAX_DELAY = 0x1 << 4
+  PROP_SIZE_BUFFERS
 };
 
-static gboolean gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans,
-    GstQuery * query, GType api, const GstStructure * params);
-static GstFlowReturn gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, 
+static GstFlowReturn gst_buffer_holder_prepare_output_buffer (GstBaseTransform * bt, 
     GstBuffer * buffer, GstBuffer ** outbuf);
-static GstFlowReturn gst_gl_2_dxgi_transform (GstBaseTransform * bt,
-    GstBuffer * buffer, GstBuffer * outbuf);
-static gboolean gst_gl_2_dxgi_stop (GstBaseTransform * bt);
-static gboolean gst_gl_2_dxgi_start (GstBaseTransform * bt);
+static gboolean gst_buffer_holder_stop (GstBaseTransform * bt);
+static gboolean gst_buffer_holder_start (GstBaseTransform * bt);
 static gboolean gst_buffer_holder_accept_caps(GstBaseTransform * base,
   GstPadDirection direction, GstCaps * caps);
-static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
+static void gst_buffer_holder_set_property(GObject * object, guint prop_id,
   const GValue * value, GParamSpec * pspec);
-static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
+static void gst_buffer_holder_get_property(GObject * object, guint prop_id,
   GValue * value, GParamSpec * pspec);
 static gboolean
 gst_buffer_holder_query(GstBaseTransform * base, GstPadDirection direction,
@@ -95,45 +87,36 @@ gst_gl_2_dxgi_finalize (GObject * object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
-static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
+static void gst_buffer_holder_set_property(GObject * object, guint prop_id,
   const GValue * value, GParamSpec * pspec) {
 
   GstBufferHolder *self = GST_BUFFER_HOLDER(object);
 
   switch (prop_id) {
+  case PROP_SIZE_BUFFERS:
+    self->size_buffers = g_value_get_uint(value);
+    break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
     break;
   }
 }
 
-static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
+static void gst_buffer_holder_get_property(GObject * object, guint prop_id,
   GValue * value, GParamSpec * pspec) {
 
   GstBufferHolder *self = GST_BUFFER_HOLDER(object);
   GST_OBJECT_LOCK(self);
 
   switch (prop_id) {
-    case PROP_LATENCY:
-      g_value_set_uint64(value, self->latency / 1000000);
-      break;
-    case PROP_MAX_LATENCY:
-      g_value_set_uint64(value, self->max_latency / 1000000);
-      self->max_latency = 0;
-      break;
-    case PROP_DELAY:
-      g_value_set_uint64(value, self->delay / 1000000);
-      break;
-    case PROP_MAX_DELAY:
-      g_value_set_uint64(value, self->max_delay / 1000000);
-      self->max_delay = 0;
+    case PROP_SIZE_BUFFERS:
+      g_value_set_uint64(value, self->size_buffers);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
   GST_OBJECT_UNLOCK(self);
-
 }
 
 static gboolean
@@ -157,10 +140,9 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
-  bt_class->prepare_output_buffer = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_prepare_output_buffer);
-  bt_class->transform = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_transform);
-  bt_class->stop = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_stop);
-  bt_class->start = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_start);
+  bt_class->prepare_output_buffer = GST_DEBUG_FUNCPTR (gst_buffer_holder_prepare_output_buffer);
+  bt_class->stop = GST_DEBUG_FUNCPTR (gst_buffer_holder_stop);
+  bt_class->start = GST_DEBUG_FUNCPTR (gst_buffer_holder_start);
   bt_class->query = GST_DEBUG_FUNCPTR (gst_buffer_holder_query);
   bt_class->accept_caps = GST_DEBUG_FUNCPTR(gst_buffer_holder_accept_caps);
   gst_element_class_add_static_pad_template (element_class,
@@ -173,48 +155,18 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
       "OpenGL D3D11 interop", "Pigs in Flight, Inc");
 
   gobject_class->finalize = gst_gl_2_dxgi_finalize;
-  gobject_class->set_property = gst_gl_2_dxgi_set_property;
-  gobject_class->get_property = gst_gl_2_dxgi_get_property;
+  gobject_class->set_property = gst_buffer_holder_set_property;
+  gobject_class->get_property = gst_buffer_holder_get_property;
 
   g_object_class_install_property(gobject_class,
-    PROP_LATENCY,
-    g_param_spec_uint64("latency",
-      "latency",
-      "latency to element in ns",
+    PROP_SIZE_BUFFERS,
+    g_param_spec_uint64("size-buffers",
+      "size in buffers",
+      "the number of buffers to hold before ",
       0,
       G_MAXULONG,
       0,
-      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property(gobject_class,
-    PROP_MAX_LATENCY,
-    g_param_spec_uint64("max-latency",
-      "maximum latency",
-      "maximum latency to element in ns since last get",
-      0,
-      G_MAXULONG,
-      0,
-      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property(gobject_class,
-    PROP_DELAY,
-    g_param_spec_uint64("delay",
-      "delay",
-      "time we wait for gl to sync in ns",
-      0,
-      G_MAXULONG,
-      0,
-      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property(gobject_class,
-    PROP_MAX_DELAY,
-    g_param_spec_uint64("max-delay",
-      "maximum delay",
-      "maximum time we wait for gl to sync in ns since last get",
-      0,
-      G_MAXULONG,
-      0,
-      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+      G_PARAM_READWRITE));
 
 }
 
@@ -227,7 +179,7 @@ gst_buffer_holder_init (GstBufferHolder * self)
 }
 
 static gboolean
-gst_gl_2_dxgi_start (GstBaseTransform * bt)
+gst_buffer_holder_start (GstBaseTransform * bt)
 {
   GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
   GST_INFO_OBJECT (self, "Starting");
@@ -236,10 +188,10 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
 }
 
 static gboolean
-gst_gl_2_dxgi_stop (GstBaseTransform * bt)
+gst_buffer_holder_stop (GstBaseTransform * bt)
 {
   GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
-  GST_ERROR_OBJECT (self, "Stopping");
+  GST_DEBUG_OBJECT (self, "Stopping");
 
   if (self->queue) {
     GstBuffer * buf = g_async_queue_try_pop(self->queue);
@@ -253,10 +205,10 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
 }
 
 GstFlowReturn 
-gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
+gst_buffer_holder_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
 {
-  GST_INFO("PREPARE");
+  GST_LOG("PREPARE");
   GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
@@ -284,29 +236,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
-
-  if (clock != NULL) {
-    /* The time according to the current clock */
-
-    GstClockTime running_time = gst_clock_get_time(clock) - base_time;
-    latency = running_time - buf->pts;
-
-    GST_OBJECT_LOCK(self);
-    self->latency = latency;
-    self->max_latency = max(self->max_latency, latency);
-
-    self->delay = running_time - start_running_time;
-    self->max_delay = max(self->max_delay, self->delay);
-    GST_OBJECT_UNLOCK(self);
-
-    GST_LOG("Measured gl2dxgi latency to %d , max_latency: %d, delay: %d max_delay: %d",
-      self->latency / 1000000,
-      self->max_latency / 1000000,
-      self->delay / 1000000,
-      self->max_delay / 1000000);
-    gst_object_unref (clock);
-    clock = NULL;
-  }
 
   // We can't unref the buffer - because it seems to be already unrefed
   *outbuf = buf;
@@ -359,10 +288,4 @@ gst_buffer_holder_query(GstBaseTransform * base, GstPadDirection direction,
     ret = TRUE;
   }
   return ret;
-}
-static GstFlowReturn
-gst_gl_2_dxgi_transform (GstBaseTransform * bt, GstBuffer * buffer,
-    GstBuffer * outbuf)
-{
-  return GST_FLOW_OK;
 }
