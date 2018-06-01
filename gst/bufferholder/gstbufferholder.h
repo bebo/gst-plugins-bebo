@@ -47,7 +47,6 @@ struct _GstBufferHolder
 {
   /* <private> */
   GstBaseTransform parent;
-  GstBufferPool *pool;
   GAsyncQueue   *queue;
   GstVideoInfo       in_info;
   GstVideoInfo       out_info;
@@ -57,8 +56,6 @@ struct _GstBufferHolder
   guint64 delay;
   guint64 max_delay;
 
-
-  //GstGLUpload *upload;
 };
 
 /**
@@ -70,7 +67,6 @@ struct _GstBufferHolderClass
 {
   GstGLBaseFilterClass object_class;
   gboolean(*set_caps)          (GstBufferHolder* gl2dxgi, GstCaps* incaps, GstCaps* outcaps);
-
 };
 
 G_END_DECLS
