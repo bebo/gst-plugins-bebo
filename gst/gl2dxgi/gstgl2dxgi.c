@@ -32,7 +32,7 @@
 #include "gstgl2dxgi.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 20
+#define BUFFER_COUNT 50
 #define INTERNAL_QUEUE_SIZE 4
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
