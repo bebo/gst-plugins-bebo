@@ -197,7 +197,7 @@ gst_buffer_holder_stop (GstBaseTransform * bt)
     }
     g_async_queue_unref(self->queue);
   }
-  return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
+  return TRUE;
 }
 
 GstFlowReturn 
