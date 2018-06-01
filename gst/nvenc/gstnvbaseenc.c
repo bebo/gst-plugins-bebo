@@ -989,6 +989,10 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         GST_LOG_OBJECT (enc, "wait for bitstream buffer..");
 
         /* assumes buffers are submitted in order */
+        // FIXME: Only submit buffers to the bitstream queue when the encoder has enough output.
+        while (g_async_queue_length(nvenc->bitstream_queue) < 17) {
+          Sleep(10);
+        }
         out_buf = g_async_queue_pop (nvenc->bitstream_queue);
         if ((gpointer) out_buf == SHUTDOWN_COOKIE)
           break;
@@ -1387,16 +1391,16 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
 
   if(NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_DEBUG("Enabling lookahead");
+    GST_INFO("Enabling lookahead");
     params->encodeConfig->rcParams.enableLookahead = 1;
-    params->encodeConfig->rcParams.lookaheadDepth = 32;
+    params->encodeConfig->rcParams.lookaheadDepth = 16;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
   supported = 0;
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_DEBUG("Enabling temporal aq");
+    GST_INFO("Enabling temporal aq");
     params->encodeConfig->rcParams.enableAQ = 1;
     params->encodeConfig->rcParams.enableTemporalAQ = 1;
   }
@@ -1405,7 +1409,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   supported = 0;
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_DEBUG("Enabling weighted prediction.");
+    GST_INFO("Enabling weighted prediction.");
     params->enableWeightedPrediction = 1;
   }
 
@@ -1413,7 +1417,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   supported = 0;
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_DEBUG("Enabling useBFramesAsReF");
+    GST_INFO("Enabling useBFramesAsReF");
     params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
   }
 
