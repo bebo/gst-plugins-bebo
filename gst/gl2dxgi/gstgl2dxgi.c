@@ -800,7 +800,7 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
       (GstGLContext **) & self->other_context);
   self->allocator = gst_gl_dxgi_memory_allocator_new(self);
 
-  return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
+  return GST_BASE_TRANSFORM_CLASS (parent_class)->start (bt);
 }
 
 static gboolean
