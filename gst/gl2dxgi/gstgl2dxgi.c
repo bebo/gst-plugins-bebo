@@ -780,7 +780,7 @@ static void gst_gl_2_dxgi_set_context(GstElement * element,
 static void
 gst_gl_2_dxgi_init (GstGL2DXGI * self)
 {
-  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), TRUE);
+  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), FALSE);
   self->queue = g_async_queue_new();
 }
 

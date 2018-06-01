@@ -46,15 +46,12 @@ typedef struct _GstBufferHolderPrivate GstBufferHolderPrivate;
 struct _GstBufferHolder
 {
   /* <private> */
-  GstGLBaseFilter parent;
-  GstGLContext *other_context; /* context and display live in the base */
+  GstBaseTransform parent;
   GstBufferPool *pool;
   GAsyncQueue   *queue;
   GstVideoInfo       in_info;
   GstVideoInfo       out_info;
   GstCaps           *out_caps;
-  GstGLTextureTarget in_texture_target;
-  GstGLTextureTarget out_texture_target;
   guint64 max_latency;
   guint64 latency;
   guint64 delay;
