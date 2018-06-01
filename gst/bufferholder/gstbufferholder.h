@@ -19,23 +19,20 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_GL_2_DXGI_H__
-#define __GST_GL_2_DXGI_H__
+#ifndef __GST_BUFFER_HOLDER__
+#define __GST_BUFFER_HOLDER__
 
 #include <gst/video/video.h>
 
-#include "gstdxgimemory.h"
-/* #include <gst/gl/gstgl_fwd.h> */
-
 G_BEGIN_DECLS
 
-#define GST_TYPE_GL_2_DXGI (gst_gl_2_dxgi_get_type())
-#define GST_GL_2_DXGI_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_GL_2_DXGI, GstBufferHolderClass))
-#define GST_GL_2_DXGI(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GL_2_DXGI,GstBufferHolder))
-#define GST_GL_2_DXGI_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GL_2_DXGI, GstBufferHolderClass))
-#define GST_IS_GL_2_DXGI(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_2_DXGI))
-#define GST_IS_GL_2_DXGI_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GL_2_DXGI))
-#define GST_GL_2_DXGI_CAST(obj) ((GstBufferHolder*)(obj))
+#define GST_TYPE_BUFFER_HOLDER (gst_buffer_holder_get_type())
+#define GST_BUFFER_HOLDER_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_BUFFER_HOLDER, GstBufferHolderClass))
+#define GST_BUFFER_HOLDER(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_BUFFER_HOLDER,GstBufferHolder))
+#define GST_BUFFER_HOLDER_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_BUFFER_HOLDER, GstBufferHolderClass))
+#define GST_IS_BUFFER_HOLDER(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_BUFFER_HOLDER))
+#define GST_IS_BUFFER_HOLDER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_BUFFER_HOLDER))
+#define GST_BUFFER_HOLDER_CAST(obj) ((GstBufferHolder*)(obj))
 
 typedef struct _GstBufferHolder GstBufferHolder;
 typedef struct _GstBufferHolderClass GstBufferHolderClass;
@@ -52,7 +49,6 @@ struct _GstBufferHolder
   GstGLBaseFilter parent;
   GstGLContext *other_context; /* context and display live in the base */
   GstBufferPool *pool;
-  GstGLDXGIMemoryAllocator *allocator;
   GAsyncQueue   *queue;
   GstVideoInfo       in_info;
   GstVideoInfo       out_info;
@@ -82,6 +78,6 @@ struct _GstBufferHolderClass
 
 G_END_DECLS
 
-GType gst_gl_2_dxgi_get_type (void);
+GType gst_buffer_holder_get_type (void);
 
 #endif /* __GST_GL_2_DXGI_H__ */

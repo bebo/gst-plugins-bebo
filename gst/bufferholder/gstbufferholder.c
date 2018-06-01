@@ -29,21 +29,21 @@
 #include <GL/wglext.h>
 #include <gst/gl/gstgldisplay.h>
 #include <gst/video/gstvideometa.h>
-#include "gstgl2dxgi.h"
+#include "gstbufferholder.h"
 #include "gstdxgidevice.h"
 
 #define BUFFER_COUNT 20
 #define INTERNAL_QUEUE_SIZE 4
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
 
-GST_DEBUG_CATEGORY_STATIC (gst_gl_2_dxgi_debug);
-#define GST_CAT_DEFAULT gst_gl_2_dxgi_debug
+GST_DEBUG_CATEGORY_STATIC (gst_buffer_holder_debug);
+#define GST_CAT_DEFAULT gst_buffer_holder_debug
 
-#define gst_gl_2_dxgi_parent_class parent_class
-G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_gl_2_dxgi,
+#define gst_buffer_holder_parent_class parent_class
+G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_buffer_holder,
     GST_TYPE_GL_BASE_FILTER,
-    GST_DEBUG_CATEGORY_INIT (gst_gl_2_dxgi_debug, "gl2dxgi", 0,
-        "gl2dxgi Element"););
+    GST_DEBUG_CATEGORY_INIT (gst_buffer_holder_debug, "bufferholder", 0,
+        "bufferholder Element"););
 
 enum
 {
@@ -109,7 +109,7 @@ static void
 gst_gl_2_dxgi_finalize (GObject * object)
 {
     // FIXME 
-  /* GstBufferHolder *upload = GST_GL_2_DXGI (object); */
+  /* GstBufferHolder *upload = GST_BUFFER_HOLDER (object); */
 
   /* if (upload->upload) */
   /*   gst_object_unref (upload->upload); */
@@ -121,7 +121,7 @@ gst_gl_2_dxgi_finalize (GObject * object)
 static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
   const GValue * value, GParamSpec * pspec) {
 
-  GstBufferHolder *self = GST_GL_2_DXGI(object);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(object);
 
   switch (prop_id) {
   default:
@@ -133,7 +133,7 @@ static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
 static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
   GValue * value, GParamSpec * pspec) {
 
-  GstBufferHolder *self = GST_GL_2_DXGI(object);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(object);
   GST_OBJECT_LOCK(self);
 
   switch (prop_id) {
@@ -558,7 +558,7 @@ static GstCaps *
 gst_gl_2_dxgi_transform_caps(GstBaseTransform * bt,
   GstPadDirection direction, GstCaps * caps, GstCaps * filter_caps)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI(bt);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
 
   GstCaps *tmp = gst_caps_ref(caps);
 
@@ -590,8 +590,8 @@ static gboolean
 gst_gl_2_dxgi_gl_set_caps(GstGLBaseFilter * bt, GstCaps * incaps,
   GstCaps * outcaps)
 {
-  //GstBufferHolder *self = GST_GL_2_DXGI(bt);
-  //GstBufferHolderClass *gl2dxgi_class = GST_GL_2_DXGI_GET_CLASS(self);
+  //GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
+  //GstBufferHolderClass *gl2dxgi_class = GST_BUFFER_HOLDER_GET_CLASS(self);
   //GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
   return TRUE;
 }
@@ -604,8 +604,8 @@ gst_gl_2_dxgi_set_caps(GstBaseTransform * bt, GstCaps * incaps,
   //GstGLFilterClass *filter_class;
   GstGLTextureTarget from_target, to_target;
 
-  GstBufferHolder *self = GST_GL_2_DXGI(bt);
-  GstBufferHolderClass *gl2dxgi_class = GST_GL_2_DXGI_GET_CLASS(self);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
+  GstBufferHolderClass *gl2dxgi_class = GST_BUFFER_HOLDER_GET_CLASS(self);
   //filter = GST_GL_FILTER(bt);
   //filter_class = GST_GL_FILTER_GET_CLASS(filter);
 
@@ -667,7 +667,7 @@ wrong_caps:
 }
 
 static void
-gst_gl_2_dxgi_class_init (GstBufferHolderClass * klass)
+gst_buffer_holder_class_init (GstBufferHolderClass * klass)
 {
   GstBaseTransformClass *bt_class = GST_BASE_TRANSFORM_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
@@ -684,8 +684,8 @@ gst_gl_2_dxgi_class_init (GstBufferHolderClass * klass)
   bt_class->transform_caps = gst_gl_2_dxgi_transform_caps;
   bt_class->fixate_caps = gst_gl_2_dxgi_fixate_caps;
   bt_class->set_caps = gst_gl_2_dxgi_set_caps;
-  bt_class->propose_allocation = gst_gl_2_dxgi_propose_allocation;
-  bt_class->decide_allocation = gst_gl_2_dxgi_decide_allocation;
+  //bt_class->propose_allocation = gst_gl_2_dxgi_propose_allocation;
+  //bt_class->decide_allocation = gst_gl_2_dxgi_decide_allocation;
   bt_class->passthrough_on_same_caps = FALSE; // FIXME - should I touch this?
   klass->set_caps = NULL;
   gl_class->gl_set_caps = gst_gl_2_dxgi_gl_set_caps;
@@ -763,7 +763,7 @@ gst_gl_2_dxgi_class_init (GstBufferHolderClass * klass)
 static void gst_gl_2_dxgi_set_context(GstElement * element,
   GstContext * context)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI(element);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(element);
   GstGLBaseFilter *gl_base_filter = GST_GL_BASE_FILTER(self);
 
   gst_gl_handle_set_context (element, context,
@@ -778,7 +778,7 @@ static void gst_gl_2_dxgi_set_context(GstElement * element,
 }
 
 static void
-gst_gl_2_dxgi_init (GstBufferHolder * self)
+gst_buffer_holder_init (GstBufferHolder * self)
 {
   gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), TRUE);
   self->queue = g_async_queue_new();
@@ -787,7 +787,7 @@ gst_gl_2_dxgi_init (GstBufferHolder * self)
 static gboolean
 gst_gl_2_dxgi_start (GstBaseTransform * bt)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI (bt);
+  GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
   GST_ERROR_OBJECT (self, "Starting");
 
   /* if (upload->upload) { */
@@ -798,7 +798,6 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
   gst_gl_ensure_element_data (GST_ELEMENT (bt),
       (GstGLDisplay **) & gl_base_filter->display,
       (GstGLContext **) & self->other_context);
-  self->allocator = gst_gl_dxgi_memory_allocator_new(self);
 
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
 }
@@ -806,7 +805,7 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
 static gboolean
 gst_gl_2_dxgi_stop (GstBaseTransform * bt)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI (bt);
+  GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
   GST_ERROR_OBJECT (self, "Stopping");
 
   if (self->queue) {
@@ -821,10 +820,6 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
   if (self->pool)
     gst_object_unref (self->pool);
   self->pool = NULL;
-
-  if (self->allocator)
-    gst_object_unref (self->allocator);
-  self->allocator = NULL;
 
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
 }
@@ -848,7 +843,7 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
 /*     GstPadDirection direction, GstCaps * caps, GstCaps * filter) */
 /* { */
 /*   GstGLBaseFilter *base_filter = GST_GL_BASE_FILTER (bt); */
-/*   GstBufferHolder *upload = GST_GL_2_DXGI (bt); */
+/*   GstBufferHolder *upload = GST_BUFFER_HOLDER (bt); */
 /*   GstGLContext *context; */
 
 /*   if (base_filter->display && !gst_gl_base_filter_find_gl_context (base_filter)) */
@@ -874,7 +869,7 @@ gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans, GstQuery * query,
 /* _gst_gl_2_dxgi_propose_allocation (GstBaseTransform * bt, */
 /*     GstQuery * decide_query, GstQuery * query) */
 /* { */
-/*   GstBufferHolder *upload = GST_GL_2_DXGI (bt); */
+/*   GstBufferHolder *upload = GST_BUFFER_HOLDER (bt); */
 /*   GstGLContext *context = GST_GL_BASE_FILTER (bt)->context; */
 /*   gboolean ret; */
 
@@ -912,10 +907,11 @@ gst_gl2dxgi_ensure_gl_context(GstBufferHolder * self) {
   return gst_dxgi_device_ensure_gl_context((GstElement *)self, &gl_base_filter->context, &self->other_context, &gl_base_filter->display);
 }
 
+#if 0
 static gboolean
 gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_query, GstQuery * query)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI(sink);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(sink);
   GST_ERROR_OBJECT(self, "gst_shm_sink_propose_allocation");
   GST_LOG_OBJECT(self, "propose_allocation");
 
@@ -997,11 +993,12 @@ config_failed:
   }
 }
 
+
 static gboolean
 gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
     GstQuery * query)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI(trans);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(trans);
   GST_LOG_OBJECT(self, "propose_allocation");
 
   GstCaps *caps;
@@ -1091,18 +1088,18 @@ static void gl_run_gl_flush(GstGLContext *context, void * reserved)
 {
   context->gl_vtable->Flush();
 }
+#endif
 
 GstFlowReturn 
 gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
 {
-  GstBufferHolder *self = GST_GL_2_DXGI(bt);
+  GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
 
   {
     GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
-    gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_gl_flush, NULL);
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buffer);
     if (sync_meta) {
       gst_gl_sync_meta_set_sync_point(sync_meta, context);
@@ -1136,7 +1133,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
   {
     GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
-    GstGLDXGIMemory *gl_dxgi_mem = (GstGLDXGIMemory *)gst_buffer_peek_memory(buf, 0);
     GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
     if (sync_meta) {
       gst_gl_sync_meta_wait(sync_meta, context);
@@ -1144,7 +1140,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     } else {
       GST_ERROR("NO SYNC META");
     }
-    gst_gl_context_thread_add(context, (GstGLContextThreadFunc)gl_run_dxgi_map_d3d, gl_dxgi_mem);
   }
 
   if (clock != NULL) {

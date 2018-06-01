@@ -30,7 +30,7 @@
 #include "bebosquisher/gstglmixerbin.h"
 #include "bebosquisher/gstglvideomixer.h"
 #include "bebosquisher/gstglstereomix.h"
-
+#include "bufferholder/gstbufferholder.h"
 
 static gboolean
 plugin_init (GstPlugin * plugin)
@@ -59,6 +59,10 @@ plugin_init (GstPlugin * plugin)
   }
   if (!gst_element_register(plugin, "beboglstereomix",
     GST_RANK_NONE, GST_TYPE_GL_STEREO_MIX)) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "bufferholder",
+    GST_RANK_NONE, GST_TYPE_BUFFER_HOLDER)) {
     return FALSE;
   }
 
