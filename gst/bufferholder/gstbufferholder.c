@@ -213,26 +213,7 @@ gst_buffer_holder_prepare_output_buffer(GstBaseTransform * bt,
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
 
-  GstClockTime start_running_time = 0;
-  GstClockTime latency = 0;
-  GstClockTime base_time = 0;
-
-  GstClock *clock = GST_ELEMENT_CLOCK (self);
-  if (clock != NULL) {
-    gst_object_ref (clock);
-  }
-
-  if (clock != NULL) {
-    /* The time according to the current clock */
-    base_time = GST_ELEMENT_CAST (self)->base_time;
-    start_running_time = gst_clock_get_time(clock) - base_time;
-  }
-
-  if (g_async_queue_length(self->queue) < INTERNAL_QUEUE_SIZE) {
-    GstBuffer * buf = g_async_queue_try_pop(self->queue);
-    g_async_queue_push_front(self->queue, buf);
-    gst_buffer_ref(buf);
-    *outbuf = buf;
+  if (g_async_queue_length(self->queue) < self->size_buffers) {
     return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
