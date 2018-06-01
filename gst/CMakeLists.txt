@@ -67,6 +67,11 @@ SET(gl2dxgi_HEADERS
   gl2dxgi/gstgl2dxgi.h
 )
 
+SET(buffer_holder_FILES
+  bufferholder/gstbufferholder.c
+  bufferholder/gstbufferholder.h
+)
+
 SET(bebosquisher_SOURCES
   bebosquisher/gstglbasemixer.c
   bebosquisher/gstglmixerbin.c
@@ -91,7 +96,7 @@ source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
 source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
 source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
-
+source_group("bufferholder" FILES ${buffer_holder_FILES})
 
 ADD_LIBRARY(libbebogst SHARED
   gstbeboplugin.c
@@ -105,6 +110,7 @@ ADD_LIBRARY(libbebogst SHARED
   ${gl2dxgi_HEADERS}
   ${bebosquisher_SOURCES}
   ${bebosquisher_HEADERS}
+  ${buffer_holder_FILES}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst
