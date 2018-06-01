@@ -41,7 +41,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_buffer_holder_debug);
 
 #define gst_buffer_holder_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_buffer_holder,
-    GST_TYPE_GL_BASE_FILTER,
+    GST_TYPE_BASE_TRANSFORM,
     GST_DEBUG_CATEGORY_INIT (gst_buffer_holder_debug, "bufferholder", 0,
         "bufferholder Element"););
 
@@ -62,18 +62,12 @@ enum
 /*     GstCaps * in_caps, GstCaps * out_caps); */
 static gboolean gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans,
     GstQuery * query, GType api, const GstStructure * params);
-static gboolean gst_gl_2_dxgi_propose_allocation (GstBaseTransform *
-    bt, GstQuery * decide_query, GstQuery * query);
-static gboolean gst_gl_2_dxgi_decide_allocation (GstBaseTransform * 
-     trans, GstQuery * query); 
 static GstFlowReturn gst_gl_2_dxgi_prepare_output_buffer (GstBaseTransform * bt, 
     GstBuffer * buffer, GstBuffer ** outbuf);
 static GstFlowReturn gst_gl_2_dxgi_transform (GstBaseTransform * bt,
     GstBuffer * buffer, GstBuffer * outbuf);
 static gboolean gst_gl_2_dxgi_stop (GstBaseTransform * bt);
 static gboolean gst_gl_2_dxgi_start (GstBaseTransform * bt);
-static void gst_gl_2_dxgi_set_context (GstElement * element,
-    GstContext * context);
 
 static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
   const GValue * value, GParamSpec * pspec);
@@ -587,16 +581,6 @@ gst_gl_2_dxgi_get_unit_size(GstBaseTransform * trans, GstCaps * caps,
 }
 
 static gboolean
-gst_gl_2_dxgi_gl_set_caps(GstGLBaseFilter * bt, GstCaps * incaps,
-  GstCaps * outcaps)
-{
-  //GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
-  //GstBufferHolderClass *gl2dxgi_class = GST_BUFFER_HOLDER_GET_CLASS(self);
-  //GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
-  return TRUE;
-}
-
-static gboolean
 gst_gl_2_dxgi_set_caps(GstBaseTransform * bt, GstCaps * incaps,
   GstCaps * outcaps)
 {
@@ -647,8 +631,6 @@ gst_gl_2_dxgi_set_caps(GstBaseTransform * bt, GstCaps * incaps,
 #endif
 
   gst_caps_replace(&self->out_caps, outcaps);
-  self->in_texture_target = from_target;
-  self->out_texture_target = to_target;
 
   GST_DEBUG_OBJECT(self, "set_caps %dx%d in %" GST_PTR_FORMAT
     " out %" GST_PTR_FORMAT,
@@ -672,7 +654,6 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
   GstBaseTransformClass *bt_class = GST_BASE_TRANSFORM_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstGLBaseFilterClass *gl_class = GST_GL_BASE_FILTER_CLASS(klass);
 
   bt_class->filter_meta = gst_gl_2_dxgi_filter_meta;
   bt_class->get_unit_size = gst_gl_2_dxgi_get_unit_size;
@@ -688,7 +669,7 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
   //bt_class->decide_allocation = gst_gl_2_dxgi_decide_allocation;
   bt_class->passthrough_on_same_caps = FALSE; // FIXME - should I touch this?
   klass->set_caps = NULL;
-  gl_class->gl_set_caps = gst_gl_2_dxgi_gl_set_caps;
+  //gl_class->gl_set_caps = gst_gl_2_dxgi_gl_set_caps;
   //FIXME:
   //gl_class->gl_stop = gst_gl_filter_gl_stop;
 
@@ -711,8 +692,6 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
   gst_element_class_set_metadata (element_class,
       "OpenGL 2 DXGI ", "Filter/Video",
       "OpenGL D3D11 interop", "Pigs in Flight, Inc");
-
-  element_class->set_context = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_set_context);
 
   gobject_class->finalize = gst_gl_2_dxgi_finalize;
   gobject_class->set_property = gst_gl_2_dxgi_set_property;
@@ -760,27 +739,11 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
 
 }
 
-static void gst_gl_2_dxgi_set_context(GstElement * element,
-  GstContext * context)
-{
-  GstBufferHolder *self = GST_BUFFER_HOLDER(element);
-  GstGLBaseFilter *gl_base_filter = GST_GL_BASE_FILTER(self);
-
-  gst_gl_handle_set_context (element, context,
-      (GstGLDisplay **) & gl_base_filter->display,
-      (GstGLContext **) & self->other_context);
-  if (gl_base_filter->display)
-    gst_gl_display_filter_gl_api (GST_GL_DISPLAY (gl_base_filter->display),
-        SUPPORTED_GL_APIS);
-
-  GST_ELEMENT_CLASS (parent_class)->set_context (element, context);
-
-}
-
 static void
 gst_buffer_holder_init (GstBufferHolder * self)
 {
-  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), TRUE);
+  GST_INFO("BUFFER BUFFER");
+  gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), FALSE);
   self->queue = g_async_queue_new();
 }
 
@@ -789,15 +752,6 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
 {
   GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
   GST_ERROR_OBJECT (self, "Starting");
-
-  /* if (upload->upload) { */
-  /*   gst_object_unref (upload->upload); */
-  /*   upload->upload = NULL; */
-  /* } */
-  GstGLBaseFilter *gl_base_filter = GST_GL_BASE_FILTER(self);
-  gst_gl_ensure_element_data (GST_ELEMENT (bt),
-      (GstGLDisplay **) & gl_base_filter->display,
-      (GstGLContext **) & self->other_context);
 
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
 }
@@ -824,39 +778,6 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
 }
 
-/* static gboolean */
-/* gst_gl_2_dxgi_get_unit_size (GstBaseTransform * trans, GstCaps * caps, */
-/*     gsize * size) */
-/* { */
-/*   gboolean ret = FALSE; */
-/*   GstVideoInfo info; */
-
-/*   ret = gst_video_info_from_caps (&info, caps); */
-/*   if (ret) */
-/*     *size = GST_VIDEO_INFO_SIZE (&info); */
-
-/*   return TRUE; */
-/* } */
-
-/* static GstCaps * */
-/* _gst_gl_2_dxgi_transform_caps (GstBaseTransform * bt, */
-/*     GstPadDirection direction, GstCaps * caps, GstCaps * filter) */
-/* { */
-/*   GstGLBaseFilter *base_filter = GST_GL_BASE_FILTER (bt); */
-/*   GstBufferHolder *upload = GST_BUFFER_HOLDER (bt); */
-/*   GstGLContext *context; */
-
-/*   if (base_filter->display && !gst_gl_base_filter_find_gl_context (base_filter)) */
-/*     return NULL; */
-
-/*   context = GST_GL_BASE_FILTER (bt)->context; */
-/*   if (upload->upload == NULL) */
-/*     upload->upload = gst_gl_upload_new (context); */
-
-/*   return gst_gl_upload_transform_caps (upload->upload, context, direction, caps, */
-/*       filter); */
-/* } */
-
 static gboolean
 gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans, GstQuery * query,
     GType api, const GstStructure * params)
@@ -865,231 +786,6 @@ gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans, GstQuery * query,
   return TRUE;
 }
 
-/* static gboolean */
-/* _gst_gl_2_dxgi_propose_allocation (GstBaseTransform * bt, */
-/*     GstQuery * decide_query, GstQuery * query) */
-/* { */
-/*   GstBufferHolder *upload = GST_BUFFER_HOLDER (bt); */
-/*   GstGLContext *context = GST_GL_BASE_FILTER (bt)->context; */
-/*   gboolean ret; */
-
-/*   if (!upload->upload) */
-/*     return FALSE; */
-/*   if (!context) */
-/*     return FALSE; */
-
-/*   gst_gl_upload_set_context (upload->upload, context); */
-
-/*   ret = GST_BASE_TRANSFORM_CLASS (parent_class)->propose_allocation (bt, */
-/*       decide_query, query); */
-/*   gst_gl_upload_propose_allocation (upload->upload, decide_query, query); */
-
-/*   return ret; */
-/* } */
-
-
-
-static gboolean
-_find_local_gl_context(GstGLBaseFilter * filter)
-{
-  if (gst_gl_query_local_gl_context(GST_ELEMENT(filter), GST_PAD_SRC,
-    &filter->context))
-    return TRUE;
-  if (gst_gl_query_local_gl_context(GST_ELEMENT(filter), GST_PAD_SINK,
-    &filter->context))
-    return TRUE;
-  return FALSE;
-}
-
-static gboolean
-gst_gl2dxgi_ensure_gl_context(GstBufferHolder * self) {
-  GstGLBaseFilter * gl_base_filter = GST_GL_BASE_FILTER(self);
-  return gst_dxgi_device_ensure_gl_context((GstElement *)self, &gl_base_filter->context, &self->other_context, &gl_base_filter->display);
-}
-
-#if 0
-static gboolean
-gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_query, GstQuery * query)
-{
-  GstBufferHolder *self = GST_BUFFER_HOLDER(sink);
-  GST_ERROR_OBJECT(self, "gst_shm_sink_propose_allocation");
-  GST_LOG_OBJECT(self, "propose_allocation");
-
-  GstCaps *caps;
-  gboolean need_pool;
-  gst_query_parse_allocation(query, &caps, &need_pool);
-  GstCapsFeatures *features;
-  features = gst_caps_get_features (caps, 0);
-  gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
-
-  if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
-      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
-  }
-
-  // offer our custom allocator
-  GstAllocator *allocator;
-  GstAllocationParams params;
-  gst_allocation_params_init (&params);
-
-  allocator = GST_ALLOCATOR (self->allocator);
-  gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator);
-
-  GstVideoInfo info;
-  if (!gst_video_info_from_caps (&info, caps))
-    goto invalid_caps;
-
-  guint vi_size = (guint) info.size;
-
-  if (!gst_gl2dxgi_ensure_gl_context(self)) {
-    return FALSE;
-  }
-
-  if (self->pool) {
-    GstStructure *cur_pool_config;
-    cur_pool_config = gst_buffer_pool_get_config(self->pool);
-    guint size;
-    gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
-    if (size == vi_size) {
-      GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-      return TRUE;
-    } else {
-      GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
-        size, vi_size);
-      gst_object_unref(self->pool);
-    }
-  }
-
-  GST_DEBUG("Make a new buffer pool.");
-  self->pool = gst_gl_buffer_pool_new(GST_GL_BASE_FILTER(self)->context);
-  GstStructure *config;
-  config = gst_buffer_pool_get_config (self->pool);
-  gst_buffer_pool_config_set_params (config, caps, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
-  gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
-
-  if (!gst_buffer_pool_set_config (self->pool, config)) {
-    gst_object_unref (self->pool);
-    goto config_failed;
-  }
-
-  /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
-
-  return TRUE;
-
-invalid_caps:
-  {
-    GST_WARNING_OBJECT (self, "invalid caps specified");
-    return FALSE;
-  }
-config_failed:
-  {
-    GST_WARNING_OBJECT (self, "failed setting config");
-    return FALSE;
-  }
-}
-
-
-static gboolean
-gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
-    GstQuery * query)
-{
-  GstBufferHolder *self = GST_BUFFER_HOLDER(trans);
-  GST_LOG_OBJECT(self, "propose_allocation");
-
-  GstCaps *caps;
-  gboolean need_pool;
-  gst_query_parse_allocation(query, &caps, &need_pool);
-  GstCapsFeatures *features;
-  features = gst_caps_get_features (caps, 0);
-
-  if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
-      GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
-  }
-
-  // offer our custom allocator
-  GstAllocator *allocator;
-  GstAllocationParams params;
-  gst_allocation_params_init (&params);
-
-  allocator = GST_ALLOCATOR (self->allocator);
-  gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator);
-
-  GstVideoInfo info;
-  if (!gst_video_info_from_caps (&info, caps))
-    goto invalid_caps;
-
-  guint vi_size = (guint) info.size;
-
-  if (!gst_gl2dxgi_ensure_gl_context(self)) {
-    return FALSE;
-  }
-
-  if (self->pool) {
-    GstStructure *cur_pool_config;
-    cur_pool_config = gst_buffer_pool_get_config(self->pool);
-    guint size;
-    gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
-    if (size == vi_size) {
-      GST_DEBUG("Reusing buffer pool.");
-      gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-      return TRUE;
-    } else {
-      GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
-        size, vi_size);
-      gst_object_unref(self->pool);
-    }
-  }
-
-  GST_DEBUG("Make a new buffer pool.");
-  self->pool = gst_gl_buffer_pool_new(GST_GL_BASE_FILTER(self)->context);
-  GstStructure *config;
-  config = gst_buffer_pool_get_config (self->pool);
-  gst_buffer_pool_config_set_params (config, caps, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_GL_SYNC_META);
-  gst_buffer_pool_config_set_allocator (config, GST_ALLOCATOR (self->allocator), &params);
-
-  if (!gst_buffer_pool_set_config (self->pool, config)) {
-    gst_object_unref (self->pool);
-    goto config_failed;
-  }
-
-  /* we need at least 2 buffer because we hold on to the last one */
-  gst_query_add_allocation_pool (query, self->pool, vi_size, BUFFER_COUNT, BUFFER_COUNT);
-  GST_DEBUG_OBJECT(self, "Added %" GST_PTR_FORMAT " pool to query", self->pool);
-
-  return TRUE;
-
-invalid_caps:
-  {
-    GST_WARNING_OBJECT (self, "invalid caps specified");
-    return FALSE;
-  }
-config_failed:
-  {
-    GST_WARNING_OBJECT (self, "failed setting config");
-    return FALSE;
-  }
-}
-
-static void gl_run_dxgi_map_d3d(GstGLContext *context, GstGLDXGIMemory * gl_mem)
-{
-  gl_dxgi_map_d3d(gl_mem);
-  //context->gl_vtable->Flush();
-}
-
-static void gl_run_gl_flush(GstGLContext *context, void * reserved)
-{
-  context->gl_vtable->Flush();
-}
-#endif
-
 GstFlowReturn 
 gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
@@ -1097,16 +793,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
-
-  {
-    GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
-    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buffer);
-    if (sync_meta) {
-      gst_gl_sync_meta_set_sync_point(sync_meta, context);
-    } else {
-      GST_ERROR("NO SYNC META");
-    }
-  }
 
   GstClockTime start_running_time = 0;
   GstClockTime latency = 0;
@@ -1131,16 +817,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
     return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
-  {
-    GstGLContext *context = GST_GL_BASE_FILTER(self)->context;
-    GstGLSyncMeta * sync_meta = gst_buffer_get_gl_sync_meta(buf);
-    if (sync_meta) {
-      gst_gl_sync_meta_wait(sync_meta, context);
-      gst_gl_sync_meta_wait_cpu(sync_meta, context);
-    } else {
-      GST_ERROR("NO SYNC META");
-    }
-  }
 
   if (clock != NULL) {
     /* The time according to the current clock */
