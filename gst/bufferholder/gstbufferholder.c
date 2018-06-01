@@ -32,9 +32,7 @@
 #include "gstbufferholder.h"
 #include "gstdxgidevice.h"
 
-#define BUFFER_COUNT 20
-#define INTERNAL_QUEUE_SIZE 4
-#define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
+#define DEFAULT_SIZE_BUFFERS 5
 
 GST_DEBUG_CATEGORY_STATIC (gst_buffer_holder_debug);
 #define GST_CAT_DEFAULT gst_buffer_holder_debug
@@ -47,6 +45,7 @@ G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_buffer_holder,
 
 enum
 {
+  PROP_0,
   PROP_SIZE_BUFFERS
 };
 
@@ -162,12 +161,8 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
     PROP_SIZE_BUFFERS,
     g_param_spec_uint64("size-buffers",
       "size in buffers",
-      "the number of buffers to hold before ",
-      0,
-      G_MAXULONG,
-      0,
-      G_PARAM_READWRITE));
-
+      "the number of buffers to hold before pushing buffers downstream",
+      0, G_MAXULONG, DEFAULT_SIZE_BUFFERS, G_PARAM_READWRITE));
 }
 
 static void
@@ -176,6 +171,7 @@ gst_buffer_holder_init (GstBufferHolder * self)
   GST_INFO("BUFFER BUFFER");
   gst_base_transform_set_prefer_passthrough (GST_BASE_TRANSFORM (self), FALSE);
   self->queue = g_async_queue_new();
+  self->size_buffers = DEFAULT_SIZE_BUFFERS;
 }
 
 static gboolean
