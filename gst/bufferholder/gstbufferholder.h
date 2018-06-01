@@ -48,14 +48,7 @@ struct _GstBufferHolder
   /* <private> */
   GstBaseTransform parent;
   GAsyncQueue   *queue;
-  GstVideoInfo       in_info;
-  GstVideoInfo       out_info;
-  GstCaps           *out_caps;
-  guint64 max_latency;
-  guint64 latency;
-  guint64 delay;
-  guint64 max_delay;
-
+  guint64 size_buffers;
 };
 
 /**
