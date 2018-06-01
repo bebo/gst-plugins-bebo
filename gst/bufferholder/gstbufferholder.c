@@ -43,7 +43,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_buffer_holder_debug);
 G_DEFINE_TYPE_WITH_CODE (GstBufferHolder, gst_buffer_holder,
     GST_TYPE_BASE_TRANSFORM,
     GST_DEBUG_CATEGORY_INIT (gst_buffer_holder_debug, "bufferholder", 0,
-        "bufferholder Element"););
+        "bufferholder element"););
 
 enum
 {
@@ -68,7 +68,9 @@ static void gst_gl_2_dxgi_set_property(GObject * object, guint prop_id,
   const GValue * value, GParamSpec * pspec);
 static void gst_gl_2_dxgi_get_property(GObject * object, guint prop_id,
   GValue * value, GParamSpec * pspec);
-
+static gboolean
+gst_buffer_holder_query(GstBaseTransform * base, GstPadDirection direction,
+  GstQuery * query);
 
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE("sink",
   GST_PAD_SINK,
@@ -155,17 +157,12 @@ gst_buffer_holder_class_init (GstBufferHolderClass * klass)
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
-  bt_class->filter_meta = gst_gl_2_dxgi_filter_meta;
-  bt_class->get_unit_size = gst_gl_2_dxgi_get_unit_size;
-  bt_class->prepare_output_buffer = gst_gl_2_dxgi_prepare_output_buffer;
-  bt_class->transform = gst_gl_2_dxgi_transform;
-  bt_class->stop = gst_gl_2_dxgi_stop;
-  bt_class->start = gst_gl_2_dxgi_start;
-
+  bt_class->prepare_output_buffer = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_prepare_output_buffer);
+  bt_class->transform = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_transform);
+  bt_class->stop = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_stop);
+  bt_class->start = GST_DEBUG_FUNCPTR (gst_gl_2_dxgi_start);
+  bt_class->query = GST_DEBUG_FUNCPTR (gst_buffer_holder_query);
   bt_class->accept_caps = GST_DEBUG_FUNCPTR(gst_buffer_holder_accept_caps);
-  bt_class->passthrough_on_same_caps = FALSE; // FIXME - should I touch this?
-  klass->set_caps = NULL;
-
   gst_element_class_add_static_pad_template (element_class,
       &srctemplate);
   gst_element_class_add_static_pad_template (element_class,
@@ -235,7 +232,7 @@ gst_gl_2_dxgi_start (GstBaseTransform * bt)
   GstBufferHolder *self = GST_BUFFER_HOLDER (bt);
   GST_INFO_OBJECT (self, "Starting");
 
-  return GST_BASE_TRANSFORM_CLASS (parent_class)->start(bt);
+  return TRUE;
 }
 
 static gboolean
@@ -255,18 +252,11 @@ gst_gl_2_dxgi_stop (GstBaseTransform * bt)
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
 }
 
-static gboolean
-gst_gl_2_dxgi_filter_meta (GstBaseTransform * trans, GstQuery * query,
-    GType api, const GstStructure * params)
-{
-  /* propose all metadata upstream */
-  return TRUE;
-}
-
 GstFlowReturn 
 gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   GstBuffer * buffer, GstBuffer ** outbuf)
 {
+  GST_INFO("PREPARE");
   GstBufferHolder *self = GST_BUFFER_HOLDER(bt);
   g_async_queue_push(self->queue, buffer);
   gst_buffer_ref(buffer);
@@ -342,6 +332,34 @@ gst_buffer_holder_accept_caps(GstBaseTransform * base,
   return ret;
 }
 
+static gboolean
+gst_buffer_holder_query(GstBaseTransform * base, GstPadDirection direction,
+  GstQuery * query)
+{
+  GstBufferHolder *identity;
+  gboolean ret;
+
+  identity = GST_BUFFER_HOLDER(base);
+
+  if (GST_QUERY_TYPE(query) == GST_QUERY_ALLOCATION) {
+    GST_DEBUG_OBJECT(identity, "Dropping allocation query.");
+    return FALSE;
+  }
+
+  ret = GST_BASE_TRANSFORM_CLASS(parent_class)->query(base, direction, query);
+
+  if (GST_QUERY_TYPE(query) == GST_QUERY_LATENCY) {
+    gboolean live = FALSE;
+    GstClockTime min = 0, max = 0;
+
+    if (ret) {
+      gst_query_parse_latency(query, &live, &min, &max);
+
+    }
+    ret = TRUE;
+  }
+  return ret;
+}
 static GstFlowReturn
 gst_gl_2_dxgi_transform (GstBaseTransform * bt, GstBuffer * buffer,
     GstBuffer * outbuf)
