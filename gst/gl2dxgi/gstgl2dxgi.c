@@ -1127,10 +1127,6 @@ gst_gl_2_dxgi_prepare_output_buffer(GstBaseTransform * bt,
   }
 
   if (g_async_queue_length(self->queue) < INTERNAL_QUEUE_SIZE) {
-    GstBuffer * buf = g_async_queue_try_pop(self->queue);
-    g_async_queue_push_front(self->queue, buf);
-    gst_buffer_ref(buf);
-    *outbuf = buf;
     return GST_BASE_TRANSFORM_FLOW_DROPPED;
   }
   GstBuffer * buf = g_async_queue_try_pop(self->queue);
