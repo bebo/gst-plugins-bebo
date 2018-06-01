@@ -1379,16 +1379,43 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   }
 
   params->encodeConfig = &preset_config.presetCfg;
+  // TODO: Check encoder caps to make sure they support these settings.
+  NV_ENC_CAPS_PARAM caps_param = { 0, };
+  caps_param.version = NV_ENC_CAPS_PARAM_VER;
+  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_LOOKAHEAD;
+  int supported = 0;
 
-  //if (GST_VIDEO_INFO_IS_INTERLACED (info)) {
-  //  if (GST_VIDEO_INFO_INTERLACE_MODE (info) ==
-  //      GST_VIDEO_INTERLACE_MODE_INTERLEAVED
-  //      || GST_VIDEO_INFO_INTERLACE_MODE (info) ==
-  //      GST_VIDEO_INTERLACE_MODE_MIXED) {
-  //    preset_config.presetCfg.frameFieldMode =
-  //        NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
-  //  }
-  //}
+  if(NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+    GST_DEBUG("Enabling lookahead");
+    params->encodeConfig->rcParams.enableLookahead = 1;
+    params->encodeConfig->rcParams.lookaheadDepth = 32;
+  }
+
+  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
+  supported = 0;
+  if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+    GST_DEBUG("Enabling temporal aq");
+    params->encodeConfig->rcParams.enableAQ = 1;
+    params->encodeConfig->rcParams.enableTemporalAQ = 1;
+  }
+
+  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION;
+  supported = 0;
+  if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+    GST_DEBUG("Enabling weighted prediction.");
+    params->enableWeightedPrediction = 1;
+  }
+
+  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE;
+  supported = 0;
+  if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+    GST_DEBUG("Enabling useBFramesAsReF");
+    params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
+  }
 
   if (info->fps_d > 0 && info->fps_n > 0) {
     params->frameRateNum = info->fps_n;
