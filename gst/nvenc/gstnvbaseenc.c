@@ -703,7 +703,7 @@ static gboolean
 gst_nv_base_enc_stop (GstVideoEncoder * enc)
 {
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
-
+  GST_INFO("Stopping NVENC");
   gst_nv_base_enc_drain_encoder(nvenc);
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
   gst_nv_base_enc_free_buffers (nvenc);
@@ -741,7 +741,7 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
     gst_object_unref (nvenc->allocator);
   }
   nvenc->allocator = NULL;
-
+  GST_INFO("Stop complete");
   return TRUE;
 }
 
@@ -822,7 +822,7 @@ static gboolean
 gst_nv_base_enc_close (GstVideoEncoder * enc)
 {
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
-
+  GST_DEBUG("Closing encoder");
   if (nvenc->encoder) {
     if (NvEncDestroyEncoder (nvenc->encoder) != NV_ENC_SUCCESS)
       return FALSE;
@@ -844,7 +844,7 @@ gst_nv_base_enc_close (GstVideoEncoder * enc)
     g_async_queue_unref (nvenc->bitstream_pool);
     nvenc->bitstream_pool = NULL;
   }
-
+  GST_DEBUG("Encoder successfully closed");
   return TRUE;
 }
 
@@ -1122,16 +1122,18 @@ static gboolean
 gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 {
   gpointer out_buf;
-
+  GST_DEBUG("Stopping bitstream thread.");
   if (nvenc->bitstream_thread == NULL)
     return TRUE;
   g_async_queue_lock(nvenc->bitstream_queue);
   g_async_queue_lock(nvenc->bitstream_pool);
   g_async_queue_lock(nvenc->holding_queue);
+
   /* FIXME */
   // FIXME: Rowan handle the queued up frames when we stop.
-  while (g_async_queue_length(nvenc->holding_queue) > 0) {
-    g_async_queue_push(nvenc->bitstream_queue, g_async_queue_pop(nvenc->holding_queue));
+  while (g_async_queue_length_unlocked(nvenc->holding_queue) > 0) {
+    GST_DEBUG("Encoder is drained so moving buffer from holding to bitstream queue.");
+    g_async_queue_push_unlocked(nvenc->bitstream_queue, g_async_queue_pop_unlocked(nvenc->holding_queue));
   }
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
 
@@ -1139,17 +1141,18 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   //  GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
   //  g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
   //}
+  GST_DEBUG("Stopping bitstream thread.5");
   g_async_queue_push_unlocked (nvenc->bitstream_queue, SHUTDOWN_COOKIE);
   g_async_queue_unlock (nvenc->bitstream_pool);
   g_async_queue_unlock (nvenc->bitstream_queue);
-  g_async_queue_lock(nvenc->holding_queue);
+  g_async_queue_unlock (nvenc->holding_queue);
 
 
   /* temporary unlock, so other thread can find and push frame */
   GST_VIDEO_ENCODER_STREAM_UNLOCK (nvenc);
   g_thread_join (nvenc->bitstream_thread);
   GST_VIDEO_ENCODER_STREAM_LOCK (nvenc);
-
+  GST_DEBUG("Bitstream thread stopped.");
   nvenc->bitstream_thread = NULL;
   return TRUE;
 }
@@ -2057,10 +2060,10 @@ gst_nv_base_enc_drain_encoder (D3DGstNvBaseEnc * nvenc)
 
   nv_ret = gl_NvEncEncodePicture (nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret != NV_ENC_SUCCESS) {
-    GST_LOG_OBJECT (nvenc, "Failed to drain encoder, ret %d", nv_ret);
+    GST_ERROR_OBJECT (nvenc, "Failed to drain encoder, ret %d", nv_ret);
     return FALSE;
   }
-
+  GST_DEBUG("Encoder drained.");
   return TRUE;
 }
 
