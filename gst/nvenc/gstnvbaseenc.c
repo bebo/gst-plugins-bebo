@@ -995,8 +995,11 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 
         /* assumes buffers are submitted in order */
         out_buf = g_async_queue_pop (nvenc->bitstream_queue);
-        if ((gpointer) out_buf == SHUTDOWN_COOKIE)
+        if ((gpointer)out_buf == SHUTDOWN_COOKIE) {
+          GST_DEBUG("Bitstream thread got shutdown cookie");
           break;
+        }
+
 
         GST_LOG_OBJECT (nvenc, "waiting for output buffer %p to be ready",
             out_buf);
@@ -1086,8 +1089,12 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 
     if (flow != GST_FLOW_OK) {
       GST_INFO_OBJECT (enc, "got flow %s", gst_flow_get_name (flow));
-      g_atomic_int_set (&nvenc->last_flow, flow);
-      break;
+      if (flow != GST_FLOW_FLUSHING || (
+        !g_async_queue_length(nvenc->bitstream_queue) &&
+        !g_async_queue_length(nvenc->holding_queue))) {
+        g_atomic_int_set(&nvenc->last_flow, flow);
+        break;
+      }
     }
   }
   while (TRUE);
@@ -1129,8 +1136,6 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   g_async_queue_lock(nvenc->bitstream_pool);
   g_async_queue_lock(nvenc->holding_queue);
 
-  /* FIXME */
-  // FIXME: Rowan handle the queued up frames when we stop.
   while (g_async_queue_length_unlocked(nvenc->holding_queue) > 0) {
     GST_DEBUG("Encoder is drained so moving buffer from holding to bitstream queue.");
     g_async_queue_push_unlocked(nvenc->bitstream_queue, g_async_queue_pop_unlocked(nvenc->holding_queue));
@@ -1141,7 +1146,6 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   //  GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
   //  g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
   //}
-  GST_DEBUG("Stopping bitstream thread.5");
   g_async_queue_push_unlocked (nvenc->bitstream_queue, SHUTDOWN_COOKIE);
   g_async_queue_unlock (nvenc->bitstream_pool);
   g_async_queue_unlock (nvenc->bitstream_queue);
@@ -1198,25 +1202,10 @@ gst_nv_base_enc_free_buffers (D3DGstNvBaseEnc * nvenc)
   for (i = 0; i < nvenc->n_bufs; ++i) {
     NV_ENC_OUTPUT_PTR out_buf = nvenc->output_bufs[i];
 
-#if HAVE_NVENC_GST_GL
     if (nvenc->gl_input) {
       struct gl_input_resource *in_gl_resource = nvenc->input_bufs[i];
-
-      // cuCtxPushCurrent (nvenc->cuda_ctx);
-      //
-
-      // We register and unregister the resource each time we handle a frame.
-      //nv_ret =
-      //    NvEncUnregisterResource (nvenc->encoder,
-      //    in_gl_resource->nv_resource.registeredResource);
-      //if (nv_ret != NV_ENC_SUCCESS)
-      //  GST_ERROR_OBJECT (nvenc, "Failed to unregister resource %p, ret %d",
-      //      in_gl_resource, nv_ret);
-
       g_free (in_gl_resource);
-      //cuCtxPopCurrent (NULL);
     } else
-#endif
     {
       NV_ENC_INPUT_PTR in_buf = (NV_ENC_INPUT_PTR) nvenc->input_bufs[i];
 
@@ -1729,106 +1718,6 @@ struct map_gl_input
   GstVideoInfo *info;
   struct gl_input_resource *in_gl_resource;
 };
-
-#if 0
-static void
-_map_gl_input_buffer (GstGLContext * context, struct map_gl_input *data)
-{
-  cudaError_t cuda_ret;
-  guint8 *data_pointer;
-  guint i;
-
-  cuCtxPushCurrent (data->nvenc->cuda_ctx);
-  data_pointer = data->in_gl_resource->cuda_pointer;
-  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (data->info); i++) {
-    guint plane_n_components;
-    GstGLBuffer *gl_buf_obj;
-    GstGLMemoryPBO *gl_mem;
-    guint src_stride, dest_stride;
-
-    gl_mem =
-        (GstGLMemoryPBO *) gst_buffer_peek_memory (data->frame->input_buffer,
-        i);
-    g_return_if_fail (gst_is_gl_memory_pbo ((GstMemory *) gl_mem));
-    data->in_gl_resource->gl_mem[i] = GST_GL_MEMORY_CAST (gl_mem);
-    plane_n_components = _plane_get_n_components (data->info, i);
-
-    gl_buf_obj = (GstGLBuffer *) gl_mem->pbo;
-    g_return_if_fail (gl_buf_obj != NULL);
-
-    /* get the texture into the PBO */
-    gst_gl_memory_pbo_upload_transfer (gl_mem);
-    gst_gl_memory_pbo_download_transfer (gl_mem);
-
-    GST_LOG_OBJECT (data->nvenc, "attempting to copy texture %u into cuda",
-        gl_mem->mem.tex_id);
-
-    cuda_ret =
-        cudaGraphicsGLRegisterBuffer (&data->in_gl_resource->cuda_texture,
-        gl_buf_obj->id, cudaGraphicsRegisterFlagsReadOnly);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to register GL texture %u to cuda "
-          "ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    cuda_ret =
-        cudaGraphicsMapResources (1, &data->in_gl_resource->cuda_texture, 0);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to map GL texture %u into cuda "
-          "ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    cuda_ret =
-        cudaGraphicsResourceGetMappedPointer (&data->in_gl_resource->
-        cuda_plane_pointers[i], &data->in_gl_resource->cuda_num_bytes,
-        data->in_gl_resource->cuda_texture);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to get mapped pointer of map GL "
-          "texture %u in cuda ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    src_stride = GST_VIDEO_INFO_PLANE_STRIDE (data->info, i);
-    dest_stride = data->in_gl_resource->cuda_stride;
-
-    /* copy into scratch buffer */
-    cuda_ret =
-        cudaMemcpy2D (data_pointer, dest_stride,
-        data->in_gl_resource->cuda_plane_pointers[i], src_stride,
-        _get_plane_width (data->info, i) * plane_n_components,
-        _get_plane_height (data->info, i), cudaMemcpyDeviceToDevice);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to copy GL texture %u into cuda "
-          "ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    cuda_ret =
-        cudaGraphicsUnmapResources (1, &data->in_gl_resource->cuda_texture, 0);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to unmap GL texture %u from cuda "
-          "ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    cuda_ret =
-        cudaGraphicsUnregisterResource (data->in_gl_resource->cuda_texture);
-    if (cuda_ret != cudaSuccess) {
-      GST_ERROR_OBJECT (data->nvenc, "failed to unregister GL texture %u from "
-          "cuda ret :%d", gl_mem->mem.tex_id, cuda_ret);
-      g_assert_not_reached ();
-    }
-
-    data_pointer =
-        data_pointer +
-        data->in_gl_resource->cuda_stride *
-        _get_plane_height (&data->nvenc->input_info, i);
-  }
-  cuCtxPopCurrent (NULL);
-}
-#endif
 
 static GstFlowReturn
 _acquire_input_buffer (D3DGstNvBaseEnc * nvenc, gpointer * input)
