@@ -712,6 +712,10 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
     g_async_queue_unref (nvenc->bitstream_pool);
     nvenc->bitstream_pool = NULL;
   }
+  if (nvenc->holding_queue) {
+    g_async_queue_unref(nvenc->holding_queue);
+    nvenc->holding_queue = NULL;
+  }
   if (nvenc->bitstream_queue) {
     g_async_queue_unref (nvenc->bitstream_queue);
     nvenc->bitstream_queue = NULL;
@@ -1121,6 +1125,9 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 
   /* FIXME */
   // FIXME: Rowan handle the queued up frames when we stop.
+  while (g_async_queue_length(nvenc->holding_queue) > 0) {
+    g_async_queue_push(nvenc->bitstream_queue, g_async_queue_pop(nvenc->holding_queue));
+  }
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
   g_async_queue_lock (nvenc->bitstream_queue);
   g_async_queue_lock (nvenc->bitstream_pool);
