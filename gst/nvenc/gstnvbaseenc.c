@@ -1393,8 +1393,8 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if(NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling lookahead");
-    //params->encodeConfig->rcParams.enableLookahead = 1;
-    //params->encodeConfig->rcParams.lookaheadDepth = 16;
+    params->encodeConfig->rcParams.enableLookahead = 1;
+    params->encodeConfig->rcParams.lookaheadDepth = 3;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
@@ -1857,16 +1857,7 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   pic_params.inputHeight = meta->height;
   pic_params.outputBitstream = outputBufferPtr;
   pic_params.completionEvent = NULL;
-#if 0
-  if (GST_VIDEO_FRAME_IS_INTERLACED (vframe)) {
-    if (GST_VIDEO_FRAME_IS_TFF (vframe))
-      pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
-    else
-      pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
-  } else {
-    pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
-  }
-#endif
+
   pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
   pic_params.inputTimeStamp = frame->pts;
   pic_params.inputDuration =
@@ -1887,15 +1878,17 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   nv_ret = gl_NvEncEncodePicture(nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret == NV_ENC_SUCCESS) {
     GST_LOG_OBJECT (nvenc, "Encoded picture");
-    while (g_async_queue_length(nvenc->holding_queue) > 0) {
-      g_async_queue_push(nvenc->bitstream_queue, g_async_queue_pop(nvenc->holding_queue));
+    void *b_frame_buffer = g_async_queue_try_pop(nvenc->holding_queue);
+    while (b_frame_buffer) {
+      g_async_queue_push(nvenc->bitstream_queue, b_frame_buffer);
+      b_frame_buffer = g_async_queue_try_pop(nvenc->holding_queue);
     }
     g_async_queue_push(nvenc->bitstream_queue, outputBufferPtr);
   } else if (nv_ret == NV_ENC_ERR_NEED_MORE_INPUT) {
     /* FIXME: we should probably queue pending output buffers here and only
      * submit them to the async queue once we got sucess back */
     GST_DEBUG_OBJECT (nvenc, "Encoded picture (encoder needs more input)");
-    g_async_queue_push(nvenc->holding_queue, inputBuffer);
+    g_async_queue_push(nvenc->holding_queue, outputBufferPtr);
   } else {
     GST_ERROR_OBJECT (nvenc, "Failed to encode picture: %d", nv_ret);
     GST_DEBUG_OBJECT (nvenc, "re-enqueueing input buffer %p", inputBuffer);
