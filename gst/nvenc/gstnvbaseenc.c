@@ -671,6 +671,7 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
   nvenc->bitstream_pool = g_async_queue_new ();
   nvenc->bitstream_queue = g_async_queue_new ();
   nvenc->in_bufs_pool = g_async_queue_new ();
+  nvenc->holding_queue = g_async_queue_new(); 
 
   nvenc->last_flow = GST_FLOW_OK;
   nvenc->allocator = gst_gl_dxgi_memory_allocator_new();
@@ -703,6 +704,7 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
 {
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
 
+  gst_nv_base_enc_drain_encoder(nvenc);
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
   gst_nv_base_enc_free_buffers (nvenc);
 
@@ -822,12 +824,6 @@ gst_nv_base_enc_close (GstVideoEncoder * enc)
       return FALSE;
     nvenc->encoder = NULL;
   }
-
-  //if (nvenc->cuda_ctx) {
-  //  if (!gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
-  //    return FALSE;
-  //  nvenc->cuda_ctx = NULL;
-  //}
 
   GST_OBJECT_LOCK (nvenc);
   g_free (nvenc->input_formats);
@@ -991,10 +987,6 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         GST_LOG_OBJECT (enc, "wait for bitstream buffer..");
 
         /* assumes buffers are submitted in order */
-        // FIXME: Only submit buffers to the bitstream queue when the encoder has enough output.
-        while (g_async_queue_length(nvenc->bitstream_queue) < 17) {
-          Sleep(10);
-        }
         out_buf = g_async_queue_pop (nvenc->bitstream_queue);
         if ((gpointer) out_buf == SHUTDOWN_COOKIE)
           break;
@@ -1888,10 +1880,15 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   nv_ret = gl_NvEncEncodePicture(nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret == NV_ENC_SUCCESS) {
     GST_LOG_OBJECT (nvenc, "Encoded picture");
+    while (g_async_queue_length(nvenc->holding_queue) > 0) {
+      g_async_queue_push(nvenc->bitstream_queue, g_async_queue_pop(nvenc->holding_queue));
+    }
+    g_async_queue_push(nvenc->bitstream_queue, outputBufferPtr);
   } else if (nv_ret == NV_ENC_ERR_NEED_MORE_INPUT) {
     /* FIXME: we should probably queue pending output buffers here and only
      * submit them to the async queue once we got sucess back */
     GST_DEBUG_OBJECT (nvenc, "Encoded picture (encoder needs more input)");
+    g_async_queue_push(nvenc->holding_queue, inputBuffer);
   } else {
     GST_ERROR_OBJECT (nvenc, "Failed to encode picture: %d", nv_ret);
     GST_DEBUG_OBJECT (nvenc, "re-enqueueing input buffer %p", inputBuffer);
@@ -1901,9 +1898,6 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 
     return GST_FLOW_ERROR;
   }
-
-  g_async_queue_push (nvenc->bitstream_queue, outputBufferPtr);
-
   return GST_FLOW_OK;
 }
 
@@ -2069,10 +2063,10 @@ gst_nv_base_enc_finish (GstVideoEncoder * enc)
 
   GST_FIXME_OBJECT (enc, "implement finish");
 
-  gst_nv_base_enc_drain_encoder (nvenc);
+  //gst_nv_base_enc_drain_encoder (nvenc);
 
   /* wait for encoder to output the remaining buffers */
-  gst_nv_base_enc_stop_bitstream_thread (nvenc);
+  //gst_nv_base_enc_stop_bitstream_thread (nvenc);
 
   return GST_FLOW_OK;
 }
