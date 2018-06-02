@@ -47,7 +47,7 @@
 
 #define N_BUFFERS_PER_FRAME 1
 #define SUPPORTED_GL_APIS GST_GL_API_OPENGL3
-#define BUFFER_COUNT 50
+#define BUFFER_COUNT 30
 
 /* magic pointer value we can put in the async queue to signal shut down */
 #define SHUTDOWN_COOKIE ((gpointer)GINT_TO_POINTER (1))
@@ -1125,15 +1125,16 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 
   if (nvenc->bitstream_thread == NULL)
     return TRUE;
-
+  g_async_queue_lock(nvenc->bitstream_queue);
+  g_async_queue_lock(nvenc->bitstream_pool);
+  g_async_queue_lock(nvenc->holding_queue);
   /* FIXME */
   // FIXME: Rowan handle the queued up frames when we stop.
   while (g_async_queue_length(nvenc->holding_queue) > 0) {
     g_async_queue_push(nvenc->bitstream_queue, g_async_queue_pop(nvenc->holding_queue));
   }
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
-  g_async_queue_lock (nvenc->bitstream_queue);
-  g_async_queue_lock (nvenc->bitstream_pool);
+
   //while ((out_buf = g_async_queue_try_pop_unlocked (nvenc->bitstream_queue))) {
   //  GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
   //  g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
@@ -1141,6 +1142,8 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   g_async_queue_push_unlocked (nvenc->bitstream_queue, SHUTDOWN_COOKIE);
   g_async_queue_unlock (nvenc->bitstream_pool);
   g_async_queue_unlock (nvenc->bitstream_queue);
+  g_async_queue_lock(nvenc->holding_queue);
+
 
   /* temporary unlock, so other thread can find and push frame */
   GST_VIDEO_ENCODER_STREAM_UNLOCK (nvenc);
@@ -1397,7 +1400,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling lookahead");
     params->encodeConfig->rcParams.enableLookahead = 1;
-    params->encodeConfig->rcParams.lookaheadDepth = 16;
+    params->encodeConfig->rcParams.lookaheadDepth = 8;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
