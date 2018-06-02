@@ -915,8 +915,11 @@ lock_bitstream_helper(GstGLContext *ctx, struct bslock* bs) {
   NVENCSTATUS nv_ret = NvEncLockBitstream(bs->encoder, bs->lock_bs);
   if (nv_ret != NV_ENC_SUCCESS) {
     /* FIXME: what to do here? */
-    GST_ERROR("Failed to lock bitstream: %d", nv_ret);
+    GST_ERROR("Failed to lock bitstream: %d, %d", nv_ret, bs->out_buf);
     bs->out_buf = SHUTDOWN_COOKIE;
+  }
+  else {
+    GST_INFO("LOCKED Bitstream: %d", bs->out_buf);
   }
 }
 
@@ -1394,7 +1397,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling lookahead");
     params->encodeConfig->rcParams.enableLookahead = 1;
-    params->encodeConfig->rcParams.lookaheadDepth = 3;
+    params->encodeConfig->rcParams.lookaheadDepth = 16;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
@@ -1877,17 +1880,19 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 
   nv_ret = gl_NvEncEncodePicture(nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret == NV_ENC_SUCCESS) {
-    GST_LOG_OBJECT (nvenc, "Encoded picture");
+    GST_INFO ("Encoded picture: %d", outputBufferPtr);
     void *b_frame_buffer = g_async_queue_try_pop(nvenc->holding_queue);
-    while (b_frame_buffer) {
+    if (b_frame_buffer) {
       g_async_queue_push(nvenc->bitstream_queue, b_frame_buffer);
-      b_frame_buffer = g_async_queue_try_pop(nvenc->holding_queue);
+      g_async_queue_push(nvenc->holding_queue, outputBufferPtr);
     }
-    g_async_queue_push(nvenc->bitstream_queue, outputBufferPtr);
+    else {
+      g_async_queue_push(nvenc->bitstream_queue, outputBufferPtr);
+    }
   } else if (nv_ret == NV_ENC_ERR_NEED_MORE_INPUT) {
     /* FIXME: we should probably queue pending output buffers here and only
      * submit them to the async queue once we got sucess back */
-    GST_DEBUG_OBJECT (nvenc, "Encoded picture (encoder needs more input)");
+    GST_DEBUG("Encoded picture (encoder needs more input) %d", outputBufferPtr);
     g_async_queue_push(nvenc->holding_queue, outputBufferPtr);
   } else {
     GST_ERROR_OBJECT (nvenc, "Failed to encode picture: %d", nv_ret);
