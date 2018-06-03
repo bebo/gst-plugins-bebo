@@ -695,15 +695,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
       GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
   }
 
-  // offer our custom allocator
-  GstAllocator *allocator;
-  GstAllocationParams params;
-  gst_allocation_params_init (&params);
-
-  allocator = GST_ALLOCATOR (self->allocator);
-  gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator);
-
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
@@ -732,6 +723,15 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   }
 
   GST_DEBUG("Make a new buffer pool.");
+  // offer our custom allocator
+  GstAllocator *allocator;
+  GstAllocationParams params;
+  gst_allocation_params_init(&params);
+
+  allocator = GST_ALLOCATOR(self->allocator);
+  gst_query_add_allocation_param(query, allocator, &params);
+  gst_object_unref(allocator);
+
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
   config = gst_buffer_pool_get_config (self->pool);
