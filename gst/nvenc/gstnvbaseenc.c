@@ -2072,16 +2072,7 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
   gst_query_add_allocation_meta(query, GST_GL_SYNC_META_API_TYPE, 0);
   if (!gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
       GST_ERROR_OBJECT(self, "shouldn't GL MEMORY be negotiated?");
-  }
-
-  // offer our custom allocator
-  GstAllocator *allocator;
-  GstAllocationParams params;
-  gst_allocation_params_init (&params);
-
-  allocator = GST_ALLOCATOR (self->allocator);
-  gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator); 
+  } 
 
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
@@ -2110,6 +2101,14 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
     }
   }
 
+  // offer our custom allocator
+  GstAllocator *allocator;
+  GstAllocationParams params;
+  gst_allocation_params_init(&params);
+
+  allocator = GST_ALLOCATOR(self->allocator);
+  gst_query_add_allocation_param(query, allocator, &params);
+  gst_object_unref(allocator);
   GST_DEBUG("Make a new buffer pool.");
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
