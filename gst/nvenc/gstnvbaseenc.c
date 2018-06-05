@@ -1391,9 +1391,9 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if(NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling lookahead");
-    params->encodeConfig->rcParams.enableLookahead = 0;
-    //params->encodeConfig->rcParams.disableBadapt = 1; // disable b frames for now
-    //params->encodeConfig->rcParams.lookaheadDepth = 8;
+    //params->encodeConfig->rcParams.enableLookahead = 0;
+    params->encodeConfig->rcParams.disableBadapt = 1; // disable b frames for now
+    params->encodeConfig->rcParams.lookaheadDepth = 8;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
@@ -1514,7 +1514,6 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     /* input buffers */
     nvenc->input_bufs = g_new0 (gpointer, nvenc->n_bufs);
 
-#if HAVE_NVENC_GST_GL
     features = gst_caps_get_features (state->caps, 0);
     if (gst_caps_features_contains (features,
             GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
@@ -1525,58 +1524,29 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
         pixel_depth += GST_VIDEO_INFO_COMP_DEPTH (info, i);
       }
 
-      //cuCtxPushCurrent (nvenc->cuda_ctx);
       for (i = 0; i < nvenc->n_bufs; ++i) {
         struct gl_input_resource *in_gl_resource =
             g_new0 (struct gl_input_resource, 1);
-        // CUresult cu_ret;
 
         memset (&in_gl_resource->nv_resource, 0,
             sizeof (in_gl_resource->nv_resource));
         memset (&in_gl_resource->nv_mapped_resource, 0,
             sizeof (in_gl_resource->nv_mapped_resource));
 
-        ///* scratch buffer for non-contigious planer into a contigious buffer */
-        //cu_ret =
-        //    cuMemAllocPitch ((CUdeviceptr *) & in_gl_resource->cuda_pointer,
-        //    &in_gl_resource->cuda_stride, input_width,
-        //    _get_frame_data_height (info), 16);
-        //if (cu_ret != CUDA_SUCCESS) {
-        //  const gchar *err;
-
-        //  cuGetErrorString (cu_ret, &err);
-        //  GST_ERROR_OBJECT (nvenc, "failed to alocate cuda scratch buffer "
-        //      "ret %d error :%s", cu_ret, err);
-        //  g_assert_not_reached ();
-        //}
-
         in_gl_resource->nv_resource.version = NV_ENC_REGISTER_RESOURCE_VER;
         in_gl_resource->nv_resource.resourceType =
           NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
         in_gl_resource->nv_resource.width = input_width;
         in_gl_resource->nv_resource.height = input_height;
-        //FIXME in_gl_resource->nv_resource.pitch = in_gl_resource->cuda_stride;
         in_gl_resource->nv_resource.pitch = input_width;
         in_gl_resource->nv_resource.bufferFormat =
             gst_nvenc_get_nv_buffer_format (GST_VIDEO_INFO_FORMAT (info));
-#if 0
-        in_gl_resource->nv_resource.resourceToRegister =
-          ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d11texture;
-        nv_ret =
-            NvEncRegisterResource (nvenc->encoder,
-            &in_gl_resource->nv_resource);
-        if (nv_ret != NV_ENC_SUCCESS)
-          GST_ERROR_OBJECT (nvenc, "Failed to register resource %p, ret %d",
-              in_gl_resource, nv_ret);
-#endif
 
         nvenc->input_bufs[i] = in_gl_resource;
         g_async_queue_push (nvenc->in_bufs_pool, nvenc->input_bufs[i]);
       }
 
-      //cuCtxPopCurrent (NULL);
     } else
-#endif
     {
       for (i = 0; i < nvenc->n_bufs; ++i) {
         NV_ENC_CREATE_INPUT_BUFFER cin_buf = { 0, };
@@ -1637,28 +1607,6 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
 
       g_async_queue_push (nvenc->bitstream_pool, nvenc->output_bufs[i]);
     }
-
-#if 0
-    /* Get SPS/PPS */
-    {
-      NV_ENC_SEQUENCE_PARAM_PAYLOAD seq_param = { 0 };
-      uint32_t seq_size = 0;
-
-      seq_param.version = NV_ENC_SEQUENCE_PARAM_PAYLOAD_VER;
-      seq_param.spsppsBuffer = g_alloca (1024);
-      seq_param.inBufferSize = 1024;
-      seq_param.outSPSPPSPayloadSize = &seq_size;
-
-      nv_ret = NvEncGetSequenceParams (nvenc->encoder, &seq_param);
-      if (nv_ret != NV_ENC_SUCCESS) {
-        GST_WARNING_OBJECT (enc, "Failed to retrieve SPS/PPS: %d", nv_ret);
-        return FALSE;
-      }
-
-      /* FIXME: use SPS/PPS */
-      GST_MEMDUMP_OBJECT (enc, "SPS/PPS", seq_param.spsppsBuffer, seq_size);
-    }
-#endif
   }
 
   g_assert (nvenc_class->set_src_caps);
