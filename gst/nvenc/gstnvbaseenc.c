@@ -569,12 +569,6 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     GST_ERROR("COULD NOT OPEN");
     return FALSE;
   }
-  /*nvenc->cuda_ctx = gst_nvenc_create_cuda_context (nvenc->cuda_device_id);
-  if (nvenc->cuda_ctx == NULL) {
-    GST_ELEMENT_ERROR (enc, LIBRARY, INIT, (NULL),
-        ("Failed to create CUDA context, perhaps CUDA is not supported."));
-    return FALSE;
-  } */
 
   {
     GST_INFO("CREATING_ENCODER");
@@ -601,8 +595,6 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     nv_ret = gl_NvEncOpenEncodeSessionEx(nvenc->context, &params, &nvenc->encoder);
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ERROR ("Failed to create NVENC encoder session, ret=%d", nv_ret);
-      //if (gst_nvenc_destroy_cuda_context (nvenc->cuda_ctx))
-        //nvenc->cuda_ctx = NULL;
       return FALSE;
     }
     GST_INFO ("created NVENC encoder %p", nvenc->encoder);
