@@ -1393,8 +1393,8 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling temporal aq");
-    params->encodeConfig->rcParams.enableAQ = 1;
-    params->encodeConfig->rcParams.enableTemporalAQ = 1;
+    //params->encodeConfig->rcParams.enableAQ = 1;
+    //params->encodeConfig->rcParams.enableTemporalAQ = 1;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION;
@@ -1402,7 +1402,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling weighted prediction.");
-    params->enableWeightedPrediction = 1;
+    //params->enableWeightedPrediction = 1;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE;
@@ -1410,7 +1410,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling useBFramesAsReF");
-    params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
+    //params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
   }
 
   if (info->fps_d > 0 && info->fps_n > 0) {
@@ -1716,7 +1716,7 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
 
   nv_ret = gl_NvEncEncodePicture(nvenc->context, nvenc->encoder, &pic_params);
   if (nv_ret == NV_ENC_SUCCESS) {
-    GST_INFO ("Encoded picture: %d", outputBufferPtr);
+    GST_LOG ("Encoded picture: %d", outputBufferPtr);
     void *b_frame_buffer = g_async_queue_try_pop(nvenc->holding_queue);
     if (b_frame_buffer) {
       g_async_queue_push(nvenc->bitstream_queue, b_frame_buffer);
@@ -1729,6 +1729,7 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
     /* FIXME: we should probably queue pending output buffers here and only
      * submit them to the async queue once we got sucess back */
     GST_DEBUG("Encoded picture (encoder needs more input) %d", outputBufferPtr);
+
     g_async_queue_push(nvenc->holding_queue, outputBufferPtr);
   } else {
     GST_ERROR_OBJECT (nvenc, "Failed to encode picture: %d", nv_ret);
