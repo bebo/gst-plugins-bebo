@@ -1391,8 +1391,9 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if(NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
     &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
     GST_INFO("Enabling lookahead");
-    params->encodeConfig->rcParams.enableLookahead = 1;
-    params->encodeConfig->rcParams.lookaheadDepth = 8;
+    params->encodeConfig->rcParams.enableLookahead = 0;
+    //params->encodeConfig->rcParams.disableBadapt = 1; // disable b frames for now
+    //params->encodeConfig->rcParams.lookaheadDepth = 8;
   }
 
   caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ;
