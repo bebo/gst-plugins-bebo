@@ -1397,21 +1397,21 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     //params->encodeConfig->rcParams.enableTemporalAQ = 1;
   }
 
-  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION;
-  supported = 0;
-  if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
-    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_INFO("Enabling weighted prediction.");
-    //params->enableWeightedPrediction = 1;
-  }
+  //caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION;
+  //supported = 0;
+  //if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+  //  &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+  //  GST_INFO("Enabling weighted prediction.");
+  //  //params->enableWeightedPrediction = 1;
+  //}
 
-  caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE;
-  supported = 0;
-  if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
-    &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
-    GST_INFO("Enabling useBFramesAsReF");
-    params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
-  }
+  //caps_param.capsToQuery = NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE;
+  //supported = 0;
+  //if (NvEncGetEncodeCaps(nvenc->encoder, nvenc_class->codec_id,
+  //  &caps_param, &supported) == NV_ENC_SUCCESS && supported) {
+  //  GST_INFO("Enabling useBFramesAsReF");
+  //  params->encodeConfig->encodeCodecConfig.h264Config.useBFramesAsRef = 1;
+  //}
 
   if (info->fps_d > 0 && info->fps_n > 0) {
     params->frameRateNum = info->fps_n;
