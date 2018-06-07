@@ -141,8 +141,8 @@ INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib/glib-2.0/include
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
   ${PROJECT_SOURCE_DIR}/../../win32/common
-  ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
-  # ${NVENC_SDK_BASE}/Samples/Common/inc
+  # ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
+  ${NVENC_SDK_BASE}/Video_Codec_SDK_7.1.9/Samples/Common/inc
   ${CMAKE_SOURCE_DIR}/gst-libs/gst
   ${CMAKE_SOURCE_DIR}/gst
   ${CMAKE_SOURCE_DIR}/shared
