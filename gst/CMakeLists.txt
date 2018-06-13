@@ -90,6 +90,11 @@ SET(bebosquisher_HEADERS
   bebosquisher/gstglutils.h
 )
 
+SET(noisegate_FILES
+  noisegate/gstaudionoisegate.c
+  noisegate/gstaudionoisegate.h
+)
+
 source_group("nvenc" FILES ${nvenc_SOURCES} ${nvenc_HEADERS})
 source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS})
 source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
@@ -97,6 +102,7 @@ source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
 source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
 source_group("bufferholder" FILES ${buffer_holder_FILES})
+source_group("noisegate" FILES ${noisegate_FILES})
 
 ADD_LIBRARY(libbebogst SHARED
   gstbeboplugin.c
@@ -111,6 +117,7 @@ ADD_LIBRARY(libbebogst SHARED
   ${bebosquisher_SOURCES}
   ${bebosquisher_HEADERS}
   ${buffer_holder_FILES}
+  ${noisegate_FILES}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst
