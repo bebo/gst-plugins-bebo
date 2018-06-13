@@ -5,10 +5,23 @@
 #include "gstdxgidevice.h"
 #include <D3d11_4.h>
 
+GST_DEBUG_CATEGORY_STATIC (GST_CAT_GL_DXGI);
+#define GST_CAT_DEFAULT GST_CAT_GL_DXGI
+
+void
+gst_gl_dxgi_device_init_once(void)
+{
+  static volatile gsize _init = 0;
+
+  if (g_once_init_enter(&_init)) {
+    GST_DEBUG_CATEGORY_INIT(GST_CAT_GL_DXGI, "gl2dxgidevice", 0, "OpenGL DXGI Device");
+    g_once_init_leave(&_init, 1);
+  }
+}
 
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
-  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR  : %s", glGetString(GL_VENDOR));
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VERSION : %s", glGetString(GL_VERSION));
 
   share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
@@ -56,8 +69,7 @@ _create_device_d3d11() {
       &device,
       &level_used,
       NULL);
-
-  GST_INFO("CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
   
   GUID myIID_ID3D112Multithread = {
@@ -75,9 +87,10 @@ _create_device_d3d11() {
 static void
 _init_d3d11_context(GstGLContext* gl_context, gpointer * element) {
 
+  gst_gl_dxgi_device_init_once();
   void * d = g_object_get_data((GObject*)gl_context, GST_GL_DXGI_D3D11_CONTEXT);
   if (d != NULL) {
-    GST_INFO("D3D11 device already initialized");
+    GST_CAT_TRACE(GST_CAT_GL_DXGI, "D3D11 device already initialized");
     return;
   }
 
@@ -87,13 +100,12 @@ _init_d3d11_context(GstGLContext* gl_context, gpointer * element) {
 
   share_context->d3d11_device = _create_device_d3d11();
   g_assert( share_context->d3d11_device != NULL);
-  GST_INFO("created D3D11 device for %" GST_PTR_FORMAT, gl_context);
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "created D3D11 device for %" GST_PTR_FORMAT, gl_context);
 
   share_context->device_interop_handle = share_context->wglDXOpenDeviceNV(share_context->d3d11_device);
   g_assert( share_context->device_interop_handle != NULL);
 
   g_object_set_data((GObject *) gl_context, GST_GL_DXGI_D3D11_CONTEXT, share_context);
-
 
   // TODO: need to free these memory and close interop
 }
@@ -102,6 +114,7 @@ gboolean
 gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, GstGLContext** other_context, GstGLDisplay ** display)
 {
   GError *error = NULL;
+  gst_gl_dxgi_device_init_once();
 
   if (*context) {
     gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
@@ -113,7 +126,7 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
       display,
       other_context);
   }
-  GST_INFO_OBJECT(self, "other_context:%" GST_PTR_FORMAT, *other_context);
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "other_context:%" GST_PTR_FORMAT, *other_context);
 
   if (!*context) {
     GST_OBJECT_LOCK (*display);
@@ -135,17 +148,19 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
     GST_OBJECT_UNLOCK (*display);
   }
   gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
-  GST_INFO_OBJECT(self, "context:%" GST_PTR_FORMAT, *context);
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "context:%" GST_PTR_FORMAT, *context);
 
   return TRUE;
 
 context_error:
   {
     if (error) {
+      GST_CAT_ERROR(GST_CAT_GL_DXGI, "RESOURCE NOT FOUND: %s", error->message);
       GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
           (NULL));
       g_clear_error (&error);
     } else {
+      GST_CAT_ERROR(GST_CAT_GL_DXGI, "RESOURCE NOT FOUND");
       GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
     }
     if (*context)
@@ -160,4 +175,3 @@ GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context) {
   share_context = (GstDXGID3D11Context*) g_object_get_data((GObject*) context, GST_GL_DXGI_D3D11_CONTEXT);
   return share_context;
 }
-
