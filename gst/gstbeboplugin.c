@@ -32,6 +32,7 @@
 #include "bebosquisher/gstglstereomix.h"
 #include "bufferholder/gstbufferholder.h"
 #include "noisegate/gstaudionoisegate.h"
+#include "noisesuppression/gstaudionoisesuppression.h"
 
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -70,6 +71,10 @@ plugin_init (GstPlugin * plugin)
   }
   if (!gst_element_register(plugin, "noisegate",
     GST_RANK_NONE, GST_TYPE_AUDIO_NOISE_GATE)) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "noisesuppression",
+    GST_RANK_NONE, GST_TYPE_AUDIO_NOISE_SUPPRESSION)) {
     return FALSE;
   }
   return TRUE;
