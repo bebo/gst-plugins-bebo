@@ -90,8 +90,7 @@ enum
   PROP_MAKEUP,
   PROP_KNEE,
   PROP_DETECTION,
-  PROP_LINK,
-  PROP_LEVEL_SC
+  PROP_LINK
 };
 
 enum
@@ -180,7 +179,6 @@ static void gate_float(GstAudioNoiseGate *s,
     GST_AUDIO_CAPS_MAKE(GST_AUDIO_NE(F32))
 
 #define DEFAULT_LEVEL_IN    1.0
-#define DEFAULT_LEVEL_SC    1.0
 #define DEFAULT_ATTACK      20.0
 #define DEFAULT_RELEASE     250.0
 // #define DEFAULT_THRESHOLD   0.125
@@ -217,12 +215,6 @@ gst_audio_noise_gate_class_init (GstAudioNoiseGateClass * klass)
       g_param_spec_double ("level-in", "Input gain",
           "Set input level before filtering", 0.015625, 64,
           DEFAULT_LEVEL_IN,
-          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_LEVEL_SC,
-      g_param_spec_double ("level-sc", "Sidechain gain",
-          "set sidechain gain", 0.015625, 64,
-          DEFAULT_LEVEL_SC,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_ATTACK,
@@ -305,7 +297,6 @@ static void
 gst_audio_noise_gate_init (GstAudioNoiseGate * filter)
 {
   filter->level_in = DEFAULT_LEVEL_IN;
-  filter->level_sc = DEFAULT_LEVEL_SC;
   filter->attack = DEFAULT_ATTACK;
   filter->release = DEFAULT_RELEASE;
   filter->threshold = DEFAULT_THRESHOLD;
@@ -313,8 +304,8 @@ gst_audio_noise_gate_init (GstAudioNoiseGate * filter)
   filter->knee = DEFAULT_KNEE;
   filter->makeup = DEFAULT_MAKEUP;
   filter->range = DEFAULT_RANGE;
-  filter->link = DEFAULT_DETECTION;
-  filter->detection = DEFAULT_LINK;
+  filter->link = DEFAULT_LINK;
+  filter->detection = DEFAULT_DETECTION;
 
   // gst_base_transform_set_in_place (GST_BASE_TRANSFORM (filter), FALSE);
   // gst_base_transform_set_gap_aware (GST_BASE_TRANSFORM (filter), FALSE);
@@ -357,9 +348,6 @@ gst_audio_noise_gate_set_property (GObject * object, guint prop_id,
       break;
     case PROP_LINK:
       filter->link = g_value_get_enum (value);
-      break;
-    case PROP_LEVEL_SC:
-      filter->level_sc = g_value_get_double (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -405,9 +393,6 @@ gst_audio_noise_gate_get_property (GObject * object, guint prop_id,
       break;
     case PROP_LINK:
       g_value_set_enum(value, filter->link);
-      break;
-    case PROP_LEVEL_SC:
-      g_value_set_double(value, filter->level_sc);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -486,7 +471,7 @@ gst_audio_noise_gate_filter (GstBaseTransform * base_transform,
       gint nbsamples = map_in.size / GST_AUDIO_INFO_BPF(info);
       filter->process(filter,
           map_in.data, map_out.data, map_in.data,
-          nbsamples, filter->level_in, filter->level_sc);
+          nbsamples, filter->level_in, filter->level_in);
 
       gst_buffer_unmap (outbuf, &map_out);
     }
