@@ -111,6 +111,7 @@ source_group("plugin_init" FILES gstbeboplugin.c)
 source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
 source_group("bufferholder" FILES ${buffer_holder_FILES})
 source_group("noisegate" FILES ${noisegate_FILES})
+source_group("noisesuppression" FILES ${noisesuppression_FILES})
 
 ADD_LIBRARY(libbebogst SHARED
   gstbeboplugin.c
