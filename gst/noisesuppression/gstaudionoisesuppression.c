@@ -72,12 +72,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_audio_noise_suppression_debug);
 G_DEFINE_TYPE (GstAudioNoiseSuppression, gst_audio_noise_suppression,
     GST_TYPE_AUDIO_FILTER);
 
-// A fake infinity value (because real infinity may break some hosts)
-#define FAKE_INFINITY (65536.0 * 65536.0)
-
-// Check for infinity (with appropriate-ish tolerance)
-#define IS_FAKE_INFINITY(value) (fabs(value-FAKE_INFINITY) < 1.0)
-
 enum
 {
   PROP_0,
@@ -100,7 +94,7 @@ gst_audio_noise_suppression_filter_inplace (GstBaseTransform * base_transform,
 
 /* For simplicity only support 16-bit pcm in native endianness for starters */
 #define SUPPORTED_CAPS_STRING \
-    GST_AUDIO_CAPS_MAKE(GST_AUDIO_NE(S16))
+    GST_AUDIO_CAPS_MAKE(GST_AUDIO_NE(F32))
 
 #define MIN_NOISE_SUPPRESS      -60
 #define MAX_NOISE_SUPPRESS      0
@@ -134,9 +128,9 @@ gst_audio_noise_suppression_class_init (GstAudioNoiseSuppressionClass * klass)
 
   /* here you set up functions to process data (either in place, or from
    * one input buffer to another output buffer); only one is required */
-  // btrans_class->transform = GST_DEBUG_FUNCPTR (gst_audio_noise_suppression_filter);
+  btrans_class->transform = GST_DEBUG_FUNCPTR (gst_audio_noise_suppression_filter);
   btrans_class->transform_ip = gst_audio_noise_suppression_filter_inplace;
-  /* Set some basic metadata about your new element */
+
   gst_element_class_set_details_simple (element_class,
     "Noise Suppression",
     "Filter/Effect/Audio",
@@ -159,11 +153,11 @@ gst_audio_noise_suppression_class_init (GstAudioNoiseSuppressionClass * klass)
 static void
 gst_audio_noise_suppression_init (GstAudioNoiseSuppression * filter)
 {
+  filter->converter_pcm = NULL;
+  filter->converter_original = NULL;
   filter->preprocess_state = NULL;
+  filter->info_pcm = NULL;
   filter->noise_suppress = DEFAULT_NOISE_SUPPRESS;
-
-  gst_base_transform_set_in_place (GST_BASE_TRANSFORM (filter), TRUE);
-  // gst_base_transform_set_gap_aware (GST_BASE_TRANSFORM (filter), FALSE);
 }
 
 static void
@@ -173,6 +167,12 @@ gst_audio_noise_suppression_finalize (GObject * object)
 
   if (filter->preprocess_state)
     speex_preprocess_state_destroy(filter->preprocess_state);
+
+  if (filter->converter_pcm)
+    gst_audio_converter_free (filter->converter_pcm);
+
+  if (filter->converter_original)
+    gst_audio_converter_free (filter->converter_original);
 }
 
 static void
@@ -223,19 +223,19 @@ gst_audio_noise_suppression_setup (GstAudioFilter * base,
   chans = GST_AUDIO_INFO_CHANNELS (info);
   fmt = GST_AUDIO_INFO_FORMAT (info);
 
+  filter->info_pcm = gst_audio_info_copy (info);
+  gst_audio_info_set_format (filter->info_pcm,
+      GST_AUDIO_FORMAT_S16,
+      rate, chans,
+      info->position);
+
+  filter->converter_pcm = gst_audio_converter_new (0,
+      info, filter->info_pcm, NULL);
+  filter->converter_original = gst_audio_converter_new (0,
+      filter->info_pcm, info, NULL);
+
   GST_INFO_OBJECT (filter, "format %d (%s), rate %d, %d channels",
       fmt, GST_AUDIO_INFO_NAME (info), rate, chans);
-
-  /* if any setup needs to be done (like memory allocated), do it here */
-
-  /* The audio filter base class also saves the audio info in
-   * GST_AUDIO_FILTER_INFO(filter) so it's automatically available
-   * later from there as well */
-
-  int frame_size_ms = 20;
-  int frame_size = rate * frame_size_ms / 1000;
-  filter->preprocess_state = speex_preprocess_state_init(frame_size, rate);
-
   return TRUE;
 }
 
@@ -244,56 +244,70 @@ gst_audio_noise_suppression_setup (GstAudioFilter * base,
  * full functionality, however, implementing both will cause
  * audiofilter to use the optimal function in every situation,
  * with a minimum of memory copies. */
-
 static GstFlowReturn
 gst_audio_noise_suppression_filter (GstBaseTransform * base_transform,
     GstBuffer * inbuf, GstBuffer * outbuf)
 {
   GstAudioNoiseSuppression *filter = GST_AUDIO_NOISE_SUPPRESSION (base_transform);
   const GstAudioInfo* info = GST_AUDIO_FILTER_INFO(filter);
+  GstFlowReturn flow = GST_FLOW_OK;
   GstMapInfo map_in;
   GstMapInfo map_out;
 
   GST_LOG_OBJECT (filter, "transform buffer");
 
-  if (gst_buffer_map (inbuf, &map_in, GST_MAP_READ)) {
-    if (gst_buffer_map (outbuf, &map_out, GST_MAP_WRITE)) {
-      g_assert (map_out.size == map_in.size);
+  gsize samples = gst_buffer_get_size (inbuf) / GST_AUDIO_INFO_BPF(info);
 
-      memcpy (map_out.data, map_in.data, map_out.size);
-      speex_preprocess_run (filter->preprocess_state,
-        (spx_int16_t *) map_out.data);
-
-      gst_buffer_unmap (outbuf, &map_out);
-    }
-    gst_buffer_unmap (inbuf, &map_in);
+  if (!filter->preprocess_state) {
+    gsize speex_sample_size = 2 * samples; // 2 segments of audio buffers
+    filter->preprocess_state = speex_preprocess_state_init(speex_sample_size,
+        GST_AUDIO_INFO_RATE (info));
   }
 
-  return GST_FLOW_OK;
+  speex_preprocess_ctl(filter->preprocess_state,
+      SPEEX_PREPROCESS_SET_NOISE_SUPPRESS,
+      &filter->noise_suppress);
+
+  if (gst_buffer_map (inbuf, &map_in, GST_MAP_READ)) {
+    if (gst_buffer_map (outbuf, &map_out, GST_MAP_WRITE)) {
+      gpointer in[1] = { map_in.data };
+      gpointer out[1] = { map_out.data };
+
+      if (!gst_audio_converter_samples (filter->converter_pcm,
+            0, in, samples, out, samples)) {
+        GST_ERROR("Failed to perform audio convert samples to PCM");
+        goto convert_fail;
+      }
+
+      speex_preprocess_run (filter->preprocess_state,
+          (spx_int16_t *) map_out.data);
+
+      if (!gst_audio_converter_samples (filter->converter_original,
+            0, out, samples, out, samples)) {
+        GST_ERROR("Failed to perform audio convert samples to output");
+        goto convert_fail;
+      }
+    }
+  }
+
+done:
+  gst_buffer_unmap (inbuf, &map_in);
+  gst_buffer_unmap (outbuf, &map_out);
+
+  return flow;
+
+convert_fail:
+  {
+    flow = GST_FLOW_ERROR;
+    goto done;
+  }
 }
 
 static GstFlowReturn
 gst_audio_noise_suppression_filter_inplace (GstBaseTransform * base_transform,
     GstBuffer * buf)
 {
-  GstAudioNoiseSuppression *filter = GST_AUDIO_NOISE_SUPPRESSION (base_transform);
-  GstFlowReturn flow = GST_FLOW_OK;
-  GstMapInfo map;
-
-  GST_LOG_OBJECT (filter, "transform buffer in place");
-
-  speex_preprocess_ctl(filter->preprocess_state,
-      SPEEX_PREPROCESS_SET_NOISE_SUPPRESS,
-      &filter->noise_suppress);
-
-  if (gst_buffer_map (buf, &map, GST_MAP_READWRITE)) {
-    speex_preprocess_run (filter->preprocess_state,
-        (spx_int16_t *) map.data);
-
-    gst_buffer_unmap (buf, &map);
-  }
-
-  return flow;
+  return gst_audio_noise_suppression_filter (base_transform, buf, buf);
 }
 
 

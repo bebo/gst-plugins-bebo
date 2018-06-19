@@ -85,8 +85,13 @@ struct _GstAudioNoiseSuppression
 {
   GstAudioFilter filter;
 
-  gint           noise_suppress;
-  SpeexPreprocessState* preprocess_state;
+  gint              noise_suppress;
+
+  GstAudioConverter *converter_pcm;
+  GstAudioConverter *converter_original;
+  GstAudioInfo      *info_pcm;
+
+  SpeexPreprocessState *preprocess_state;
 };
 
 struct _GstAudioNoiseSuppressionClass
