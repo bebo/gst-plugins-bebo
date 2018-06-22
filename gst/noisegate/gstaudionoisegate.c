@@ -149,6 +149,8 @@ static void gst_audio_noise_gate_set_property (GObject * object,
 static void gst_audio_noise_gate_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec);
 
+static void reconfigure_values(GstAudioNoiseGate *filter);
+
 static gboolean gst_audio_noise_gate_setup (GstAudioFilter * filter,
     const GstAudioInfo * info);
 static GstFlowReturn gst_audio_noise_gate_filter (GstBaseTransform * bt,
@@ -182,12 +184,13 @@ static void gate_float(GstAudioNoiseGate *s,
 #define DEFAULT_ATTACK      20.0
 #define DEFAULT_RELEASE     250.0
 #define DEFAULT_THRESHOLD   -26
-#define DEFAULT_RANGE       -32
-#define DEFAULT_RATIO       2.0
-#define DEFAULT_KNEE        2.828427125
+#define DEFAULT_RANGE       0
+#define DEFAULT_RATIO       450.0
+// #define DEFAULT_KNEE        2.828427125
+#define DEFAULT_KNEE        8.0
 #define DEFAULT_MAKEUP      1.0
 #define DEFAULT_DETECTION   DETECTION_PEAK
-#define DEFAULT_LINK        LINK_AVERAGE
+#define DEFAULT_LINK        LINK_MAXIMUM
 
 static double
 decibel_to_linear(double db)
@@ -240,13 +243,13 @@ gst_audio_noise_gate_class_init (GstAudioNoiseGateClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_THRESHOLD,
       g_param_spec_int ("threshold", "Threshold",
-          "If a signal rises above this level the gain reduction is released (dB)", -96, 0,
+          "If a signal rises above this level the gain reduction is released (dB)", -100, 0,
           DEFAULT_THRESHOLD,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_RANGE,
-      g_param_spec_int ("range", "Range",
-          "Set the level of gain reduction when the signal is below the threshold (dB)", -96, 0,
+      g_param_spec_double ("range", "Range",
+          "Set the level of gain reduction when the signal is below the threshold", 0, 1.0,
           DEFAULT_RANGE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
@@ -313,7 +316,7 @@ gst_audio_noise_gate_init (GstAudioNoiseGate * filter)
   filter->attack = DEFAULT_ATTACK;
   filter->release = DEFAULT_RELEASE;
   filter->threshold_db = DEFAULT_THRESHOLD;
-  filter->range_db = DEFAULT_RANGE;
+  filter->range = DEFAULT_RANGE;
   filter->ratio = DEFAULT_RATIO;
   filter->knee = DEFAULT_KNEE;
   filter->makeup = DEFAULT_MAKEUP;
@@ -336,7 +339,7 @@ gst_audio_noise_gate_set_property (GObject * object, guint prop_id,
       filter->level_in = g_value_get_double (value);
       break;
     case PROP_RANGE:
-      filter->range_db = g_value_get_int (value);
+      filter->range = g_value_get_double (value);
       break;
     case PROP_THRESHOLD:
       filter->threshold_db = g_value_get_int (value);
@@ -366,6 +369,7 @@ gst_audio_noise_gate_set_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  reconfigure_values(filter);
   GST_OBJECT_UNLOCK (filter);
 }
 
@@ -381,7 +385,7 @@ gst_audio_noise_gate_get_property (GObject * object, guint prop_id,
       g_value_set_double(value, filter->level_in);
       break;
     case PROP_RANGE:
-      g_value_set_int(value, filter->range_db);
+      g_value_set_double(value, filter->range);
       break;
     case PROP_THRESHOLD:
       g_value_set_int(value, filter->threshold_db);
@@ -414,6 +418,28 @@ gst_audio_noise_gate_get_property (GObject * object, guint prop_id,
   GST_OBJECT_UNLOCK (filter);
 }
 
+static void
+reconfigure_values(GstAudioNoiseGate *filter)
+{
+  const GstAudioInfo* info = GST_AUDIO_FILTER_INFO(filter);
+  gint rate = GST_AUDIO_INFO_RATE (info);
+
+  gdouble lin_threshold = decibel_to_linear(filter->threshold_db);
+  gdouble lin_knee_sqrt = sqrt(filter->knee);
+  gdouble lin_knee_start;
+
+  if (filter->detection)
+    lin_threshold *= lin_threshold;
+
+  filter->attack_coeff  = MIN(1.0, 1.0 / (filter->attack * rate / 4000.0));
+  filter->release_coeff = MIN(1.0, 1.0 / (filter->release * rate / 4000.0));
+  filter->lin_knee_stop = lin_threshold * lin_knee_sqrt;
+  lin_knee_start = lin_threshold / lin_knee_sqrt;
+  filter->thres = log(lin_threshold);
+  filter->knee_start = log(lin_knee_start);
+  filter->knee_stop = log(filter->lin_knee_stop);
+}
+
 static gboolean
 gst_audio_noise_gate_setup (GstAudioFilter * base,
     const GstAudioInfo * info)
@@ -435,20 +461,7 @@ gst_audio_noise_gate_setup (GstAudioFilter * base,
    * GST_AUDIO_FILTER_INFO(filter) so it's automatically available
    * later from there as well */
 
-  gdouble lin_threshold = decibel_to_linear(filter->threshold_db);
-  gdouble lin_knee_sqrt = sqrt(filter->knee);
-  gdouble lin_knee_start;
-
-  if (filter->detection)
-    lin_threshold *= lin_threshold;
-
-  filter->attack_coeff  = MIN(1.0, 1.0 / (filter->attack * rate / 4000.0));
-  filter->release_coeff = MIN(1.0, 1.0 / (filter->release * rate / 4000.0));
-  filter->lin_knee_stop = lin_threshold * lin_knee_sqrt;
-  lin_knee_start = lin_threshold / lin_knee_sqrt;
-  filter->thres = log(lin_threshold);
-  filter->knee_start = log(lin_knee_start);
-  filter->knee_stop = log(filter->lin_knee_stop);
+  reconfigure_values(filter);
 
   filter->process = (fmt == GST_AUDIO_FORMAT_F32) ?
     (GstAudioNoiseGateProcessFunc) gate_float :
@@ -593,7 +606,6 @@ static void gate_float(GstAudioNoiseGate *s,
   const gdouble release_coeff = s->release_coeff;
   int n, c;
   int in_channels, out_channels;
-  gdouble lin_range = decibel_to_linear(s->range_db);
 
   in_channels = out_channels = GST_AUDIO_INFO_CHANNELS(info);
 
@@ -617,7 +629,7 @@ static void gate_float(GstAudioNoiseGate *s,
     if (s->lin_slope > 0.0)
       gain = output_gain(s->lin_slope, s->ratio, s->thres,
           s->knee, s->knee_start, s->knee_stop,
-          s->lin_knee_stop, lin_range);
+          s->lin_knee_stop, s->range);
 
     for (c = 0; c < in_channels; c++)
       dst[c] = src[c] * level_in * gain * makeup;
@@ -634,7 +646,6 @@ static void gate_int16(GstAudioNoiseGate *s,
   const gdouble release_coeff = s->release_coeff;
   int n, c;
   int in_channels, out_channels;
-  gdouble lin_range = decibel_to_linear(s->range_db);
 
   in_channels = out_channels = GST_AUDIO_INFO_CHANNELS(info);
 
@@ -658,7 +669,7 @@ static void gate_int16(GstAudioNoiseGate *s,
     if (s->lin_slope > 0.0)
       gain = output_gain(s->lin_slope, s->ratio, s->thres,
           s->knee, s->knee_start, s->knee_stop,
-          s->lin_knee_stop, lin_range);
+          s->lin_knee_stop, s->range);
 
     for (c = 0; c < in_channels; c++)
       dst[c] = src[c] * level_in * gain * makeup;

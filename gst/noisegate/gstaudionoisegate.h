@@ -89,7 +89,7 @@ struct _GstAudioNoiseGate
   GstAudioFilter filter;
 
   gdouble level_in;
-  gint range_db;
+  gdouble range;
   gint threshold_db;
   gdouble attack;
   gdouble release;
