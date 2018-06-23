@@ -31,6 +31,8 @@
 #include "bebosquisher/gstglvideomixer.h"
 #include "bebosquisher/gstglstereomix.h"
 #include "bufferholder/gstbufferholder.h"
+#include "noisegate/gstaudionoisegate.h"
+#include "noisesuppression/gstaudionoisesuppression.h"
 
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -38,10 +40,9 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
-
   if (load_nvenc_dlls()) {
-	gst_element_register(plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
-		gst_nv_h264_enc_get_type());
+    gst_element_register(plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
+        gst_nv_h264_enc_get_type());
   }
   gst_element_register(plugin, "dshowfiltersink",
     GST_RANK_NONE, GST_TYPE_SHM_SINK);
@@ -68,7 +69,14 @@ plugin_init (GstPlugin * plugin)
     GST_RANK_NONE, GST_TYPE_BUFFER_HOLDER)) {
     return FALSE;
   }
-
+  if (!gst_element_register(plugin, "noisegate",
+    GST_RANK_NONE, GST_TYPE_AUDIO_NOISE_GATE)) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "noisesuppression",
+    GST_RANK_NONE, GST_TYPE_AUDIO_NOISE_SUPPRESSION)) {
+    return FALSE;
+  }
   return TRUE;
 }
 

@@ -16,11 +16,13 @@ INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
   ${PROJECT_SOURCE_DIR}/../../win32/common
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/
+  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/include
 )
 
 LINK_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib
   "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.15063.0/um/x64"
+  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/lib
 )
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
@@ -90,6 +92,17 @@ SET(bebosquisher_HEADERS
   bebosquisher/gstglutils.h
 )
 
+SET(noisegate_FILES
+  noisegate/gstaudionoisegate.c
+  noisegate/gstaudionoisegate.h
+)
+
+SET(noisesuppression_FILES
+  noisesuppression/gstaudionoisesuppression.c
+  noisesuppression/gstaudionoisesuppression.h
+)
+
+
 source_group("nvenc" FILES ${nvenc_SOURCES} ${nvenc_HEADERS})
 source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS})
 source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
@@ -97,6 +110,8 @@ source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
 source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
 source_group("bufferholder" FILES ${buffer_holder_FILES})
+source_group("noisegate" FILES ${noisegate_FILES})
+source_group("noisesuppression" FILES ${noisesuppression_FILES})
 
 ADD_LIBRARY(libbebogst SHARED
   gstbeboplugin.c
@@ -111,6 +126,8 @@ ADD_LIBRARY(libbebogst SHARED
   ${bebosquisher_SOURCES}
   ${bebosquisher_HEADERS}
   ${buffer_holder_FILES}
+  ${noisegate_FILES}
+  ${noisesuppression_FILES}
 )
 
 TARGET_LINK_LIBRARIES(libbebogst
@@ -132,6 +149,7 @@ TARGET_LINK_LIBRARIES(libbebogst
   gstbadvideo-1.0
   gstpbutils-1.0
   gstcontroller-1.0
+  libspeexdsp
 )
 
 INCLUDE_DIRECTORIES(
@@ -143,6 +161,7 @@ INCLUDE_DIRECTORIES(
   ${PROJECT_SOURCE_DIR}/../../win32/common
   # ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
   ${NVENC_SDK_BASE}/Video_Codec_SDK_7.1.9/Samples/Common/inc
+  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/include
   ${CMAKE_SOURCE_DIR}/gst-libs/gst
   ${CMAKE_SOURCE_DIR}/gst
   ${CMAKE_SOURCE_DIR}/shared
@@ -151,6 +170,7 @@ INCLUDE_DIRECTORIES(
 
 LINK_DIRECTORIES(
   ${GST_INSTALL_BASE}/lib
+  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/lib
 )
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
