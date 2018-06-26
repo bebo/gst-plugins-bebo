@@ -153,6 +153,7 @@ gst_audio_noise_suppression_class_init (GstAudioNoiseSuppressionClass * klass)
 static void
 gst_audio_noise_suppression_init (GstAudioNoiseSuppression * filter)
 {
+  filter->speex_sample_size = 0;
   filter->converter_pcm = NULL;
   filter->converter_original = NULL;
   filter->preprocess_state = NULL;
@@ -234,8 +235,12 @@ gst_audio_noise_suppression_setup (GstAudioFilter * base,
   filter->converter_original = gst_audio_converter_new (0,
       filter->info_pcm, info, NULL);
 
-  GST_INFO_OBJECT (filter, "format %d (%s), rate %d, %d channels",
-      fmt, GST_AUDIO_INFO_NAME (info), rate, chans);
+  filter->speex_sample_size = rate * 20 / 1000; // 20ms of audio buffers
+  filter->preprocess_state = speex_preprocess_state_init(filter->speex_sample_size,
+      GST_AUDIO_INFO_RATE (info));
+
+  GST_DEBUG_OBJECT (filter, "format %d (%s), rate %d, %d channels. speex_samples: %d",
+      fmt, GST_AUDIO_INFO_NAME (info), rate, chans, filter->speex_sample_size);
   return TRUE;
 }
 
@@ -254,15 +259,25 @@ gst_audio_noise_suppression_filter (GstBaseTransform * base_transform,
   GstMapInfo map_in;
   GstMapInfo map_out;
 
-  GST_LOG_OBJECT (filter, "transform buffer");
-
   gsize samples = gst_buffer_get_size (inbuf) / GST_AUDIO_INFO_BPF(info);
 
-  if (!filter->preprocess_state) {
-    gsize speex_sample_size = 2 * samples; // 2 segments of audio buffers
-    filter->preprocess_state = speex_preprocess_state_init(speex_sample_size,
+  // incoming buffer size is larger than expected from (setup)
+  // directsound and testsrc seems to have different size than wasapisrc
+  if (samples > filter->speex_sample_size) {
+    GST_DEBUG("incoming buffer size is larger than configured. incoming: %d, expected: %d", 
+        samples, filter->speex_sample_size);
+
+    if (filter->preprocess_state) {
+      speex_preprocess_state_destroy(filter->preprocess_state);
+    }
+
+    filter->speex_sample_size = 2 * samples;
+    filter->preprocess_state = speex_preprocess_state_init(filter->speex_sample_size,
         GST_AUDIO_INFO_RATE (info));
   }
+
+  GST_LOG("samples: %ld, rate: %ld",
+      samples, GST_AUDIO_INFO_RATE (info));
 
   speex_preprocess_ctl(filter->preprocess_state,
       SPEEX_PREPROCESS_SET_NOISE_SUPPRESS,

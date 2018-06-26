@@ -87,6 +87,7 @@ struct _GstAudioNoiseSuppression
 
   gint              noise_suppress;
 
+  gint              speex_sample_size;
   GstAudioConverter *converter_pcm;
   GstAudioConverter *converter_original;
   GstAudioInfo      *info_pcm;
