@@ -185,13 +185,13 @@ gst_audio_noise_gate_class_init (GstAudioNoiseGateClass * klass)
           DEFAULT_CLOSE_THRESHOLD,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_CLOSE_THRESHOLD,
+  g_object_class_install_property (gobject_class, PROP_ATTACK_HOLD_TIME,
       g_param_spec_float ("attack-hold-time", "Attack Hold Time",
           "Hold time before starting to increase the signal gain (ms)", 0.0, 10000.0,
           DEFAULT_ATTACK_HOLD_TIME,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_CLOSE_THRESHOLD,
+  g_object_class_install_property (gobject_class, PROP_RELEASE_HOLD_TIME,
       g_param_spec_float ("release-hold-time", "Release Hold Time",
           "Hold time before starting to decrease the signal gain (ms)", 0.0, 10000.0,
           DEFAULT_RELEASE_HOLD_TIME,
