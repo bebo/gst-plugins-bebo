@@ -88,20 +88,20 @@ struct _GstAudioNoiseGate
 {
   GstAudioFilter filter;
 
-  gdouble level_in;
-  gint threshold_db;
-  gdouble attack;
-  gdouble release;
-  gdouble makeup;
-  gint link;
-  gint detection;
+  gint attack;
+  gint release;
+  gfloat makeup;
+  gfloat open_threshold_db;
+  gfloat close_threshold_db;
+  gfloat attack_hold_time;
+  gfloat release_hold_time;
 
-  gdouble thres;
-  gdouble attack_coeff;
-  gdouble release_coeff;
+  gfloat hold_attack_counter;
+  gfloat hold_release_counter;
+  gfloat attack_coeff;
+  gfloat release_coeff;
 
-  gdouble previous_weight;
-  gdouble previous_gain;
+  gfloat previous_gain;
 
   GstAudioNoiseGateProcessFunc process;
 };

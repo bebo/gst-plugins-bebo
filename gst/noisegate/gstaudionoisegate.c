@@ -75,65 +75,14 @@ G_DEFINE_TYPE (GstAudioNoiseGate, gst_audio_noise_gate,
 enum
 {
   PROP_0,
-  PROP_LEVEL_IN,
-  PROP_THRESHOLD,
+  PROP_OPEN_THRESHOLD,
+  PROP_CLOSE_THRESHOLD,
   PROP_ATTACK,
   PROP_RELEASE,
-  PROP_MAKEUP,
-  PROP_DETECTION,
-  PROP_LINK
+  PROP_ATTACK_HOLD_TIME,
+  PROP_RELEASE_HOLD_TIME,
+  PROP_MAKEUP
 };
-
-enum
-{
-  DETECTION_PEAK = 0,
-  DETECTION_RMS
-};
-
-#define GST_TYPE_AUDIO_NOISE_GATE_DETECTION (gst_audio_noise_gate_detection_get_type ())
-static GType
-gst_audio_noise_gate_detection_get_type (void)
-{
-  static GType gtype = 0;
-
-  if (gtype == 0) {
-    static const GEnumValue values[] = {
-      {DETECTION_PEAK, "Peak",
-          "peak"},
-      {DETECTION_RMS, "RMS",
-          "rms"},
-      {0, NULL, NULL}
-    };
-
-    gtype = g_enum_register_static ("GstAudioNoiseGateDetection", values);
-  }
-  return gtype;
-}
-
-enum
-{
-  LINK_AVERAGE = 0,
-  LINK_MAXIMUM
-};
-#define GST_TYPE_AUDIO_NOISE_GATE_LINK (gst_audio_noise_gate_link_get_type ())
-static GType
-gst_audio_noise_gate_link_get_type (void)
-{
-  static GType gtype = 0;
-
-  if (gtype == 0) {
-    static const GEnumValue values[] = {
-      {LINK_AVERAGE, "Average",
-          "average"},
-      {LINK_MAXIMUM, "Maximum",
-          "maximum"},
-      {0, NULL, NULL}
-    };
-
-    gtype = g_enum_register_static ("GstAudioNoiseGateLink", values);
-  }
-  return gtype;
-}
 
 static void gst_audio_noise_gate_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec);
@@ -168,33 +117,26 @@ static void gate_float(GstAudioNoiseGate *s,
 #define SUPPORTED_CAPS_STRING \
     GST_AUDIO_CAPS_MAKE(GST_AUDIO_NE(F32))
 
-#define DEFAULT_LEVEL_IN    1.0
-#define DEFAULT_ATTACK      20.0
-#define DEFAULT_RELEASE     250.0
-#define DEFAULT_THRESHOLD   -26
-#define DEFAULT_MAKEUP      1.0
-#define DEFAULT_DETECTION   DETECTION_PEAK
-#define DEFAULT_LINK        LINK_MAXIMUM
+#define DEFAULT_ATTACK            20
+#define DEFAULT_RELEASE           250
+#define DEFAULT_ATTACK_HOLD_TIME  0.0
+#define DEFAULT_RELEASE_HOLD_TIME 200.0
+#define DEFAULT_OPEN_THRESHOLD    -26.0
+#define DEFAULT_CLOSE_THRESHOLD   0.0
+#define DEFAULT_MAKEUP            1.0
 
-static double
-decibel_to_linear(double db)
+static float
+decibel_to_linear(float db)
 {
-  return pow(10.0, (db / 20.0));
+  return powf(10.0f, (db / 20.0f));
 }
 
-static double
-linear_to_decibel(double linear)
+static float
+ms_to_s(float ms)
 {
-  if (linear != 0)
-    return 20.0 * log(linear);
-  return -144.0;
+  return ms / 1000.0f;
 }
 
-static double
-level_to_decibel(double level)
-{
-  return 10 * log(level);
-}
 
 /* GObject vmethod implementations */
 static void
@@ -218,47 +160,47 @@ gst_audio_noise_gate_class_init (GstAudioNoiseGateClass * klass)
   gobject_class->get_property = gst_audio_noise_gate_get_property;
 
   g_object_class_install_property (gobject_class, PROP_ATTACK,
-      g_param_spec_double ("attack", "Attack",
-          "Amount of milliseconds the signal has to rise above the threshold before gain reduction stops",
-          0.01, 9000.0,
+      g_param_spec_int ("attack", "Attack",
+          "Amount of milliseconds the signal has to rise above the threshold before gain reduction stops (ms)",
+          0, 10000,
           DEFAULT_ATTACK,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_RELEASE,
-      g_param_spec_double ("release", "Release",
-          "Amount of milliseconds the signal has to fall below the threshold before the reduction is increased again",
-          0.01, 9000.0,
+      g_param_spec_int ("release", "Release",
+          "Amount of milliseconds the signal has to fall below the threshold before the reduction is increased again (ms)",
+          0, 10000,
           DEFAULT_RELEASE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_THRESHOLD,
-      g_param_spec_int ("threshold", "Threshold",
-          "If a signal rises above this level the gain reduction is released (dB)", -100, 0,
-          DEFAULT_THRESHOLD,
+  g_object_class_install_property (gobject_class, PROP_OPEN_THRESHOLD,
+      g_param_spec_float ("open-threshold", "Open Threshold",
+          "If a signal rises above this level the gain reduction is released (dB)", -100.0, 0.0,
+          DEFAULT_OPEN_THRESHOLD,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_LEVEL_IN,
-      g_param_spec_double ("level-in", "Input gain",
-          "Set input level before filtering", 0.015625, 64,
-          DEFAULT_LEVEL_IN,
+  g_object_class_install_property (gobject_class, PROP_CLOSE_THRESHOLD,
+      g_param_spec_float ("close-threshold", "Close Threshold",
+          "If a signal drop below this level the signal will be cut off (dB)", -100.0, 0.0,
+          DEFAULT_CLOSE_THRESHOLD,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_CLOSE_THRESHOLD,
+      g_param_spec_float ("attack-hold-time", "Attack Hold Time",
+          "Hold time before starting to increase the signal gain (ms)", 0.0, 10000.0,
+          DEFAULT_ATTACK_HOLD_TIME,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_CLOSE_THRESHOLD,
+      g_param_spec_float ("release-hold-time", "Release Hold Time",
+          "Hold time before starting to decrease the signal gain (ms)", 0.0, 10000.0,
+          DEFAULT_RELEASE_HOLD_TIME,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MAKEUP,
-      g_param_spec_double ("makeup", "Makeup",
+      g_param_spec_float ("makeup", "Makeup",
           "Set amount of amplification of signal after processing", 1.0, 64.0,
           DEFAULT_MAKEUP,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_DETECTION,
-      g_param_spec_enum ("detection", "Detection",
-          "Choose if exact signal should be taken for detection or an RMS like one",
-          GST_TYPE_AUDIO_NOISE_GATE_DETECTION, DEFAULT_DETECTION,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_LINK,
-      g_param_spec_enum ("link", "Link",
-          "Choose if the average level between all channels or the louder channel affects the reduction",
-          GST_TYPE_AUDIO_NOISE_GATE_LINK, DEFAULT_LINK,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /* this function will be called when the format is set before the
@@ -284,16 +226,17 @@ gst_audio_noise_gate_class_init (GstAudioNoiseGateClass * klass)
 static void
 gst_audio_noise_gate_init (GstAudioNoiseGate * filter)
 {
-  filter->level_in = DEFAULT_LEVEL_IN;
   filter->attack = DEFAULT_ATTACK;
   filter->release = DEFAULT_RELEASE;
-  filter->threshold_db = DEFAULT_THRESHOLD;
+  filter->open_threshold_db = DEFAULT_OPEN_THRESHOLD;
+  filter->close_threshold_db = DEFAULT_CLOSE_THRESHOLD;
+  filter->attack_hold_time = DEFAULT_ATTACK_HOLD_TIME;
+  filter->release_hold_time = DEFAULT_RELEASE_HOLD_TIME;
   filter->makeup = DEFAULT_MAKEUP;
-  filter->link = DEFAULT_LINK;
-  filter->detection = DEFAULT_DETECTION;
-
   filter->previous_gain = 0.0;
-  filter->previous_weight = 1.0;
+  filter->hold_release_counter = 0.0;
+  filter->hold_attack_counter = 0.0;
+
   // gst_base_transform_set_in_place (GST_BASE_TRANSFORM (filter), FALSE);
   // gst_base_transform_set_gap_aware (GST_BASE_TRANSFORM (filter), FALSE);
 }
@@ -306,26 +249,26 @@ gst_audio_noise_gate_set_property (GObject * object, guint prop_id,
 
   GST_OBJECT_LOCK (filter);
   switch (prop_id) {
-    case PROP_LEVEL_IN:
-      filter->level_in = g_value_get_double (value);
+    case PROP_OPEN_THRESHOLD:
+      filter->open_threshold_db = g_value_get_float (value);
       break;
-    case PROP_THRESHOLD:
-      filter->threshold_db = g_value_get_int (value);
+    case PROP_CLOSE_THRESHOLD:
+      filter->close_threshold_db = g_value_get_float (value);
+      break;
+    case PROP_ATTACK_HOLD_TIME:
+      filter->attack_hold_time = g_value_get_float (value);
+      break;
+    case PROP_RELEASE_HOLD_TIME:
+      filter->release_hold_time = g_value_get_float (value);
       break;
     case PROP_ATTACK:
-      filter->attack = g_value_get_double (value);
+      filter->attack = g_value_get_int (value);
       break;
     case PROP_RELEASE:
-      filter->release = g_value_get_double (value);
+      filter->release = g_value_get_int (value);
       break;
     case PROP_MAKEUP:
-      filter->makeup = g_value_get_double (value);
-      break;
-    case PROP_DETECTION:
-      filter->detection = g_value_get_enum (value);
-      break;
-    case PROP_LINK:
-      filter->link = g_value_get_enum (value);
+      filter->makeup = g_value_get_float (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -343,26 +286,26 @@ gst_audio_noise_gate_get_property (GObject * object, guint prop_id,
 
   GST_OBJECT_LOCK (filter);
   switch (prop_id) {
-    case PROP_LEVEL_IN:
-      g_value_set_double(value, filter->level_in);
+    case PROP_OPEN_THRESHOLD:
+      g_value_set_float(value, filter->open_threshold_db);
       break;
-    case PROP_THRESHOLD:
-      g_value_set_int(value, filter->threshold_db);
+    case PROP_CLOSE_THRESHOLD:
+      g_value_set_float(value, filter->close_threshold_db);
+      break;
+    case PROP_ATTACK_HOLD_TIME:
+      g_value_set_float(value, filter->attack_hold_time);
+      break;
+    case PROP_RELEASE_HOLD_TIME:
+      g_value_set_float(value, filter->release_hold_time);
       break;
     case PROP_ATTACK:
-      g_value_set_double(value, filter->attack);
+      g_value_set_int(value, filter->attack);
       break;
     case PROP_RELEASE:
-      g_value_set_double(value, filter->release);
+      g_value_set_int(value, filter->release);
       break;
     case PROP_MAKEUP:
-      g_value_set_double(value, filter->makeup);
-      break;
-    case PROP_DETECTION:
-      g_value_set_enum(value, filter->detection);
-      break;
-    case PROP_LINK:
-      g_value_set_enum(value, filter->link);
+      g_value_set_float(value, filter->makeup);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -377,14 +320,8 @@ reconfigure_values(GstAudioNoiseGate *filter)
   const GstAudioInfo* info = GST_AUDIO_FILTER_INFO(filter);
   gint rate = GST_AUDIO_INFO_RATE (info);
 
-  gdouble lin_threshold = decibel_to_linear(filter->threshold_db);
-
-  if (filter->detection)
-    lin_threshold *= lin_threshold;
-
-  filter->attack_coeff  = MIN(1.0, 1.0 / (filter->attack * rate / 4000.0));
-  filter->release_coeff = MIN(1.0, 1.0 / (filter->release * rate / 4000.0));
-  filter->thres = lin_threshold;
+  filter->attack_coeff  = expf(-logf(9) / (filter->attack / 1000.0f * rate));
+  filter->release_coeff = expf(-logf(9) / (filter->release / 1000.0f * rate));
 }
 
 static gboolean
@@ -431,7 +368,7 @@ gst_audio_noise_gate_filter (GstBaseTransform * base_transform,
       gint nbsamples = map_in.size / GST_AUDIO_INFO_BPF(info);
       filter->process(filter,
           map_in.data, map_out.data, map_in.data,
-          nbsamples, filter->level_in, filter->level_in);
+          nbsamples, 1.0, 1.0);
 
       gst_buffer_unmap (outbuf, &map_out);
     }
@@ -462,50 +399,57 @@ static void gate_float(GstAudioNoiseGate *s,
     int nb_samples, double level_in, double level_sc)
 {
   const GstAudioInfo* info = GST_AUDIO_FILTER_INFO(s);
-  const gdouble makeup = s->makeup;
-  const gdouble attack_coeff = s->attack_coeff;
-  const gdouble release_coeff = s->release_coeff;
+  const gfloat open_threshold = decibel_to_linear(s->open_threshold_db);
+  const gfloat close_threshold = MIN(open_threshold, decibel_to_linear(s->close_threshold_db));
+  const gfloat makeup = s->makeup;
+  const gfloat attack_coeff = s->attack_coeff;
+  const gfloat release_coeff = s->release_coeff;
   const gint rate = GST_AUDIO_INFO_RATE (info);
+  const gfloat attack_hold_time = ms_to_s(s->attack_hold_time);
+  const gfloat release_hold_time = ms_to_s(s->release_hold_time);
+  const gfloat period = 1.0f / rate;
   int n, c;
   int in_channels, out_channels;
-  gdouble time_constant = 0.05;
-  gdouble alpha = exp(-1.0 / (rate * time_constant));
-  gdouble attack_steps = ceil(rate * s->attack / 1000.0);
-  gdouble release_steps = ceil(rate * s->release / 1000.0);
-  gdouble attack_loss_per_step = (1.0 / attack_steps);
-  gdouble release_gain_per_step = (1.0 / release_steps);
 
   in_channels = out_channels = GST_AUDIO_INFO_CHANNELS(info);
 
   for (n = 0; n < nb_samples; n++, src += in_channels, dst += in_channels, scsrc += out_channels) {
-    gdouble abs_sample = fabs(scsrc[0] * level_sc), gain = 1.0, weight = 1.0;
+    gfloat abs_sample = fabsf(scsrc[0]), gain = 1.0f;
 
-    if (s->link == 1) {
-      for (c = 1; c < out_channels; c++)
-        abs_sample = MAX(fabs(scsrc[c] * level_sc), abs_sample);
-    } else {
-      for (c = 1; c < out_channels; c++)
-        abs_sample += fabs(scsrc[c] * level_sc);
-
-      abs_sample /= out_channels;
+    // find the peak
+    for (c = 1; c < out_channels; c++) {
+      abs_sample = MAX(fabsf(scsrc[c]), abs_sample);
     }
 
-    if (s->detection)
-      abs_sample *= abs_sample;
-
-    gain = (alpha * s->previous_gain) + (1 - alpha) * pow(abs_sample, 2);
-    gdouble scaled_gain_db = level_to_decibel(2 * gain);
-    // GST_LOG("scaled_gain_db: %f, gain: %f", scaled_gain_db, gain);
-    if (scaled_gain_db < s->threshold_db) {
-      weight = MAX(s->previous_weight - attack_loss_per_step, 0);
+    gboolean gate_open = (abs_sample > open_threshold);
+    gboolean gate_close = (abs_sample < close_threshold);
+    gfloat gc = (gate_open) ? 1.0f : 0.0f;
+    if (gate_open) {
+      s->hold_attack_counter += period;
+      s->hold_release_counter = 0.0;
+      if (s->hold_attack_counter > attack_hold_time && gc > s->previous_gain) {
+        gain = MAX((attack_coeff * s->previous_gain) + (1.0f - attack_coeff) * gc, 0.0f);
+      } else if (s->hold_attack_counter <= attack_hold_time) {
+        gain = s->previous_gain;
+      }
+    } else if (gate_close) {
+      s->hold_attack_counter = 0.0;
+      s->hold_release_counter += period;
+      if (s->hold_release_counter > release_hold_time && gc <= s->previous_gain) {
+        gain = MIN((release_coeff * s->previous_gain) + (1.0f - release_coeff) * gc, 1.0f);
+      } else if (s->hold_release_counter <= release_hold_time) {
+        gain = s->previous_gain;
+      }
     } else {
-      weight = MIN(s->previous_weight + release_gain_per_step, 1);
+      s->hold_attack_counter = 0.0;
+      s->hold_release_counter = 0.0;
+      gain = s->previous_gain;
     }
 
     s->previous_gain = gain;
-    s->previous_weight = weight;
 
-    for (c = 0; c < in_channels; c++)
-      dst[c] = src[c] * level_in * weight * makeup;
+    for (c = 0; c < in_channels; c++) {
+      dst[c] = src[c] * gain * makeup;
+    }
   }
 }
