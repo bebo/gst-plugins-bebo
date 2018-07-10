@@ -1,4 +1,22 @@
 
+# How To Build (dev)
+
+* Visual Studio 2017 (C++)
+* cmake 3.11.4
+
+
+## GST plugins
+
+* In cmake
+** configure
+** generate
+** open (in VS 2017)
+
+
+## DirectShowFilter
+
+* open sln
+
 
 
 

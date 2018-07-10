@@ -78,6 +78,9 @@ typedef struct {
 
   void          * encoder;
 
+
+  // TODO @tulga - private stuff for fps calc here
+
   /* the supported input formats */
   GValue        * input_formats;                  /* OBJECT LOCK */
 
