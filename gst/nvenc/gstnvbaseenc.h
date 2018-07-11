@@ -80,6 +80,7 @@ typedef struct {
 
 
   // TODO @tulga - private stuff for fps calc here
+  gint           fps;
 
   /* the supported input formats */
   GValue        * input_formats;                  /* OBJECT LOCK */

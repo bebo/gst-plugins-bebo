@@ -167,8 +167,9 @@ enum
   PROP_RC_MODE,
   PROP_QP_MIN,
   PROP_QP_MAX,
-  PROP_QP_CONST,
+  PROP_QP_CONST,  
   PROP_GOP_SIZE,
+  PROP_FPS,
 };
 
 #define DEFAULT_PRESET GST_NV_PRESET_DEFAULT
@@ -1763,6 +1764,12 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       gl_mem->mem.tex_id,
       gl_mem->interop_handle,
       gl_mem->status);
+  
+  GST_LOG("tulga handle_frame texture_id %#010x interop_id:%#010x status:%d",
+    gl_mem->mem.tex_id,
+    gl_mem->interop_handle,
+    gl_mem->status);
+
 
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
@@ -2010,6 +2017,9 @@ gst_nv_base_enc_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_GOP_SIZE:
       g_value_set_int (value, nvenc->gop_size);
+      break;
+    case PROP_FPS:
+      g_value_set_int(value, nvenc->fps);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
