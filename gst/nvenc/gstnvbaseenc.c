@@ -157,7 +157,7 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE("sink",
         "width = (int) [ 16, 4096 ], height = (int) [ 16, 2160 ], "
         "framerate = (fraction) [0, MAX]"
     ));
-
+// PROP DEFINITION
 enum
 {
   PROP_0,
@@ -170,10 +170,15 @@ enum
   PROP_QP_CONST,  
   PROP_GOP_SIZE,
   PROP_FPS,
+  PROP_LAST_FRAME_NUMBER_FPS,
+  PROP_LAST_FRAME_TIME_FPS
 };
 
 #define DEFAULT_PRESET GST_NV_PRESET_DEFAULT
 #define DEFAULT_BITRATE 0
+#define DEFAULT_FPS 0
+#define DEFAULT_LAST_FRAME_FPS 0
+#define DEFAULT_TIME_LAST_FRAME_FPS 0
 #define DEFAULT_RC_MODE GST_NV_RC_MODE_DEFAULT
 #define DEFAULT_QP_MIN -1
 #define DEFAULT_QP_MAX -1
@@ -267,8 +272,6 @@ gst_nv_base_enc_class_init (D3DGstNvBaseEncClass * klass)
 
   gst_element_class_add_static_pad_template (element_class, &sink_factory);
 
-
-  // @tulga install property
   g_object_class_install_property (gobject_class, PROP_DEVICE_ID,
       g_param_spec_uint ("cuda-device-id",
           "Cuda Device ID",
@@ -313,6 +316,12 @@ gst_nv_base_enc_class_init (D3DGstNvBaseEncClass * klass)
           DEFAULT_BITRATE,
           G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
           G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property(gobject_class, PROP_FPS,
+    g_param_spec_int("fps", "FPS",
+      "Number of frames in a sec", 0, 1000,
+      DEFAULT_FPS,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
+      G_PARAM_STATIC_STRINGS));
 }
 
 static gboolean
@@ -1764,12 +1773,6 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
       gl_mem->mem.tex_id,
       gl_mem->interop_handle,
       gl_mem->status);
-  
-  GST_LOG("tulga handle_frame texture_id %#010x interop_id:%#010x status:%d",
-    gl_mem->mem.tex_id,
-    gl_mem->interop_handle,
-    gl_mem->status);
-
 
   NV_ENC_OUTPUT_PTR out_buf;
   NVENCSTATUS nv_ret;
@@ -1807,14 +1810,18 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   struct map_gl_input data;
 
   GST_LOG_OBJECT (enc, "got input buffer %p", in_gl_resource);
+  GstClockTimeDiff PTS_DIFF = frame->pts - nvenc->last_frame_pts;
 
+  if (nvenc->last_frame_number == 0) {
+    nvenc->last_frame_pts = frame->pts;
+    nvenc->last_frame_number = frame->presentation_frame_number;
+  }
 
-  // TODO @tulga - FPS here
-  // https://gstreamer.freedesktop.org/data/doc/gstreamer/1.12/gstreamer/html/GstBuffer.html#GST-BUFFER-DTS-OR-PTS:CAPS
-  // https://gstreamer.freedesktop.org/data/doc/gstreamer/1.12/gst-plugins-base-libs/html/gst-plugins-base-libs-gstvideoutils.html#GstVideoCodecFrame
-  // use best timestamp to calculate FPS
-
-
+  if (PTS_DIFF >= GST_SECOND) {
+    nvenc->fps = frame->presentation_frame_number - nvenc->last_frame_number;
+    nvenc->last_frame_pts = frame->pts;
+    nvenc->last_frame_number = frame->presentation_frame_number;
+  }
 
   in_gl_resource->gl_mem[0] =
       (GstGLMemory *) gst_buffer_peek_memory (frame->input_buffer, 0);
@@ -1988,10 +1995,6 @@ gst_nv_base_enc_get_property (GObject * object, guint prop_id, GValue * value,
     GParamSpec * pspec)
 {
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (object);
-
-
-
-  // TODO @tulga  add 
 
   switch (prop_id) {
     case PROP_DEVICE_ID:
