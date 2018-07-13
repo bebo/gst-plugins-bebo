@@ -79,9 +79,10 @@ typedef struct {
   void          * encoder;
 
 
-  // TODO @tulga - private stuff for fps calc here
+  // TODO @tulga - using frame number and frame time to calculate FPS
   gint           fps;
-
+  gint           last_frame_number;
+  GstClockTime   last_frame_pts;
   /* the supported input formats */
   GValue        * input_formats;                  /* OBJECT LOCK */
 
