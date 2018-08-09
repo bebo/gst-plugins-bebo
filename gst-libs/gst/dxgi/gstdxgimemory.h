@@ -31,6 +31,8 @@
 #include <gst/gl/gstglmemory.h>
 
 #include <gst/gl/gl.h>
+#include <gst/gl/gstglfuncs.h>
+#include <GL/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>
 

@@ -2,9 +2,11 @@
 #define __GST_DXGI_DEVICE_INCLUDED__
 
 #include <windows.h>
+#include <GL/gl.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <gst/gst.h>
+#include <gst/gl/gl.h>
 #include <gst/gl/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>

@@ -27,6 +27,7 @@
 #endif
 
 #include <windows.h>
+#include <GL/gl.h>
 #include <gst/gst.h>
 #include <gst/gl/gl.h>
 

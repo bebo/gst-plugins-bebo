@@ -24,6 +24,8 @@
 
 #include <stdio.h>
 
+#include <windows.h>
+#include <GL/gl.h>
 #include <gst/gl/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>
