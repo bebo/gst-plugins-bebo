@@ -332,7 +332,7 @@
 #undef LT_OBJDIR
 
 /* Name of package */
-#define PACKAGE "gst-plugins-bad"
+#define PACKAGE "gst-plugins-bebo"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT "http://bugzilla.gnome.org/enter_bug.cgi?product=GStreamer"
