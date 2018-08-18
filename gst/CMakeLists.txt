@@ -9,19 +9,25 @@ SET_PROPERTY(
 
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/../../win32/common
   ${GST_INSTALL_BASE}/include
   ${GST_INSTALL_BASE}/include/gstreamer-1.0
   ${GST_INSTALL_BASE}/include/glib-2.0
   ${GST_INSTALL_BASE}/lib/glib-2.0/include
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
-  ${PROJECT_SOURCE_DIR}/../../win32/common
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst
+  ${CMAKE_SOURCE_DIR}/gst
+  ${CMAKE_SOURCE_DIR}/shared
   ${CMAKE_SOURCE_DIR}/third_party/speexdsp/include
+  ${NVENC_SDK_BASE}/Video_Codec_SDK_7.1.9/Samples/Common/inc
+  ${CUDA_PATH}
 )
 
 LINK_DIRECTORIES(
-  ${GST_INSTALL_BASE}/lib
   "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.15063.0/um/x64"
+  ${GST_INSTALL_BASE}/lib
+  ${GST_INSTALL_BASE}/lib/gstreamer-1.0
   ${CMAKE_SOURCE_DIR}/third_party/speexdsp/lib
 )
 
@@ -153,28 +159,3 @@ TARGET_LINK_LIBRARIES(libgstbebo
   libspeexdsp
 )
 
-INCLUDE_DIRECTORIES(
-  ${GST_INSTALL_BASE}/include
-  ${GST_INSTALL_BASE}/include/gstreamer-1.0
-  ${GST_INSTALL_BASE}/include/glib-2.0
-  ${GST_INSTALL_BASE}/lib/glib-2.0/include
-  ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
-  ${PROJECT_SOURCE_DIR}/../../win32/common
-  # ${NVENC_SDK_BASE}/Samples/NvCodec/NvEncoder
-  ${NVENC_SDK_BASE}/Video_Codec_SDK_7.1.9/Samples/Common/inc
-  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/include
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst
-  ${CMAKE_SOURCE_DIR}/gst
-  ${CMAKE_SOURCE_DIR}/shared
-  ${CUDA_PATH}
-)
-
-LINK_DIRECTORIES(
-  ${GST_INSTALL_BASE}/lib
-  ${GST_INSTALL_BASE}/lib/gstreamer-1.0
-  ${CMAKE_SOURCE_DIR}/third_party/speexdsp/lib
-)
-
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /Zi")
-set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
