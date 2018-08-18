@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <vector>
 
-#include "matrix.h"
 #include "ppapi/cpp/graphics_3d.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/module.h"
@@ -16,6 +16,7 @@
 #include "ppapi/cpp/var_array.h"
 #include "ppapi/lib/gl/gles2/gl2ext_ppapi.h"
 #include "ppapi/utility/completion_callback_factory.h"
+#include "shared/bebo_shmem.h"
 
 #ifdef WIN32
 #undef PostMessage
@@ -23,8 +24,10 @@
 #pragma warning(disable : 4355)
 #endif
 
-extern const uint8_t kRLETextureData[];
-extern const size_t kRLETextureDataLength;
+#define error(format, ...)
+#define warn(format, ...)
+#define info(format, ...)
+#define debug(format, ...)
 
 namespace {
 
@@ -108,35 +111,25 @@ const GLubyte kBoxIndexes[6] = {
 
 }  // namespace
 
-#define BEBO_SHMEM_NAME     L"BEBO_SHARED_MEMORY_BUFFER"
-#define BEBO_SHMEM_MUTEX    L"BEBO_SHARED_MEMORY_BUFFER_MUTEX"
-#define BEBO_SHMEM_DATA_SEM L"BEBO_SHARE_MEMORY_NEW_DATA_SEMAPHORE"
-#include <windows.h>
-struct shmem {
-  uint64_t version;
-  // GstVideoInfo video_info;
-  uint64_t shmem_size;
-  uint64_t frame_offset;
-  uint64_t frame_size;
-  uint64_t count;
-  uint64_t write_ptr; // TODO better name - not really a ptr more like frame count
-  uint64_t read_ptr;
+
+class PreviewFrame {
+  public:
+    PreviewFrame(uint64_t nr, uint64_t ptr, uint64_t shared_handle):
+      nr_(nr), ptr_(ptr), shared_handle_(shared_handle) {};
+
+    uint64_t nr() { return nr_; }
+    uint64_t ptr() { return ptr_; }
+    uint64_t shared_handle() { return shared_handle_; }
+  private:
+    uint64_t ptr_;
+    uint64_t nr_;
+    uint64_t shared_handle_;
 };
 
-void OpenSharedMemory() {
-  OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
-  OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
-  // DebugBreak();
-  // WaitForSingleObject(shmem_mutex_, INFINITE);
 
-  // MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
-
-  // UnmapViewOfFile(shmem_);
-}
-
-class Graphics3DInstance : public pp::Instance {
+class PreviewInstance : public pp::Instance {
  public:
-  explicit Graphics3DInstance(PP_Instance instance)
+  explicit PreviewInstance(PP_Instance instance)
       : pp::Instance(instance),
         callback_factory_(this),
         width_(0),
@@ -146,7 +139,12 @@ class Graphics3DInstance : public pp::Instance {
         program_(0),
         texture_loc_(0),
         position_loc_(0),
-        color_loc_(0) {}
+        color_loc_(0),
+        texture_index_(0),
+        shmem_(NULL),
+        shmem_handle_(NULL),
+        shmem_mutex_(NULL),
+        shmem_new_data_semaphore_(NULL) {}
 
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
@@ -168,7 +166,6 @@ class Graphics3DInstance : public pp::Instance {
 
       InitShaders();
       InitBuffers();
-      InitTexture();
       MainLoop(0);
     } else {
       // Resize the buffers to the new size of the module.
@@ -259,8 +256,8 @@ class Graphics3DInstance : public pp::Instance {
                  &kBoxIndexes[0], GL_STATIC_DRAW);
   }
 
-  void InitTexture() {
-    glGenAndBindSharedHandleTexture(1, 1280, 720, 2147488002, &texture_);
+  void GenAndBindSharedHandleTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
+    glGenAndBindSharedHandleTexture(1, width, height, handle, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -268,17 +265,20 @@ class Graphics3DInstance : public pp::Instance {
   }
 
   void Render() {
-    glClearColor(0.0, 0.0, 0.0, 1);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
     glClearDepthf(1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
     glUseProgram(program_);
+
+    size_t texture_size = textures_.size();
+    uint32_t cur_texture_index = texture_index_ % texture_size;
+    GLuint cur_texture = textures_[cur_texture_index];
+    texture_index_ = ((texture_index_ + 1) % texture_size);
+
     glActiveTexture(GL_TEXTURE0);
-
-    // TODO: rotate through available textures
-    glBindTexture(GL_TEXTURE_2D, texture_);
-
+    glBindTexture(GL_TEXTURE_2D, cur_texture);
     glUniform1i(texture_loc_, 0);
 
     //define the attributes of the vertex
@@ -304,20 +304,161 @@ class Graphics3DInstance : public pp::Instance {
                           sizeof(Vertex),
                           reinterpret_cast<void*>(offsetof(Vertex, tex)));
     glEnableVertexAttribArray(texcoord_loc_);
-
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
   }
 
   void MainLoop(int32_t) {
+    // GetSharedTexture();
+    GLuint        texture;
+    PreviewFrame* preview_frame;
+    GetAndWaitForShmemFrame(&preview_frame, 100);
+    GenAndBindSharedHandleTexture(1280, 720, preview_frame->shared_handle(), &texture);
+    UnrefFrame(preview_frame);
+    textures_.emplace_back(texture);
+
     Render();
     context_.SwapBuffers(
-        callback_factory_.NewCallback(&Graphics3DInstance::MainLoop));
+        callback_factory_.NewCallback(&PreviewInstance::MainLoop));
+
   }
 
-  pp::CompletionCallbackFactory<Graphics3DInstance> callback_factory_;
+  bool OpenSharedMemory() {
+    shmem_new_data_semaphore_ = OpenSemaphore(SYNCHRONIZE, false, BEBO_SHMEM_DATA_SEM);
+    if (!shmem_new_data_semaphore_) {
+      // TODO: log only once...
+      error("could not open semaphore mapping %d", GetLastError());
+      Sleep(100);
+      return false;
+    }
+
+    shmem_handle_ = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, false, BEBO_SHMEM_NAME);
+    if (!shmem_handle_) {
+      return false;
+    }
+
+    shmem_mutex_ = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
+    WaitForSingleObject(shmem_mutex_, INFINITE); // FIXME maybe timeout  == WAIT_OBJECT_0;
+
+    shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
+    if (!shmem_) {
+      error("could not map shmem %d", GetLastError());
+      ReleaseMutex(shmem_mutex_);
+      return false;
+    }
+
+    uint64_t shmem_size = shmem_->shmem_size;
+    uint64_t version = shmem_->version;
+
+    UnmapViewOfFile(shmem_);
+    shmem_ = nullptr;
+
+    if (version != SHM_INTERFACE_VERSION) {
+      ReleaseMutex(shmem_mutex_);
+      error("SHM_INTERFACE_VERSION mismatch %d != %d", version, SHM_INTERFACE_VERSION);
+      Sleep(3000);
+      return false;
+    }
+
+    shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
+    shmem_->read_ptr = 0;
+
+    ReleaseMutex(shmem_mutex_);
+    if (!shmem_) {
+      error("could not map shmem %d", GetLastError());
+      return false;
+    }
+
+    info("Opened Shared Memory Buffer");
+    return S_OK;
+  }
+
+  HRESULT GetAndWaitForShmemFrame(PreviewFrame** out_frame, DWORD wait_time_ms) {
+    if (OpenSharedMemory() != S_OK) {
+      return 2;
+    }
+
+    if (!shmem_) {
+      return 2;
+    }
+
+    DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
+
+    while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
+      result = SignalObjectAndWait(shmem_mutex_,
+          shmem_new_data_semaphore_,
+          wait_time_ms,
+          false);
+
+      // if we fail to wait for semaphore, we'd 
+      if (result != WAIT_OBJECT_0) {
+        return E_FAIL;
+      }
+
+      // acquire the mutex to access shmem_ for later
+      if (WaitForSingleObject(shmem_mutex_, INFINITE) != WAIT_OBJECT_0) {
+        continue;
+      }
+    }
+
+    if (shmem_->read_ptr == 0) {
+      if (shmem_->write_ptr - shmem_->read_ptr > 0) {
+        shmem_->read_ptr = shmem_->write_ptr;
+        info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
+            shmem_->read_ptr, shmem_->write_ptr);
+        UnrefBefore(shmem_->read_ptr);
+      }
+    } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
+      uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
+      info("late - resetting read pointer read_ptr: %d write_ptr: %d behind: %d new read_ptr: %d",
+          shmem_->read_ptr, shmem_->write_ptr, shmem_->write_ptr - shmem_->read_ptr, read_ptr);
+      shmem_->read_ptr = read_ptr;
+      UnrefBefore(shmem_->read_ptr);
+    }
+
+    uint64_t i = shmem_->read_ptr % shmem_->count;
+    uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
+    struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
+    frame->ref_cnt++;
+    shmem_->read_ptr++;
+    *out_frame = new PreviewFrame(frame->nr, i, (uint64_t) frame->dxgi_handle);
+
+    ReleaseMutex(shmem_mutex_);
+    return S_OK;
+  }
+
+  struct frame* GetShmFrame(uint64_t i) {
+    uint64_t frame_offset = shmem_->frame_offset + i * shmem_->frame_size;
+    return (struct frame*) (((char*)shmem_) + frame_offset);
+  }
+
+  void UnrefBefore(uint64_t before) {
+    // expect to hold mutex!
+    for (int i = 0; i < shmem_->count; i++) {
+      auto shm_frame = GetShmFrame(i);
+      if (shm_frame->ref_cnt < 2 && shm_frame->nr < before) {
+        shm_frame->ref_cnt = 0;
+      }
+    }
+  }
+
+  void UnrefFrame(PreviewFrame* frame) {
+    if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
+      return;
+    }
+
+    auto shm_frame = GetShmFrame(frame->ptr());
+    if (shm_frame->nr == frame->nr()) {
+      shm_frame->ref_cnt = shm_frame->ref_cnt - 2;
+    }
+
+    ReleaseMutex(shmem_mutex_);
+  }
+
+  pp::CompletionCallbackFactory<PreviewInstance> callback_factory_;
   pp::Graphics3D context_;
+
   int32_t width_;
   int32_t height_;
   GLuint frag_shader_;
@@ -325,19 +466,20 @@ class Graphics3DInstance : public pp::Instance {
   GLuint program_;
   GLuint vertex_buffer_;
   GLuint index_buffer_;
-  GLuint texture_;
+
+  std::vector<GLuint> textures_;
+  GLuint              texture_index_;
+
 
   GLuint texture_loc_;
   GLuint position_loc_;
   GLuint texcoord_loc_;
   GLuint color_loc_;
 
-  /*
+  struct shmem* shmem_;
   HANDLE shmem_handle_;
-  struct shmem *shmem_;
   HANDLE shmem_mutex_;
   HANDLE shmem_new_data_semaphore_;
-  */
 };
 
 class Graphics3DModule : public pp::Module {
@@ -346,10 +488,11 @@ class Graphics3DModule : public pp::Module {
   virtual ~Graphics3DModule() {}
 
   virtual pp::Instance* CreateInstance(PP_Instance instance) {
-    return new Graphics3DInstance(instance);
+    return new PreviewInstance(instance);
   }
 };
 
 namespace pp {
 Module* CreateModule() { return new Graphics3DModule(); }
 }  // namespace pp
+
