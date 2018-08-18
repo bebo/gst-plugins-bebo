@@ -6,9 +6,9 @@
 #include <gst/video/video.h>
 #include <gst/video/video-format.h>
 
-#define BEBO_SHMEM_NAME L"BEBO_SHARED_MEMORY_BUFFER"
-#define BEBO_SHMEM_MUTEX L"BEBO_SHARED_MEMORY_BUFFER_MUTEX"
-#define BEBO_SHMEM_DATA_SEM L"BEBO_SHARE_MEMORY_NEW_DATA_SEMAPHORE"
+#define BEBO_SHMEM_NAME       L"BEBO_SHARED_MEMORY_BUFFER"
+#define BEBO_SHMEM_MUTEX      L"BEBO_SHARED_MEMORY_BUFFER_MUTEX"
+#define BEBO_SHMEM_DATA_SEM   L"BEBO_SHARE_MEMORY_NEW_DATA_SEMAPHORE"
 
 /*
  * ATTENTION - MAKE SURE YOU INCREASE THE SHM_INTERFACE_VERSION WHEN YOU CHANGE THE SHM STRUCTS BELOW !
@@ -49,6 +49,7 @@
     uint64_t write_ptr; // TODO better name - not really a ptr more like frame count
     uint64_t read_ptr;
   };
+
 #pragma pack(pop)
 #ifdef __cplusplus
     }

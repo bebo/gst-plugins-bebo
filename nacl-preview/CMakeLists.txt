@@ -1,5 +1,7 @@
 PROJECT(naclpreview)
 
+add_definitions(-DUNICODE)
+
 SET_PROPERTY(
   DIRECTORY
   APPEND PROPERTY COMPILE_DEFINITIONS
@@ -13,12 +15,12 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/third_party/naclsdk/include
   ${GST_INSTALL_BASE}/include
   ${GST_INSTALL_BASE}/include/gstreamer-1.0
+  ${GST_INSTALL_BASE}/include/glib-2.0
+  ${GST_INSTALL_BASE}/lib/glib-2.0/include
 )
 
 LINK_DIRECTORIES(
   "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.15063.0/um/x64"
-  ${GST_INSTALL_BASE}/lib
-  ${GST_INSTALL_BASE}/lib/gstreamer-1.0
   ${CMAKE_SOURCE_DIR}/third_party/naclsdk/lib/Release # ${CMAKE_BUILD_TYPE}
 )
 
@@ -33,9 +35,6 @@ SET(shared_FILES
 
 SET(preview_FILES
   preview.cc
-  matrix.cc
-  matrix.h
-  texture.cc
 )
 
 source_group("shared" FILES ${shared_FILES})
@@ -47,10 +46,6 @@ ADD_LIBRARY(naclpreview SHARED
 )
 
 TARGET_LINK_LIBRARIES(naclpreview
-  # gstreamer
-  gstreamer-1.0
-  gstvideo-1.0
-  gstbase-1.0
   # pappi
   ppapi
   ppapi_cpp
