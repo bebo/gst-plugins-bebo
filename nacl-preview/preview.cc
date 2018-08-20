@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <vector>
+#include <queue>
 
 #include "ppapi/cpp/graphics_3d.h"
 #include "ppapi/cpp/instance.h"
@@ -28,6 +28,8 @@
 #define warn(format, ...)
 #define info(format, ...)
 #define debug(format, ...)
+
+#define WAIT_MIN_NUM_OF_FRAMES_TO_UNREF 3
 
 namespace {
 
@@ -115,17 +117,23 @@ const GLubyte kBoxIndexes[6] = {
 class PreviewFrame {
   public:
     PreviewFrame(uint64_t nr, uint64_t ptr, uint64_t shared_handle):
-      nr_(nr), ptr_(ptr), shared_handle_(shared_handle) {};
+      nr_(nr), ptr_(ptr), shared_handle_(shared_handle), texture_(0) {};
 
-    uint64_t nr() { return nr_; }
-    uint64_t ptr() { return ptr_; }
-    uint64_t shared_handle() { return shared_handle_; }
+    uint64_t nr() const { return nr_; }
+    uint64_t ptr() const { return ptr_; }
+    uint64_t shared_handle() const { return shared_handle_; }
+    GLuint texture() const { return texture_; }
+
+    void SetTexture(GLuint texture) {
+      texture_ = texture;
+    }
+
   private:
     uint64_t ptr_;
     uint64_t nr_;
     uint64_t shared_handle_;
+    GLuint texture_;
 };
-
 
 class PreviewInstance : public pp::Instance {
  public:
@@ -257,6 +265,7 @@ class PreviewInstance : public pp::Instance {
   }
 
   void GenAndBindSharedHandleTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
+    // combination of glGenTexture and glBindTexture
     glGenAndBindSharedHandleTexture(1, width, height, handle, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -272,10 +281,7 @@ class PreviewInstance : public pp::Instance {
 
     glUseProgram(program_);
 
-    size_t texture_size = textures_.size();
-    uint32_t cur_texture_index = texture_index_ % texture_size;
-    GLuint cur_texture = textures_[cur_texture_index];
-    texture_index_ = ((texture_index_ + 1) % texture_size);
+    GLuint cur_texture = GetCurrentTexture();
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cur_texture);
@@ -310,18 +316,35 @@ class PreviewInstance : public pp::Instance {
   }
 
   void MainLoop(int32_t) {
-    // GetSharedTexture();
-    GLuint        texture;
-    PreviewFrame* preview_frame;
-    GetAndWaitForShmemFrame(&preview_frame, 100);
-    GenAndBindSharedHandleTexture(1280, 720, preview_frame->shared_handle(), &texture);
-    UnrefFrame(preview_frame);
-    textures_.emplace_back(texture);
-
+    PushShmemFrameToQueue();
     Render();
+    UnrefOldFrame();
     context_.SwapBuffers(
         callback_factory_.NewCallback(&PreviewInstance::MainLoop));
+  }
 
+  bool PushShmemFrameToQueue() {
+    PreviewFrame* preview_frame = NULL;
+    GLuint        texture;
+
+    if (!GetAndWaitForShmemFrame(&preview_frame) ||
+        preview_frame->shared_handle() == 0) {
+      return false;
+    }
+
+    GLint width  = shmem_->video_info.width;
+    GLint height = shmem_->video_info.height;
+    GenAndBindSharedHandleTexture(width, height, preview_frame->shared_handle(), &texture);
+    preview_frame->SetTexture(texture);
+    preview_frames_.emplace(preview_frame);
+    return true;
+  }
+
+  GLuint GetCurrentTexture() {
+    if (preview_frames_.empty()) {
+      return 0;
+    }
+    return preview_frames_.back()->texture();
   }
 
   bool OpenSharedMemory() {
@@ -339,7 +362,10 @@ class PreviewInstance : public pp::Instance {
     }
 
     shmem_mutex_ = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
-    WaitForSingleObject(shmem_mutex_, INFINITE); // FIXME maybe timeout  == WAIT_OBJECT_0;
+    DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
+    if (result != WAIT_OBJECT_0) {
+      return false;
+    }
 
     shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct shmem));
     if (!shmem_) {
@@ -371,29 +397,34 @@ class PreviewInstance : public pp::Instance {
     }
 
     info("Opened Shared Memory Buffer");
-    return S_OK;
+    return true;
   }
 
-  HRESULT GetAndWaitForShmemFrame(PreviewFrame** out_frame, DWORD wait_time_ms) {
-    if (OpenSharedMemory() != S_OK) {
-      return 2;
+  bool GetAndWaitForShmemFrame(PreviewFrame** out_frame) {
+    if (!OpenSharedMemory()) {
+      return false;
     }
 
     if (!shmem_) {
-      return 2;
+      return false;
     }
 
     DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
+    if (result != WAIT_OBJECT_0) {
+      return false;
+    }
 
+    DWORD wait_time_ms = 100; // TODO: change it to indefinitely but need to support shutdown case
     while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
       result = SignalObjectAndWait(shmem_mutex_,
           shmem_new_data_semaphore_,
           wait_time_ms,
           false);
 
-      // if we fail to wait for semaphore, we'd 
+      // re-attempt if we fail to acquire the semaphore
       if (result != WAIT_OBJECT_0) {
-        return E_FAIL;
+        ReleaseMutex(shmem_mutex_);
+        return false;
       }
 
       // acquire the mutex to access shmem_ for later
@@ -422,10 +453,10 @@ class PreviewInstance : public pp::Instance {
     struct frame *frame = (struct frame*) (((char*)shmem_) + frame_offset);
     frame->ref_cnt++;
     shmem_->read_ptr++;
-    *out_frame = new PreviewFrame(frame->nr, i, (uint64_t) frame->dxgi_handle);
 
+    *out_frame = new PreviewFrame(frame->nr, i, (uint64_t) frame->dxgi_handle);
     ReleaseMutex(shmem_mutex_);
-    return S_OK;
+    return true;
   }
 
   struct frame* GetShmFrame(uint64_t i) {
@@ -450,10 +481,24 @@ class PreviewInstance : public pp::Instance {
 
     auto shm_frame = GetShmFrame(frame->ptr());
     if (shm_frame->nr == frame->nr()) {
-      shm_frame->ref_cnt = shm_frame->ref_cnt - 2;
+      shm_frame->ref_cnt = 0; // shm_frame->ref_cnt - 2;
     }
 
     ReleaseMutex(shmem_mutex_);
+
+    delete frame;
+  }
+
+  void UnrefOldFrame() {
+    if (preview_frames_.size() < WAIT_MIN_NUM_OF_FRAMES_TO_UNREF) {
+      return;
+    }
+    PreviewFrame* frame = preview_frames_.front();
+    preview_frames_.pop();
+
+    GLuint texture = frame->texture();
+    glDeleteTextures(1, &texture);
+    UnrefFrame(frame);
   }
 
   pp::CompletionCallbackFactory<PreviewInstance> callback_factory_;
@@ -467,8 +512,8 @@ class PreviewInstance : public pp::Instance {
   GLuint vertex_buffer_;
   GLuint index_buffer_;
 
-  std::vector<GLuint> textures_;
-  GLuint              texture_index_;
+  std::queue<PreviewFrame*> preview_frames_;
+  GLuint                    texture_index_;
 
 
   GLuint texture_loc_;
