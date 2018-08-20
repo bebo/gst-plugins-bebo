@@ -7,7 +7,6 @@
 #include <dxgi.h>
 #include <gst/gst.h>
 #include <gst/gl/gl.h>
-#include <gst/gl/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>
 
