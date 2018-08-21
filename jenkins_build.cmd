@@ -35,8 +35,8 @@ if errorlevel 1 (
 
 xcopy /Y .\build\gst\Release\*.dll %DIST_DIR%\gst-plugin\
 xcopy /Y .\build\gst\Release\*.pdb %DIST_DIR%\gst-plugin\
-xcopy /Y .\build\nacl-preview\Release\*.dll %DIST_DIR%\nacl-preview\
-xcopy /Y .\build\nacl-preview\Release\*.pdb %DIST_DIR%\nacl-preview\
+xcopy /Y .\build\nacl-preview\Release\*.dll %DIST_DIR%\nacl-plugin\
+xcopy /Y .\build\nacl-preview\Release\*.pdb %DIST_DIR%\nacl-plugin\
 
 set FILENAME=gst-plugins-bebo_%TAG%.zip
 "C:\Program Files\7-Zip\7z.exe" a -r %FILENAME% -w %DIST_DIR%\* -mem=AES256
