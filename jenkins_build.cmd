@@ -1,5 +1,6 @@
 @ECHO ON
 set errorlevel=
+set DIST_DIR=.\build\dist
 
 mkdir build
 cd build
