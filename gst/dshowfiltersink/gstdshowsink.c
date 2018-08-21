@@ -488,12 +488,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     GST_DEBUG_OBJECT(self, "dropping early frame");
     return GST_FLOW_OK;
   }
-  
-  if ((GST_BUFFER_DTS_OR_PTS(buf) - self->last_render_time) < 33333330) {
-    GST_LOG("lowering fps, dropping this one %d", GST_BUFFER_DTS_OR_PTS(buf) - self->last_render_time);
-    GST_OBJECT_UNLOCK (self);
-    return GST_FLOW_OK;
-  }
+
   self->last_render_time = GST_BUFFER_DTS_OR_PTS(buf);
 
   /* GstMapInfo map; */
