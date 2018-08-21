@@ -327,8 +327,11 @@ class PreviewInstance : public pp::Instance {
     PreviewFrame* preview_frame = NULL;
     GLuint        texture;
 
-    if (!GetAndWaitForShmemFrame(&preview_frame) ||
-        preview_frame->shared_handle() == 0) {
+    if (!GetAndWaitForShmemFrame(&preview_frame)) {
+      return false;
+    }
+
+    if (preview_frame->shared_handle() == 0) {
       return false;
     }
 
@@ -401,11 +404,7 @@ class PreviewInstance : public pp::Instance {
   }
 
   bool GetAndWaitForShmemFrame(PreviewFrame** out_frame) {
-    if (!OpenSharedMemory()) {
-      return false;
-    }
-
-    if (!shmem_) {
+    if (!shmem_ && !OpenSharedMemory()) {
       return false;
     }
 
@@ -414,7 +413,7 @@ class PreviewInstance : public pp::Instance {
       return false;
     }
 
-    DWORD wait_time_ms = 100; // TODO: change it to indefinitely but need to support shutdown case
+    DWORD wait_time_ms = 1000; // TODO: change it to indefinitely but need to support shutdown case
     while (shmem_->write_ptr == 0 || shmem_->read_ptr >= shmem_->write_ptr) {
       result = SignalObjectAndWait(shmem_mutex_,
           shmem_new_data_semaphore_,
