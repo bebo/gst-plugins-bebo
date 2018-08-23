@@ -35,6 +35,7 @@ SET(shared_FILES
 
 SET(preview_FILES
   preview.cc
+  lru_cache.h
 )
 
 source_group("shared" FILES ${shared_FILES})
