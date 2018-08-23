@@ -365,7 +365,7 @@ class PreviewInstance : public pp::Instance {
       std::to_string(preview_frame->shared_handle());
     if (texture_cache_.contains(cache_key)) {
       const GLTextureFrame* texture_frame = texture_cache_.get(cache_key);
-      texture = texture_frame.texture();
+      texture = texture_frame->texture();
     } else {
       CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture);
       texture_cache_.insert(cache_key, new GLTextureFrame(texture, 0));
@@ -543,7 +543,7 @@ class PreviewInstance : public pp::Instance {
   GLuint index_buffer_;
 
   std::queue<PreviewFrame*> preview_frames_;
-  lru::Cache<std::string GLTextureFrame*> texture_cache_;
+  lru::Cache<std::string, GLTextureFrame*> texture_cache_;
 
   GLuint texture_loc_;
   GLuint position_loc_;
