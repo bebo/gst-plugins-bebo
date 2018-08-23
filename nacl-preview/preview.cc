@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <queue>
+#include <sstream>
 
 #include "ppapi/cpp/graphics_3d.h"
 #include "ppapi/cpp/instance.h"
@@ -17,6 +18,7 @@
 #include "ppapi/lib/gl/gles2/gl2ext_ppapi.h"
 #include "ppapi/utility/completion_callback_factory.h"
 #include "shared/bebo_shmem.h"
+#include "lru_cache.h"
 
 #ifdef WIN32
 #undef PostMessage
@@ -113,6 +115,27 @@ const GLubyte kBoxIndexes[6] = {
 
 }  // namespace
 
+// Only to be used in thread that has access to GL.
+class GLTextureFrame {
+  public:
+    GLTextureFrame(GLuint texture, GLuint surface):
+      texture_(texture), surface_(surface) {}
+    ~GLTextureFrame() {
+      if (texture_) {
+        glDeleteTextures(1, &texture_);
+      }
+      if (surface_) {
+        // glDeleteSurfacesEGL(1, &surface_);
+      }
+    }
+
+    GLuint texture() const { return texture_; }
+    GLuint surface() const { return surface_; }
+
+  private:
+    GLuint texture_;
+    GLuint surface_;
+};
 
 class PreviewFrame {
   public:
@@ -148,11 +171,11 @@ class PreviewInstance : public pp::Instance {
         texture_loc_(0),
         position_loc_(0),
         color_loc_(0),
-        texture_index_(0),
         shmem_(NULL),
         shmem_handle_(NULL),
         shmem_mutex_(NULL),
-        shmem_new_data_semaphore_(NULL) {}
+        shmem_new_data_semaphore_(NULL),
+        texture_cache_(64, 0) {}
 
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
@@ -264,8 +287,7 @@ class PreviewInstance : public pp::Instance {
                  &kBoxIndexes[0], GL_STATIC_DRAW);
   }
 
-  void GenAndBindSharedHandleTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
-    // combination of glGenTexture and glBindTexture
+  void CreateSharedTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
     glGenAndBindSharedHandleTexture(1, width, height, handle, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -325,7 +347,7 @@ class PreviewInstance : public pp::Instance {
 
   bool PushShmemFrameToQueue() {
     PreviewFrame* preview_frame = NULL;
-    GLuint        texture;
+    GLuint        texture = 0;
 
     if (!GetAndWaitForShmemFrame(&preview_frame)) {
       return false;
@@ -337,7 +359,18 @@ class PreviewInstance : public pp::Instance {
 
     GLint width  = shmem_->video_info.width;
     GLint height = shmem_->video_info.height;
-    GenAndBindSharedHandleTexture(width, height, preview_frame->shared_handle(), &texture);
+    std::string cache_key =
+      std::to_string(width) + ":" +
+      std::to_string(height) + ":" +
+      std::to_string(preview_frame->shared_handle());
+    if (texture_cache_.contains(cache_key)) {
+      const GLTextureFrame* texture_frame = texture_cache_.get(cache_key);
+      texture = texture_frame.texture();
+    } else {
+      CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture);
+      texture_cache_.insert(cache_key, new GLTextureFrame(texture, 0));
+    }
+
     preview_frame->SetTexture(texture);
     preview_frames_.emplace(preview_frame);
     return true;
@@ -495,8 +528,6 @@ class PreviewInstance : public pp::Instance {
     PreviewFrame* frame = preview_frames_.front();
     preview_frames_.pop();
 
-    GLuint texture = frame->texture();
-    glDeleteTextures(1, &texture);
     UnrefFrame(frame);
   }
 
@@ -512,8 +543,7 @@ class PreviewInstance : public pp::Instance {
   GLuint index_buffer_;
 
   std::queue<PreviewFrame*> preview_frames_;
-  GLuint                    texture_index_;
-
+  lru::Cache<std::string GLTextureFrame*> texture_cache_;
 
   GLuint texture_loc_;
   GLuint position_loc_;
