@@ -923,7 +923,7 @@ lock_bitstream_helper(GstGLContext *ctx, struct bslock* bs) {
     bs->out_buf = SHUTDOWN_COOKIE;
   }
   else {
-    GST_INFO("LOCKED Bitstream: %d", bs->out_buf);
+    GST_LOG("LOCKED Bitstream: %d", bs->out_buf);
   }
 }
 
@@ -2079,7 +2079,6 @@ static gboolean gst_nv_base_enc_propose_allocation (GstVideoEncoder * enc, GstQu
 
   allocator = GST_ALLOCATOR(self->allocator);
   gst_query_add_allocation_param(query, allocator, &params);
-  gst_object_unref(allocator);
   GST_DEBUG("Make a new buffer pool.");
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;
