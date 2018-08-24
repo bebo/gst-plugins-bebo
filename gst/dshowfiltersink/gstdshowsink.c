@@ -211,7 +211,7 @@ clean_shmem_frame_with_max_ref_count(GstDirectShowSink * self, int max_ref_cnt)
     uint64_t frame_offset =  self->shmem->frame_offset +  i * self->shmem->frame_size;
     struct frame *frame = ((struct frame*) (((unsigned char*)self->shmem) + frame_offset));
     if (frame->_gst_buf_ref != NULL && frame->ref_cnt <= max_ref_cnt) {
-      GST_DEBUG_OBJECT(self,
+      GST_LOG_OBJECT(self,
           "UNREF STOP nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d latency: %d refcnt: %lu",
           frame->nr,
           frame->dxgi_handle,
@@ -427,7 +427,7 @@ gst_shm_sink_stop (GstBaseSink * bsink)
 
   if (self->allocator)
     gst_object_unref (self->allocator);
-  self->allocator = NULL;
+    self->allocator = NULL;
 
   return TRUE;
 }
@@ -450,7 +450,7 @@ static GstFlowReturn
 gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 {
   GstDirectShowSink *self = GST_SHM_SINK (bsink);
-  GST_DEBUG_OBJECT(self, "gst_shm_sink_render");
+  GST_LOG_OBJECT(self, "gst_shm_sink_render");
 
   if (!GST_IS_BUFFER(buf)) {
     GST_ERROR_OBJECT(self, "NOT A BUFFER???");
@@ -472,7 +472,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     running_time = gst_clock_get_time(clock) - base_time;
     self->latency = running_time - buf->pts;
 
-    GST_LOG("Measured plugin latency to %d", self->latency / 1000000);
+    GST_LOG_OBJECT(self, "Measured plugin latency to %d", self->latency / 1000000);
     gst_object_unref (clock);
     clock = NULL;
   }
@@ -500,7 +500,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   GstMemory *memory = gst_buffer_peek_memory(buf, 0);
 #ifndef _NDEBUG
   if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
-    GST_DEBUG_OBJECT(self, "Memory in buffer %p was not allocated by us: "
+    GST_LOG_OBJECT(self, "Memory in buffer %p was not allocated by us: "
       "%" GST_PTR_FORMAT ", will memcpy", buf, memory->allocator);
   }
 #endif
@@ -530,7 +530,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
   if (frame->_gst_buf_ref != NULL) {
     if (frame->ref_cnt > 0) {
-      GST_DEBUG_OBJECT(self,
+      GST_LOG_OBJECT(self,
           "buffer is still being referenced, dropping incoming frame. nr: %llu dxgi_handle: %llu ref_cnt: %d",
           frame->nr,
           frame->dxgi_handle,
@@ -564,7 +564,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       return GST_FLOW_OK;
     }
 
-    GST_DEBUG_OBJECT(self, "UNREF(1) nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d buf: %p latency: %d",
+    GST_LOG_OBJECT(self, "UNREF(1) nr: %llu dxgi_handle: %llu pts: %lld frame_offset: %d size: %d buf: %p latency: %d",
         frame->nr,
         frame->dxgi_handle,
         //frame->dts / 1000000,
@@ -594,7 +594,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   frame->ref_cnt = 1;
   //gst_buffer_ref (buf);
 
-  GST_DEBUG_OBJECT(self, "nr: %llu dxgi_handle: %llu tex_id: %#010x pts: %" GST_TIME_FORMAT " frame_offset: %d size: %d buf: %p latency: %d",
+  GST_LOG_OBJECT(self, "nr: %llu dxgi_handle: %llu tex_id: %#010x pts: %" GST_TIME_FORMAT " frame_offset: %d size: %d buf: %p latency: %d",
       frame->nr,
       frame->dxgi_handle,
       gl_dxgi_mem->mem.tex_id,
@@ -711,19 +711,19 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
     cur_pool_config = gst_buffer_pool_get_config(self->pool);
     guint size;
     gst_buffer_pool_config_get_params(cur_pool_config, NULL, &size, NULL, NULL);
-    GST_DEBUG("Old pool size: %d New allocation size: info.size: %d", size, vi_size);
+    GST_DEBUG_OBJECT(self, "Old pool size: %d New allocation size: info.size: %d", size, vi_size);
     if (size == vi_size) {
-      GST_DEBUG("Reusing buffer pool.");
+      GST_DEBUG_OBJECT(self, "Reusing buffer pool.");
       gst_query_add_allocation_pool(query, self->pool, vi_size, BUFFER_POOL_SIZE, BUFFER_POOL_SIZE);
       return true;
     } else {
-      GST_DEBUG("The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
+      GST_DEBUG_OBJECT(self, "The pool buffer size doesn't match (old: %d new: %d). Creating a new one.",
         size, vi_size);
       gst_object_unref(self->pool);
     }
   }
 
-  GST_DEBUG("Make a new buffer pool.");
+  GST_DEBUG_OBJECT(self, "Make a new buffer pool.");
   // offer our custom allocator
   GstAllocator *allocator;
   GstAllocationParams params;
@@ -731,7 +731,6 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
 
   allocator = GST_ALLOCATOR(self->allocator);
   gst_query_add_allocation_param(query, allocator, &params);
-  gst_object_unref(allocator);
 
   self->pool = gst_gl_buffer_pool_new(self->context);
   GstStructure *config;

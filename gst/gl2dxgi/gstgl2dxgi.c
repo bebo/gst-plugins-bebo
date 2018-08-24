@@ -920,7 +920,6 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
 {
   GstGL2DXGI *self = GST_GL_2_DXGI(sink);
   GST_INFO_OBJECT(self, "gst_shm_sink_propose_allocation");
-  GST_LOG_OBJECT(self, "propose_allocation");
 
   GstCaps *caps;
   gboolean need_pool;
@@ -940,7 +939,6 @@ gst_gl_2_dxgi_propose_allocation (GstBaseTransform * sink, GstQuery * decide_que
 
   allocator = GST_ALLOCATOR (self->allocator);
   gst_query_add_allocation_param (query, allocator, &params);
-  gst_object_unref (allocator);
 
   GstVideoInfo info;
   if (!gst_video_info_from_caps (&info, caps))
