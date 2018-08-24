@@ -1000,7 +1000,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
         /* assumes buffers are submitted in order */
         out_buf = g_async_queue_pop (nvenc->bitstream_queue);
         if ((gpointer)out_buf == SHUTDOWN_COOKIE) {
-          GST_DEBUG("Bitstream thread got shutdown cookie");
+          GST_DEBUG_OBJECT(nvenc, "Bitstream thread got shutdown cookie");
           break;
         }
 
@@ -1039,7 +1039,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
             lock_bs.bitstreamSizeInBytes);
 
         if (lock_bs.pictureType == NV_ENC_PIC_TYPE_IDR) {
-          GST_DEBUG_OBJECT (nvenc, "This is a keyframe");
+          GST_LOG_OBJECT (nvenc, "This is a keyframe");
           GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (frame);
         }
 
@@ -1133,7 +1133,7 @@ static gboolean
 gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 {
   gpointer out_buf;
-  GST_DEBUG("Stopping bitstream thread.");
+  GST_DEBUG_OBJECT(nvenc, "Stopping bitstream thread.");
   if (nvenc->bitstream_thread == NULL)
     return TRUE;
   g_async_queue_lock(nvenc->bitstream_queue);
@@ -1141,7 +1141,7 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   g_async_queue_lock(nvenc->holding_queue);
 
   while (g_async_queue_length_unlocked(nvenc->holding_queue) > 0) {
-    GST_DEBUG("Encoder is drained so moving buffer from holding to bitstream queue.");
+    GST_DEBUG_OBJECT(nvenc, "Encoder is drained so moving buffer from holding to bitstream queue.");
     g_async_queue_push_unlocked(nvenc->bitstream_queue, g_async_queue_pop_unlocked(nvenc->holding_queue));
   }
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
@@ -1160,7 +1160,7 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   GST_VIDEO_ENCODER_STREAM_UNLOCK (nvenc);
   g_thread_join (nvenc->bitstream_thread);
   GST_VIDEO_ENCODER_STREAM_LOCK (nvenc);
-  GST_DEBUG("Bitstream thread stopped.");
+  GST_DEBUG_OBJECT(nvenc, "Bitstream thread stopped.");
   nvenc->bitstream_thread = NULL;
   return TRUE;
 }
@@ -1740,14 +1740,14 @@ _submit_input_buffer (D3DGstNvBaseEnc * nvenc, GstVideoCodecFrame * frame,
   } else if (nv_ret == NV_ENC_ERR_NEED_MORE_INPUT) {
     /* FIXME: we should probably queue pending output buffers here and only
      * submit them to the async queue once we got sucess back */
-    GST_DEBUG("Encoded picture (encoder needs more input) %d", outputBufferPtr);
+    GST_LOG_OBJECT(nvenc, "Encoded picture (encoder needs more input) %d", outputBufferPtr);
 
     g_async_queue_push(nvenc->holding_queue, outputBufferPtr);
   } else {
     GST_ERROR_OBJECT (nvenc, "Failed to encode picture: %d", nv_ret);
-    GST_DEBUG_OBJECT (nvenc, "re-enqueueing input buffer %p", inputBuffer);
+    GST_LOG_OBJECT (nvenc, "re-enqueueing input buffer %p", inputBuffer);
     g_async_queue_push (nvenc->in_bufs_pool, inputBuffer);
-    GST_DEBUG_OBJECT (nvenc, "re-enqueueing output buffer %p", outputBufferPtr);
+    GST_LOG_OBJECT (nvenc, "re-enqueueing output buffer %p", outputBufferPtr);
     g_async_queue_push (nvenc->bitstream_pool, outputBufferPtr);
 
     return GST_FLOW_ERROR;
