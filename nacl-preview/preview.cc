@@ -127,7 +127,7 @@ class GLTextureFrame {
         glDeleteTextures(1, &texture_);
       }
       if (surface_) {
-        glDeleteSurfacesEGL(1, &surface_);
+        glDestroySurfaceEGL(surface_);
       }
     }
 
@@ -292,7 +292,10 @@ class PreviewInstance : public pp::Instance {
   void CreateSharedTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture, GLuint64* surface) {
     glGenTextures(1, texture);
     glCreatePbufferFromClientBufferEGL(width, height, handle, surface);
-    glBindTexture(GL_TEXTURE_2D, *texture);
+  }
+
+  void BindSharedTexture(GLuint64 texture, GLuint64 surface) {
+    glBindTexture(GL_TEXTURE_2D, texture);
     glBindTexImageEGL(surface);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -375,6 +378,7 @@ class PreviewInstance : public pp::Instance {
       surface = texture_frame->surface();
     } else {
       CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture, &surface);
+      BindSharedTexture(texture, surface);
       texture_cache_.insert(cache_key, new GLTextureFrame(texture, surface));
     }
 
