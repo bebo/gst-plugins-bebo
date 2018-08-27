@@ -120,7 +120,7 @@ const GLubyte kBoxIndexes[6] = {
 // Only to be used in thread that has access to GL.
 class GLTextureFrame {
   public:
-    GLTextureFrame(GLuint texture, GLuint surface):
+    GLTextureFrame(GLuint texture, GLuint64 surface):
       texture_(texture), surface_(surface) {}
     ~GLTextureFrame() {
       if (texture_) {
@@ -132,11 +132,11 @@ class GLTextureFrame {
     }
 
     GLuint texture() const { return texture_; }
-    GLuint surface() const { return surface_; }
+    GLuint64 surface() const { return surface_; }
 
   private:
     GLuint texture_;
-    GLuint surface_;
+    GLuint64 surface_;
 };
 
 class PreviewFrame {
@@ -289,15 +289,11 @@ class PreviewInstance : public pp::Instance {
                  &kBoxIndexes[0], GL_STATIC_DRAW);
   }
 
-  void CreateSharedTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
-    GLuint64 surface;
-
+  void CreateSharedTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture, GLuint64* surface) {
     glGenTextures(1, texture);
-
-    glCreatePbufferFromClientBufferEGL(width, height, handle, &surface);
+    glCreatePbufferFromClientBufferEGL(width, height, handle, surface);
     glBindTexture(GL_TEXTURE_2D, *texture);
     glBindTexImageEGL(surface);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -357,6 +353,7 @@ class PreviewInstance : public pp::Instance {
   bool PushShmemFrameToQueue() {
     PreviewFrame* preview_frame = NULL;
     GLuint        texture = 0;
+    GLuint64      surface = 0;
 
     if (!GetAndWaitForShmemFrame(&preview_frame)) {
       return false;
@@ -375,9 +372,10 @@ class PreviewInstance : public pp::Instance {
     if (texture_cache_.contains(cache_key)) {
       const GLTextureFrame* texture_frame = texture_cache_.get(cache_key);
       texture = texture_frame->texture();
+      surface = texture_frame->surface();
     } else {
-      CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture);
-      texture_cache_.insert(cache_key, new GLTextureFrame(texture, 0));
+      CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture, &surface);
+      texture_cache_.insert(cache_key, new GLTextureFrame(texture, surface));
     }
 
     preview_frame->SetTexture(texture);
