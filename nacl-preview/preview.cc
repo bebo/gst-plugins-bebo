@@ -1,6 +1,7 @@
 // Copyright (c) 2013 The Chromium Authors. All rights reserved.  Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <math.h>
 #include <stddef.h>
@@ -32,6 +33,7 @@
 #define debug(format, ...)
 
 #define WAIT_MIN_NUM_OF_FRAMES_TO_UNREF 3
+#define TEXTURE_CACHE_SIZE  64
 
 namespace {
 
@@ -125,7 +127,7 @@ class GLTextureFrame {
         glDeleteTextures(1, &texture_);
       }
       if (surface_) {
-        // glDeleteSurfacesEGL(1, &surface_);
+        glDeleteSurfacesEGL(1, &surface_);
       }
     }
 
@@ -175,7 +177,7 @@ class PreviewInstance : public pp::Instance {
         shmem_handle_(NULL),
         shmem_mutex_(NULL),
         shmem_new_data_semaphore_(NULL),
-        texture_cache_(64, 0) {}
+        texture_cache_(TEXTURE_CACHE_SIZE, 0) {}
 
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
@@ -288,7 +290,14 @@ class PreviewInstance : public pp::Instance {
   }
 
   void CreateSharedTexture(GLint width, GLint height, GLuint64 handle, GLuint* texture) {
-    glGenAndBindSharedHandleTexture(1, width, height, handle, texture);
+    GLuint64 surface;
+
+    glGenTextures(1, texture);
+
+    glCreatePbufferFromClientBufferEGL(width, height, handle, &surface);
+    glBindTexture(GL_TEXTURE_2D, *texture);
+    glBindTexImageEGL(surface);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

@@ -24,7 +24,7 @@ include(DownloadZip)
 DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/gstreamer-base/gstreamer_meson_1.15.0.1pre0.zip" "gstreamer")
 DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/third_party/Video_Codec_SDK_7.1.9.tar.bz2" "Video_Codec_SDK_7.1.9")
 DownloadDependency("https://s3-us-west-1.amazonaws.com/bebo-app/repo/libspeexdsp/libspeexdsp-1-2rc3.tar.bz2" "speexdsp")
-DownloadZip("https://s3-us-west-1.amazonaws.com/bebo-app/repo/nacl-sdk/nacl-sdk_pepper_56-20180817160815.zip" "naclsdk")
+DownloadZip("https://s3-us-west-1.amazonaws.com/bebo-app/repo/nacl-sdk/nacl-sdk_pepper_56-20180825012712.zip" "naclsdk")
 
 #
 # Target configuration.
