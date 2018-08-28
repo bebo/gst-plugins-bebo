@@ -344,7 +344,7 @@ class PreviewInstance : public pp::Instance {
   }
 
   bool PushShmemFrameToQueue() {
-    PreviewFrame* preview_frame = NULL;
+    std::unique_ptr<PreviewFrame> preview_frame = NULL;
     GLuint        texture = 0;
     GLuint64      surface = 0;
 
@@ -363,17 +363,17 @@ class PreviewInstance : public pp::Instance {
       std::to_string(height) + ":" +
       std::to_string(preview_frame->shared_handle());
     if (texture_cache_.contains(cache_key)) {
-      const GLTextureFrame* texture_frame = texture_cache_.get(cache_key);
+      GLTextureFrame* texture_frame = texture_cache_.get(cache_key).get();
       texture = texture_frame->texture();
       surface = texture_frame->surface();
     } else {
       CreateSharedTexture(width, height, preview_frame->shared_handle(), &texture, &surface);
       BindSharedTexture(texture, surface);
-      texture_cache_.insert(cache_key, new GLTextureFrame(texture, surface));
+      texture_cache_.insert(cache_key, std::make_shared<GLTextureFrame>(texture, surface));
     }
 
     preview_frame->SetTexture(texture);
-    preview_frames_.emplace(preview_frame);
+    preview_frames_.emplace(std::move(preview_frame));
     return true;
   }
 
@@ -438,7 +438,7 @@ class PreviewInstance : public pp::Instance {
     return true;
   }
 
-  bool GetAndWaitForShmemFrame(PreviewFrame** out_frame) {
+  bool GetAndWaitForShmemFrame(std::unique_ptr<PreviewFrame>* out_frame) {
     if (!shmem_ && !OpenSharedMemory()) {
       return false;
     }
@@ -472,6 +472,7 @@ class PreviewInstance : public pp::Instance {
         shmem_->read_ptr = shmem_->write_ptr;
         info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr);
+        texture_cache_.clear();
         UnrefBefore(shmem_->read_ptr);
       }
     } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
@@ -488,7 +489,7 @@ class PreviewInstance : public pp::Instance {
     frame->ref_cnt++;
     shmem_->read_ptr++;
 
-    *out_frame = new PreviewFrame(frame->nr, i, (uint64_t) frame->dxgi_handle);
+    *out_frame = std::make_unique<PreviewFrame>(frame->nr, i, (uint64_t) frame->dxgi_handle);
     ReleaseMutex(shmem_mutex_);
     return true;
   }
@@ -508,7 +509,7 @@ class PreviewInstance : public pp::Instance {
     }
   }
 
-  void UnrefFrame(PreviewFrame* frame) {
+  void UnrefFrame(std::unique_ptr<PreviewFrame> frame) {
     if (WaitForSingleObject(shmem_mutex_, 1000) != WAIT_OBJECT_0) {
       return;
     }
@@ -519,17 +520,15 @@ class PreviewInstance : public pp::Instance {
     }
 
     ReleaseMutex(shmem_mutex_);
-
-    delete frame;
   }
 
   void UnrefOldFrame() {
     if (preview_frames_.size() < WAIT_MIN_NUM_OF_FRAMES_TO_UNREF) {
       return;
     }
-    PreviewFrame* frame = preview_frames_.front();
+    std::unique_ptr<PreviewFrame> frame = std::move(preview_frames_.front());
     preview_frames_.pop();
-    UnrefFrame(frame);
+    UnrefFrame(std::move(frame));
   }
 
   void PostTypedMessage(std::string type, pp::Var message) {
@@ -569,8 +568,8 @@ class PreviewInstance : public pp::Instance {
   GLuint vertex_buffer_;
   GLuint index_buffer_;
 
-  std::queue<PreviewFrame*> preview_frames_;
-  lru::Cache<std::string, GLTextureFrame*> texture_cache_;
+  std::queue<std::unique_ptr<PreviewFrame>> preview_frames_;
+  lru::Cache<std::string, std::shared_ptr<GLTextureFrame>> texture_cache_;
 
   GLuint texture_loc_;
   GLuint position_loc_;
