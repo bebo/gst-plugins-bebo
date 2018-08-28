@@ -16,6 +16,7 @@
 #include "ppapi/cpp/module.h"
 #include "ppapi/cpp/var.h"
 #include "ppapi/cpp/var_array.h"
+#include "ppapi/cpp/var_dictionary.h"
 #include "ppapi/lib/gl/gles2/gl2ext_ppapi.h"
 #include "ppapi/utility/completion_callback_factory.h"
 #include "shared/bebo_shmem.h"
@@ -27,54 +28,16 @@
 #pragma warning(disable : 4355)
 #endif
 
-#define error(format, ...)
-#define warn(format, ...)
-#define info(format, ...)
-#define debug(format, ...)
+#define error(format, ...) PostLogMessage("ERROR", format, __VA_ARGS__)
+#define warn(format, ...)  PostLogMessage("WARNING", format, __VA_ARGS__)
+#define info(format, ...)  PostLogMessage("INFO", format, __VA_ARGS__)
+#define debug(format, ...) PostLogMessage("DEBUG", format, __VA_ARGS__)
+#define log(format, ...)   PostLogMessage("LOG", format, __VA_ARGS__)
 
 #define WAIT_MIN_NUM_OF_FRAMES_TO_UNREF 3
 #define TEXTURE_CACHE_SIZE  64
 
 namespace {
-
-GLuint CompileShader(GLenum type, const char* data) {
-  GLuint shader = glCreateShader(type);
-  glShaderSource(shader, 1, &data, NULL);
-  glCompileShader(shader);
-
-  GLint compile_status;
-  glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
-  if (compile_status != GL_TRUE) {
-    // Shader failed to compile, let's see what the error is.
-    char buffer[1024];
-    GLsizei length;
-    glGetShaderInfoLog(shader, sizeof(buffer), &length, &buffer[0]);
-    fprintf(stderr, "Shader failed to compile: %s\n", buffer);
-    return 0;
-  }
-
-  return shader;
-}
-
-GLuint LinkProgram(GLuint frag_shader, GLuint vert_shader) {
-  GLuint program = glCreateProgram();
-  glAttachShader(program, frag_shader);
-  glAttachShader(program, vert_shader);
-  glLinkProgram(program);
-
-  GLint link_status;
-  glGetProgramiv(program, GL_LINK_STATUS, &link_status);
-  if (link_status != GL_TRUE) {
-    // Program failed to link, let's see what the error is.
-    char buffer[1024];
-    GLsizei length;
-    glGetProgramInfoLog(program, sizeof(buffer), &length, &buffer[0]);
-    fprintf(stderr, "Program failed to link: %s\n", buffer);
-    return 0;
-  }
-
-  return program;
-}
 
 const char kFragShaderSource[] =
     "precision mediump float;\n"
@@ -179,6 +142,45 @@ class PreviewInstance : public pp::Instance {
         shmem_new_data_semaphore_(NULL),
         texture_cache_(TEXTURE_CACHE_SIZE, 0) {}
 
+  GLuint CompileShader(GLenum type, const char* data) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &data, NULL);
+    glCompileShader(shader);
+
+    GLint compile_status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
+    if (compile_status != GL_TRUE) {
+      // Shader failed to compile, let's see what the error is.
+      char buffer[1024];
+      GLsizei length;
+      glGetShaderInfoLog(shader, sizeof(buffer), &length, &buffer[0]);
+      error("failed to compile gl shader: %s", buffer);
+      return 0;
+    }
+
+    return shader;
+  }
+
+  GLuint LinkProgram(GLuint frag_shader, GLuint vert_shader) {
+    GLuint program = glCreateProgram();
+    glAttachShader(program, frag_shader);
+    glAttachShader(program, vert_shader);
+    glLinkProgram(program);
+
+    GLint link_status;
+    glGetProgramiv(program, GL_LINK_STATUS, &link_status);
+    if (link_status != GL_TRUE) {
+      // Program failed to link, let's see what the error is.
+      char buffer[1024];
+      GLsizei length;
+      glGetProgramInfoLog(program, sizeof(buffer), &length, &buffer[0]);
+      error("failed to link gl program: %s", buffer);
+      return 0;
+    }
+    return program;
+  }
+
+
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
     return true;
@@ -193,9 +195,10 @@ class PreviewInstance : public pp::Instance {
 
     if (context_.is_null()) {
       if (!InitGL(new_width, new_height)) {
-        // failed.
+        error("failed to init gl at resolution: %dx%d", new_width, new_height);
         return;
       }
+      info("initialized context at resolution: %dx%d", new_width, new_height);
 
       InitShaders();
       InitBuffers();
@@ -204,12 +207,10 @@ class PreviewInstance : public pp::Instance {
       // Resize the buffers to the new size of the module.
       int32_t result = context_.ResizeBuffers(new_width, new_height);
       if (result < 0) {
-        fprintf(stderr,
-                "Unable to resize buffers to %d x %d!\n",
-                new_width,
-                new_height);
+        error("failed to resize context buffers to %dx%d", new_width, new_height);
         return;
       }
+      info("resized context to resolution: %dx%d", new_width, new_height);
     }
 
     width_ = new_width;
@@ -218,23 +219,12 @@ class PreviewInstance : public pp::Instance {
   }
 
   virtual void HandleMessage(const pp::Var& message) {
-    // An array message sets the current x and y rotation.
-    if (!message.is_array()) {
-      fprintf(stderr, "Expected array message.\n");
-      return;
-    }
-
-    pp::VarArray array(message);
-    if (array.GetLength() != 2) {
-      fprintf(stderr, "Expected array of length 2.\n");
-      return;
-    }
   }
 
  private:
   bool InitGL(int32_t new_width, int32_t new_height) {
     if (!glInitializePPAPI(pp::Module::Get()->get_browser_interface())) {
-      fprintf(stderr, "Unable to initialize GL PPAPI!\n");
+      error("unable to initialize GL PPAPI!");
       return false;
     }
 
@@ -248,7 +238,7 @@ class PreviewInstance : public pp::Instance {
 
     context_ = pp::Graphics3D(this, attrib_list);
     if (!BindGraphics(context_)) {
-      fprintf(stderr, "Unable to bind 3d context!\n");
+      error("failed to bind 3d graphics context!");
       context_ = pp::Graphics3D();
       glSetCurrentContextPPAPI(0);
       return false;
@@ -294,7 +284,7 @@ class PreviewInstance : public pp::Instance {
     glCreatePbufferFromClientBufferEGL(width, height, handle, surface);
   }
 
-  void BindSharedTexture(GLuint64 texture, GLuint64 surface) {
+  void BindSharedTexture(GLuint texture, GLuint64 surface) {
     glBindTexture(GL_TEXTURE_2D, texture);
     glBindTexImageEGL(surface);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -399,7 +389,7 @@ class PreviewInstance : public pp::Instance {
     if (!shmem_new_data_semaphore_) {
       // TODO: log only once...
       error("could not open semaphore mapping %d", GetLastError());
-      Sleep(100);
+      Sleep(300);
       return false;
     }
 
@@ -440,10 +430,11 @@ class PreviewInstance : public pp::Instance {
     ReleaseMutex(shmem_mutex_);
     if (!shmem_) {
       error("could not map shmem %d", GetLastError());
+      Sleep(300);
       return false;
     }
 
-    info("Opened Shared Memory Buffer");
+    info("successfully opened shared memory buffer");
     return true;
   }
 
@@ -538,8 +529,33 @@ class PreviewInstance : public pp::Instance {
     }
     PreviewFrame* frame = preview_frames_.front();
     preview_frames_.pop();
-
     UnrefFrame(frame);
+  }
+
+  void PostTypedMessage(std::string type, pp::Var message) {
+    pp::VarDictionary dictionary;
+    dictionary.Set(pp::Var("type"), pp::Var(type));
+    dictionary.Set(pp::Var("message"), message);
+    PostMessage(dictionary);
+  }
+
+  void PostLogMessage(std::string severity, const char* format, ...) {
+    // printf-like support
+    char buffer[2048];
+    va_list args;
+    va_start(args, format);
+    vsprintf_s(buffer, format, args);
+    va_end(args);
+
+    // enforce upper severity
+    std::transform(severity.begin(), severity.end(), severity.begin(),
+        [](char c){ return ::toupper(c); });
+
+    pp::VarDictionary dictionary;
+    dictionary.Set(pp::Var("type"), pp::Var("log"));
+    dictionary.Set(pp::Var("severity"), pp::Var(severity));
+    dictionary.Set(pp::Var("message"), pp::Var(buffer));
+    PostMessage(dictionary);
   }
 
   pp::CompletionCallbackFactory<PreviewInstance> callback_factory_;
