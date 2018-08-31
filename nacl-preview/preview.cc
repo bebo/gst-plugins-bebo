@@ -142,44 +142,10 @@ class PreviewInstance : public pp::Instance {
         shmem_new_data_semaphore_(NULL),
         texture_cache_(TEXTURE_CACHE_SIZE, 0) {}
 
-  GLuint CompileShader(GLenum type, const char* data) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &data, NULL);
-    glCompileShader(shader);
-
-    GLint compile_status;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
-    if (compile_status != GL_TRUE) {
-      // Shader failed to compile, let's see what the error is.
-      char buffer[1024];
-      GLsizei length;
-      glGetShaderInfoLog(shader, sizeof(buffer), &length, &buffer[0]);
-      error("failed to compile gl shader: %s", buffer);
-      return 0;
-    }
-
-    return shader;
+  virtual ~PreviewInstance() {
+    texture_cache_.clear();
+    CloseSharedMemory();
   }
-
-  GLuint LinkProgram(GLuint frag_shader, GLuint vert_shader) {
-    GLuint program = glCreateProgram();
-    glAttachShader(program, frag_shader);
-    glAttachShader(program, vert_shader);
-    glLinkProgram(program);
-
-    GLint link_status;
-    glGetProgramiv(program, GL_LINK_STATUS, &link_status);
-    if (link_status != GL_TRUE) {
-      // Program failed to link, let's see what the error is.
-      char buffer[1024];
-      GLsizei length;
-      glGetProgramInfoLog(program, sizeof(buffer), &length, &buffer[0]);
-      error("failed to link gl program: %s", buffer);
-      return 0;
-    }
-    return program;
-  }
-
 
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
@@ -222,6 +188,45 @@ class PreviewInstance : public pp::Instance {
   }
 
  private:
+  GLuint CompileShader(GLenum type, const char* data) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &data, NULL);
+    glCompileShader(shader);
+
+    GLint compile_status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
+    if (compile_status != GL_TRUE) {
+      // Shader failed to compile, let's see what the error is.
+      char buffer[1024];
+      GLsizei length;
+      glGetShaderInfoLog(shader, sizeof(buffer), &length, &buffer[0]);
+      error("failed to compile gl shader: %s", buffer);
+      return 0;
+    }
+
+    return shader;
+  }
+
+  GLuint LinkProgram(GLuint frag_shader, GLuint vert_shader) {
+    GLuint program = glCreateProgram();
+    glAttachShader(program, frag_shader);
+    glAttachShader(program, vert_shader);
+    glLinkProgram(program);
+
+    GLint link_status;
+    glGetProgramiv(program, GL_LINK_STATUS, &link_status);
+    if (link_status != GL_TRUE) {
+      // Program failed to link, let's see what the error is.
+      char buffer[1024];
+      GLsizei length;
+      glGetProgramInfoLog(program, sizeof(buffer), &length, &buffer[0]);
+      error("failed to link gl program: %s", buffer);
+      return 0;
+    }
+    return program;
+  }
+
+
   bool InitGL(int32_t new_width, int32_t new_height) {
     if (!glInitializePPAPI(pp::Module::Get()->get_browser_interface())) {
       error("unable to initialize GL PPAPI!");
@@ -468,12 +473,6 @@ class PreviewInstance : public pp::Instance {
     return true;
   }
 
-  void ResetSharedMemory() {
-    texture_cache_.clear();
-    CloseSharedMemory();
-    OpenSharedMemory();
-  }
-
   bool GetAndWaitForShmemFrame(std::unique_ptr<PreviewFrame>* out_frame) {
     if (!shmem_ && !OpenSharedMemory()) {
       return false;
@@ -509,17 +508,6 @@ class PreviewInstance : public pp::Instance {
         info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr);
         UnrefBefore(shmem_->read_ptr);
-
-        texture_cache_.clear();
-#if 0
-        // TODO if it's not initial start 
-        bool require_restart = shmem_->write_ptr > 1 &&  ...;
-        if (shmem_->write_ptr > 1) {
-          ReleaseMutex(shmem_mutex_);
-          ResetSharedMemory();
-          return false;
-        }
-#endif
       }
     } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
       uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
