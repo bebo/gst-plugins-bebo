@@ -384,12 +384,38 @@ class PreviewInstance : public pp::Instance {
     return preview_frames_.back()->texture();
   }
 
+  void CloseSharedMemory() {
+    if (shmem_) {
+      UnmapViewOfFile(shmem_);
+      shmem_ = NULL;
+    }
+
+    if (shmem_handle_) {
+      CloseHandle(shmem_handle_);
+      shmem_handle_ = NULL;
+    }
+
+    if (shmem_mutex_) {
+      CloseHandle(shmem_mutex_);
+      shmem_mutex_ = NULL;
+    }
+
+    if (shmem_new_data_semaphore_) {
+      CloseHandle(shmem_new_data_semaphore_);
+      shmem_new_data_semaphore_ = NULL;
+    }
+  }
+
   bool OpenSharedMemory() {
     shmem_new_data_semaphore_ = OpenSemaphore(SYNCHRONIZE, false, BEBO_SHMEM_DATA_SEM);
     if (!shmem_new_data_semaphore_) {
-      // TODO: log only once...
-      error("could not open semaphore mapping %d", GetLastError());
-      Sleep(300);
+      DWORD error = GetLastError();
+      if (error == 2) {
+        info("shared semaphore is not created yet, retrying in 500ms");
+      } else {
+        error("failed to open shared memory semaphore, %d", error);
+      }
+      Sleep(500);
       return false;
     }
 
@@ -399,6 +425,7 @@ class PreviewInstance : public pp::Instance {
     }
 
     shmem_mutex_ = OpenMutexW(SYNCHRONIZE, false, BEBO_SHMEM_MUTEX);
+
     DWORD result = WaitForSingleObject(shmem_mutex_, INFINITE);
     if (result != WAIT_OBJECT_0) {
       return false;
@@ -426,8 +453,11 @@ class PreviewInstance : public pp::Instance {
 
     shmem_ = (struct shmem*) MapViewOfFile(shmem_handle_, FILE_MAP_ALL_ACCESS, 0, 0, shmem_size);
     shmem_->read_ptr = 0;
+    video_width_ = shmem_->video_info.width;
+    video_height_ = shmem_->video_info.height;
 
     ReleaseMutex(shmem_mutex_);
+
     if (!shmem_) {
       error("could not map shmem %d", GetLastError());
       Sleep(300);
@@ -436,6 +466,12 @@ class PreviewInstance : public pp::Instance {
 
     info("successfully opened shared memory buffer");
     return true;
+  }
+
+  void ResetSharedMemory() {
+    texture_cache_.clear();
+    CloseSharedMemory();
+    OpenSharedMemory();
   }
 
   bool GetAndWaitForShmemFrame(std::unique_ptr<PreviewFrame>* out_frame) {
@@ -472,8 +508,18 @@ class PreviewInstance : public pp::Instance {
         shmem_->read_ptr = shmem_->write_ptr;
         info("starting stream - resetting read pointer read_ptr: %d write_ptr: %d",
             shmem_->read_ptr, shmem_->write_ptr);
-        texture_cache_.clear();
         UnrefBefore(shmem_->read_ptr);
+
+        texture_cache_.clear();
+#if 0
+        // TODO if it's not initial start 
+        bool require_restart = shmem_->write_ptr > 1 &&  ...;
+        if (shmem_->write_ptr > 1) {
+          ReleaseMutex(shmem_mutex_);
+          ResetSharedMemory();
+          return false;
+        }
+#endif
       }
     } else if (shmem_->write_ptr - shmem_->read_ptr > shmem_->count) {
       uint64_t read_ptr = shmem_->write_ptr - shmem_->count / 2;
@@ -516,7 +562,7 @@ class PreviewInstance : public pp::Instance {
 
     auto shm_frame = GetShmFrame(frame->ptr());
     if (shm_frame->nr == frame->nr()) {
-      shm_frame->ref_cnt = 0; // shm_frame->ref_cnt - 2;
+      shm_frame->ref_cnt = shm_frame->ref_cnt - 2;
     }
 
     ReleaseMutex(shmem_mutex_);
@@ -575,6 +621,9 @@ class PreviewInstance : public pp::Instance {
   GLuint position_loc_;
   GLuint texcoord_loc_;
   GLuint color_loc_;
+  GLint video_width_;
+  GLint video_height_;
+
 
   struct shmem* shmem_;
   HANDLE shmem_handle_;
