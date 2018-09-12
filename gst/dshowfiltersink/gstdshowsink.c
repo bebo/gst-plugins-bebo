@@ -60,20 +60,18 @@ enum
 enum
 {
   PROP_0,
-  PROP_WAIT_FOR_CONNECTION,
   PROP_BUFFER_TIME,
   PROP_LATENCY
 };
 
 
 #define SUPPORTED_GL_APIS (GST_GL_API_OPENGL3)
-#define DEFAULT_WAIT_FOR_CONNECTION (FALSE)
-#define BUFFER_COUNT 10
-#define BUFFER_POOL_SIZE BUFFER_COUNT + 10
-#define BUFFER_QUEUE_SIZE 3
-// frame count, if the dshow side doesn't consume it in 10 frames time,
-// we're going to unref it.
+
+// frame count, if the right side doesn't consume it in 10 frames time,
+// we're going to unref it and drop that frame.
 #define FRAME_UNREF_THRESHOLD 10
+#define BUFFER_COUNT      6
+#define BUFFER_POOL_SIZE  BUFFER_COUNT
 
 GST_DEBUG_CATEGORY_STATIC (shmsink_debug);
 #define GST_CAT_DEFAULT shmsink_debug
@@ -238,7 +236,6 @@ gst_shm_sink_init (GstDirectShowSink * self)
 
   g_cond_init (&self->cond);
   //self->size = DEFAULT_SIZE;
-  self->wait_for_connection = DEFAULT_WAIT_FOR_CONNECTION;
 
   // FIXME handle creation error
   self->shmem_new_data_semaphore = CreateSemaphoreW(NULL, 0, 1, BEBO_SHMEM_DATA_SEM);
@@ -274,13 +271,6 @@ gst_shm_sink_class_init (GstDirectShowSinkClass * klass)
 
   gstelement_class->set_context = GST_DEBUG_FUNCPTR (gst_dshowfiltersink_set_context);
   // FIXME: should we implement gst_element_change_state();
-
-  g_object_class_install_property (gobject_class, PROP_WAIT_FOR_CONNECTION,
-      g_param_spec_boolean ("wait-for-connection",
-          "Wait for a connection until rendering",
-          "Block the stream until the shm pipe is connected",
-          DEFAULT_WAIT_FOR_CONNECTION,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_BUFFER_TIME,
       g_param_spec_int64 ("buffer-time",
@@ -334,12 +324,6 @@ gst_shm_sink_set_property (GObject * object, guint prop_id,
   int ret = 0;
 
   switch (prop_id) {
-    case PROP_WAIT_FOR_CONNECTION:
-      GST_OBJECT_LOCK (object);
-      self->wait_for_connection = g_value_get_boolean (value);
-      GST_OBJECT_UNLOCK (object);
-      g_cond_broadcast (&self->cond);
-      break;
     case PROP_BUFFER_TIME:
       GST_OBJECT_LOCK (object);
       self->buffer_time = g_value_get_int64 (value);
@@ -363,9 +347,6 @@ gst_shm_sink_get_property (GObject * object, guint prop_id,
   GST_OBJECT_LOCK (object);
 
   switch (prop_id) {
-    case PROP_WAIT_FOR_CONNECTION:
-      g_value_set_boolean (value, self->wait_for_connection);
-      break;
     case PROP_BUFFER_TIME:
       g_value_set_int64 (value, self->buffer_time);
       break;
@@ -491,7 +472,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
 
   self->last_render_time = GST_BUFFER_DTS_OR_PTS(buf);
 
-  /* GstMapInfo map; */
   GstMemory *memory = gst_buffer_peek_memory(buf, 0);
 #ifndef _NDEBUG
   if (memory->allocator != GST_ALLOCATOR(self->allocator)) {
@@ -534,16 +514,7 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       self->shmem->write_ptr--;
 
       static uint64_t last_frame_nr = 0;
-      static uint64_t  same_frame_counter = 0;
-
-      if (last_frame_nr == frame->nr) {
-        same_frame_counter++;
-      } else {
-        same_frame_counter = 0;
-      }
-
       last_frame_nr = frame->nr;
-
       if (last_frame_nr > FRAME_UNREF_THRESHOLD) {
         gst_buffer_unref(frame->_gst_buf_ref);
         frame->ref_cnt = 0;
@@ -587,7 +558,6 @@ gst_shm_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   frame->nr = self->shmem->write_ptr;
   frame->_gst_buf_ref = buf;
   frame->ref_cnt = 1;
-  //gst_buffer_ref (buf);
 
   GST_LOG_OBJECT(self, "nr: %llu dxgi_handle: %llu tex_id: %#010x pts: %" GST_TIME_FORMAT " frame_offset: %d size: %d buf: %p latency: %d",
       frame->nr,
@@ -625,22 +595,6 @@ static gboolean
 gst_shm_sink_event (GstBaseSink * bsink, GstEvent * event)
 {
   GstDirectShowSink *self = GST_SHM_SINK (bsink);
-
-  switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_EOS:
-      GST_OBJECT_LOCK (self);
-      // TODO
-#if 0
-      while (self->wait_for_connection && sp_writer_pending_writes (self->pipe)
-          && !self->unlock)
-        g_cond_wait (&self->cond, GST_OBJECT_GET_LOCK (self));
-#endif
-      GST_OBJECT_UNLOCK (self);
-      break;
-    default:
-      break;
-  }
-
   return GST_BASE_SINK_CLASS (parent_class)->event (bsink, event);
 }
 
@@ -672,7 +626,8 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstDirectShowSink * self) {
-  return gst_dxgi_device_ensure_gl_context((GstElement *) self, &self->context, &self->other_context, &self->display);
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self,
+      &self->context, &self->other_context, &self->display);
 }
 
 static gboolean
@@ -719,6 +674,7 @@ gst_shm_sink_propose_allocation (GstBaseSink * sink, GstQuery * query)
   }
 
   GST_DEBUG_OBJECT(self, "Make a new buffer pool.");
+
   // offer our custom allocator
   GstAllocator *allocator;
   GstAllocationParams params;
