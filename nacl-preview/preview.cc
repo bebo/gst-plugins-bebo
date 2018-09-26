@@ -152,12 +152,36 @@ class PreviewInstance : public pp::Instance {
     return true;
   }
 
+  bool ShouldUpdateView(int32_t new_width, int32_t new_height) {
+    if (new_width == width_ &&
+        new_height == height_) {
+      return false;
+    }
+
+    if (new_height < 720 || new_height > 1440) {
+      return false;
+    }
+
+    int32_t old_size = width_ * height_;
+    int32_t new_size = new_width * new_height;
+    // make sure new size is at least 15% bigger or smaller compared to old size
+    if (abs(new_size - old_size) < old_size * 0.15f) {
+      return false;
+    }
+
+    return true;
+  }
+
   virtual void DidChangeView(const pp::View& view) {
     // Pepper specifies dimensions in DIPs (device-independent pixels). To
     // generate a context that is at device-pixel resolution on HiDPI devices,
     // scale the dimensions by view.GetDeviceScale().
     int32_t new_width = view.GetRect().width() * view.GetDeviceScale();
     int32_t new_height = view.GetRect().height() * view.GetDeviceScale();
+
+    if (!ShouldUpdateView(new_width, new_height)) {
+      return;
+    }
 
     if (context_.is_null()) {
       if (!InitGL(new_width, new_height)) {

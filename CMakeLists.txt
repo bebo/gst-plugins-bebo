@@ -8,7 +8,6 @@ project(bebo-gst)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(GST_INSTALL_BASE "${CMAKE_SOURCE_DIR}/third_party/gstreamer" CACHE INTERNAL "Path to the GStreamer install base")
-# set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/Video_Codec_SDK_8.1.24" CACHE INTERNAL "Path to NVENC SDK")
 set(NVENC_SDK_BASE "${CMAKE_SOURCE_DIR}/third_party/Video_Codec_SDK_7.1.9" CACHE INTERNAL "Path to NVENC SDK")
 
 
