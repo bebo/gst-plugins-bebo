@@ -130,6 +130,8 @@ class PreviewInstance : public pp::Instance {
         callback_factory_(this),
         width_(0),
         height_(0),
+        negotiated_width_(0),
+        negotiated_height_(0),
         frag_shader_(0),
         vertex_shader_(0),
         program_(0),
@@ -149,6 +151,15 @@ class PreviewInstance : public pp::Instance {
 
   virtual bool Init(uint32_t argc, const char* argn[], const char* argv[]) {
     OpenSharedMemory();
+    for (uint32_t i = 0; i < argc; i++) {
+      std::string key = std::string(argn[i]);
+      std::string value = std::string(argv[i]);
+      if (key.compare("width")) {
+        negotiated_width_ = atoi(value.c_str());
+      } else if (key.compare("height")) {
+        negotiated_height_ = atoi(value.c_str());
+      }
+    }
     return true;
   }
 
@@ -156,8 +167,18 @@ class PreviewInstance : public pp::Instance {
     // Pepper specifies dimensions in DIPs (device-independent pixels). To
     // generate a context that is at device-pixel resolution on HiDPI devices,
     // scale the dimensions by view.GetDeviceScale().
+
     int32_t new_width = view.GetRect().width() * view.GetDeviceScale();
     int32_t new_height = view.GetRect().height() * view.GetDeviceScale();
+
+    if (negotiated_width_ != 0 && negotiated_height_ != 0) {
+      new_width = negotiated_width_ * view.GetDeviceScale();
+      new_height = negotiated_height_ * view.GetDeviceScale();
+    }
+
+    if (new_width == width_ && new_height == height_) {
+      return;
+    }
 
     if (context_.is_null()) {
       if (!InitGL(new_width, new_height)) {
@@ -596,6 +617,8 @@ class PreviewInstance : public pp::Instance {
 
   int32_t width_;
   int32_t height_;
+  int32_t negotiated_width_;
+  int32_t negotiated_height_;
   GLuint frag_shader_;
   GLuint vertex_shader_;
   GLuint program_;
