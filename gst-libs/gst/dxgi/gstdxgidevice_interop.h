@@ -17,9 +17,9 @@
 #include <GL/glext.h>
 #include <GL/wglext.h>
 
-#include "gstdxgidevice_base.h"
-
 G_BEGIN_DECLS
+
+typedef struct _GstDXGIDevice GstDXGIDevice;
 
 G_GNUC_INTERNAL GType   gst_dxgi_device_interop_get_type (void);
 #define GST_TYPE_DXGI_DEVICE_INTEROP    (gst_dxgi_device_interop_get_type())

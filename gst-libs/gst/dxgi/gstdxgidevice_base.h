@@ -6,16 +6,7 @@
 #ifndef __GST_DXGI_CONTEXT_H__
 #define __GST_DXGI_CONTEXT_H__
 
-#include <windows.h>
-#include <d3d11.h>
-#include <dxgi.h>
-
 #include <gst/gst.h>
-#include <gst/gl/gl.h>
-
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <GL/wglext.h>
 
 G_BEGIN_DECLS
 
@@ -32,6 +23,7 @@ typedef struct _GstDXGIDevice {
   /*< private >*/
   GstObject parent;
 
+  /*< public >*/
   gpointer native_device;
 
   /*< private >*/
@@ -48,6 +40,11 @@ typedef struct _GstDXGIDeviceClass {
 
 } GstDXGIDeviceClass;
 
+
+GstDXGIDevice *
+gst_dxgi_device_new ();
+
 G_END_DECLS
+
 
 #endif /* __GST_DXGI_CONTEXT_H__ */
