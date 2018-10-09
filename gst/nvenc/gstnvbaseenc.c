@@ -32,7 +32,7 @@
 /* #if HAVE_NVENC_GST_GL */
 #include <gst/gl/gl.h>
 #include <gst/video/gstvideometa.h>
-#include "gstdxgidevice.h"
+#include <gst/dxgi/gstdxgidevice.h>
 
 #include <D3d11_4.h>
 

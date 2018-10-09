@@ -29,7 +29,7 @@
 
 #include <gst/gst.h>
 #include <gst/base/gstbasesink.h>
-#include "gstdxgimemory.h"
+#include <gst/dxgi/gstdxgimemory.h>
 
 //#include "shmpipe.h"
 

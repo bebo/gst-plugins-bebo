@@ -22,6 +22,7 @@
 #include "config.h"
 #endif
 
+#include "gstgl2dxgi.h"
 #include <stdio.h>
 
 #include <gst/gl/gl.h>
@@ -31,8 +32,7 @@
 #include <GL/wglext.h>
 #include <gst/gl/gstgldisplay.h>
 #include <gst/video/gstvideometa.h>
-#include "gstgl2dxgi.h"
-#include "gstdxgidevice.h"
+#include <gst/dxgi/gstdxgidevice.h>
 
 #define BUFFER_COUNT 30
 #define INTERNAL_QUEUE_SIZE 4

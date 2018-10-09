@@ -26,7 +26,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <gst/video/gstvideoencoder.h>
-#include "dxgi/gstdxgimemory.h"
+#include <gst/dxgi/gstdxgimemory.h>
 
 #define GST_TYPE_D3D_NV_BASE_ENC \
   (gst_nv_base_enc_get_type())

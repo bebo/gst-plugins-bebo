@@ -9,6 +9,8 @@
 
 #include "gstdxgidevice_interop.h"
 
+G_DEFINE_TYPE (GstDXGIDeviceInterop, gst_dxgi_device_interop, GST_TYPE_OBJECT);
+
 /* prototypes */
 static void gst_dxgi_device_interop_finalize (GObject * object);
 static GstWGLFunctions* wgl_functions_new (GstGLContext * gl_context);
@@ -59,21 +61,21 @@ gst_dxgi_device_interop_new_wrapped (GstGLContext * gl_context,
   return device;
 }
 
-static GstDXGID3D11Context *
+void
 gst_dxgi_device_interop_set_share_context (GstGLContext * context,
     GstDXGIDeviceInterop * device)
 {
   gpointer d = g_object_get_data ((GObject*) context, GST_DXGI_DEVICE_INTEROP_CONTEXT);
   if (d != NULL) {
-    GST_CAT_TRACE(GST_CAT_GL_DXGI, "D3D11 device already initialized");
+    GST_TRACE("D3D11 device already initialized");
     return;
   }
 
   g_object_set_data ((GObject *) context, GST_DXGI_DEVICE_INTEROP_CONTEXT, device);
 }
 
-GstDXGID3D11Context *
-gst_dxgi_device_interop_from_share_context(GstGLContext * context) {
+GstDXGIDeviceInterop *
+gst_dxgi_device_interop_from_share_context (GstGLContext * context) {
   GstDXGIDeviceInterop *share_context;
   share_context = (GstDXGIDeviceInterop *) g_object_get_data ((GObject*) context,
       GST_DXGI_DEVICE_INTEROP_CONTEXT);
@@ -82,8 +84,8 @@ gst_dxgi_device_interop_from_share_context(GstGLContext * context) {
 
 static GstWGLFunctions *
 wgl_functions_new (GstGLContext * gl_context) {
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR  : %s", glGetString(GL_VENDOR));
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VERSION : %s", glGetString(GL_VERSION));
+  GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
+  GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
   g_assert(strcmp(glGetString(GL_VENDOR), "Intel") != 0);
 
   GstWGLFunctions *func = g_new(GstWGLFunctions, 1);

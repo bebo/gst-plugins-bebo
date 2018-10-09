@@ -37,9 +37,9 @@
 #include "gstdshowsink.h"
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#include <gst/dxgi/gstdxgidevice.h>
 #include <string.h>
 #include "shared/bebo_shmem.h"
-#include "gstdxgidevice.h"
 
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT

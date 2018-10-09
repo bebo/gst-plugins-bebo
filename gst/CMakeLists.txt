@@ -15,8 +15,7 @@ INCLUDE_DIRECTORIES(
   ${GST_INSTALL_BASE}/include/glib-2.0
   ${GST_INSTALL_BASE}/lib/glib-2.0/include
   ${GST_INSTALL_BASE}/lib/gstreamer-1.0/include
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst
+  ${CMAKE_SOURCE_DIR}/gst-libs
   ${CMAKE_SOURCE_DIR}/gst
   ${CMAKE_SOURCE_DIR}/shared
   ${CMAKE_SOURCE_DIR}/third_party/speexdsp/include
@@ -38,6 +37,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 SET(shared_SOURCES
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_d3d12.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_interop.c
 )
 
 SET(shared_HEADERS
@@ -45,6 +47,9 @@ SET(shared_HEADERS
   ${CMAKE_SOURCE_DIR}/shared/config.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_d3d12.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_interop.h
 )
 
 SET(nvenc_SOURCES

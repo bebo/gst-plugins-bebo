@@ -24,7 +24,7 @@
 
 #include <gst/video/video.h>
 
-#include "gstdxgimemory.h"
+#include <gst/dxgi/gstdxgimemory.h>
 /* #include <gst/gl/gstgl_fwd.h> */
 
 G_BEGIN_DECLS

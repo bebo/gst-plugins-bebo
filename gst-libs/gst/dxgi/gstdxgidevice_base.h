@@ -3,8 +3,8 @@
  * Author: Jake Loo <jake@bebo.com>
  */
 
-#ifndef __GST_DXGI_CONTEXT_H__
-#define __GST_DXGI_CONTEXT_H__
+#ifndef __GST_DXGI_DEVICE_BASE_H__
+#define __GST_DXGI_DEVICE_BASE_H__
 
 #include <gst/gst.h>
 
@@ -47,4 +47,4 @@ gst_dxgi_device_new ();
 G_END_DECLS
 
 
-#endif /* __GST_DXGI_CONTEXT_H__ */
+#endif /* __GST_DXGI_DEVICE_BASE_H__ */
