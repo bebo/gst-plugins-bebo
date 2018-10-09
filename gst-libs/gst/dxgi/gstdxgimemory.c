@@ -23,21 +23,7 @@
 
 #include "gstdxgimemory.h"
 
-#define COBJMACROS
-
 #include <gst/dxgi/gstdxgidevice_interop.h>
-
-#include <windows.h>
-#include <d3d12.h>
-#include <dxgi.h>
-
-// FIXME: Why aren't these interfaces defined in dxgi.h
-#define IDXGIResource_QueryInterface(This,riid,ppvObject)	\
-    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) )
-#define IDXGIResource_Release(This)	\
-    ( (This)->lpVtbl -> Release(This) )
-#define IDXGIResource_GetSharedHandle(This,pSharedHandle)	\
-    ( (This)->lpVtbl -> GetSharedHandle(This,pSharedHandle) )
 
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
@@ -98,11 +84,12 @@ gst_gl_dxgi_memory_allocator_init (GstGLDXGIMemoryAllocator * self)
 
 static guint
 _new_texture (GstGLContext * context, guint target, guint internal_format,
-    guint format, guint type, guint width, guint height, HANDLE * interop_handle, ID3D11Texture2D ** d3d11texture, HANDLE * dxgi_handle)
+    guint format, guint type, guint width, guint height,
+    HANDLE * interop_handle, ID3D12Resource ** out_tex,
+    HANDLE * dxgi_handle)
 {
   const GstGLFuncs *gl = context->gl_vtable;
 
-  ID3D12Resource *texture;
   HRESULT hr;
   guint tex_id;
 
@@ -149,20 +136,20 @@ _new_texture (GstGLContext * context, guint target, guint internal_format,
       D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_COPY_SOURCE,
       NULL,
       &IID_ID3D12Resource,
-      &texture);
+      out_tex);
   g_assert (hr == S_OK);
 
   gl->GenTextures (1, &tex_id);
 
   *interop_handle = share_context->wgl_funcs->wglDXRegisterObjectNV (
       share_context->device_interop_handle,
-      texture,
+      *out_tex,
       tex_id,
       target,
       WGL_ACCESS_WRITE_DISCARD_NV);
 
   IDXGIResource *dxgi_res;
-  hr = ID3D12Resource_QueryInterface (texture, &IID_IDXGIResource,
+  hr = ID3D12Resource_QueryInterface (*out_tex, &IID_IDXGIResource,
       (void**) &dxgi_res);
   if (FAILED(hr)) {
     GST_ERROR("failed to query IDXGIResource interface %#010x", hr);
@@ -227,7 +214,7 @@ gl_dxgi_tex_create (GstGLDXGIMemory * gl_dxgi_mem, GError ** error)
         internal_format, tex_format, tex_type, gl_mem->tex_width,
         GL_MEM_HEIGHT (gl_mem),
         &gl_dxgi_mem->interop_handle,
-        &gl_dxgi_mem->d3d11texture,
+        &gl_dxgi_mem->d3d_texture,
         &gl_dxgi_mem->dxgi_handle);
 
     GST_DEBUG("Generating texture id:%u format:%u type:%u dimensions:%ux%u",
@@ -509,9 +496,9 @@ gl_mem_destroy (GstGLDXGIMemory * gl_mem)
     }
     gl_mem->interop_handle = NULL;
   }
-  if (gl_mem->d3d11texture) {
-    gl_mem->d3d11texture->lpVtbl->Release(gl_mem->d3d11texture);
-    gl_mem->d3d11texture = NULL;
+  if (gl_mem->d3d_texture) {
+    ID3D12Resource_Release (gl_mem->d3d_texture);
+    gl_mem->d3d_texture = NULL;
     gl_mem->dxgi_handle = NULL;
   }
 

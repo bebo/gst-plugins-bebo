@@ -8,12 +8,30 @@
 #endif
 
 #include "gstdxgidevice_interop.h"
+#include "gstdxgidevice_d3d12.h"
 
-G_DEFINE_TYPE (GstDXGIDeviceInterop, gst_dxgi_device_interop, GST_TYPE_OBJECT);
+GST_DEBUG_CATEGORY_STATIC (gst_dxgi_device_interop_debug);
+#define GST_CAT_DEFAULT   gst_dxgi_device_interop_debug
+
+G_DEFINE_TYPE (GstDXGIDeviceInterop, gst_dxgi_device_interop,
+    GST_TYPE_OBJECT);
 
 /* prototypes */
 static void gst_dxgi_device_interop_finalize (GObject * object);
 static GstWGLFunctions* wgl_functions_new (GstGLContext * gl_context);
+
+void
+gst_dxgi_device_interop_init_once (void)
+{
+  static volatile gsize _init = 0;
+
+  if (g_once_init_enter (&_init)) {
+    GST_DEBUG_CATEGORY_INIT (gst_dxgi_device_interop_debug, "dxgideviceinterop", 0,
+        "dxgidevice interop element");
+
+    g_once_init_leave (&_init, 1);
+  }
+}
 
 static void
 gst_dxgi_device_interop_class_init (GstDXGIDeviceInteropClass * klass)
@@ -55,7 +73,7 @@ gst_dxgi_device_interop_new_wrapped (GstGLContext * gl_context,
   device->dxgi_device = dxgi_device;
   device->device_interop_handle = device->wgl_funcs->wglDXOpenDeviceNV(dxgi_device->native_device);
 
-  gst_object_ref (dxgi_device);
+  gst_object_ref_sink (dxgi_device);
   gst_object_ref_sink (device);
 
   return device;
@@ -91,7 +109,7 @@ _gst_dxgi_device_interop_new (GstGLContext * context, gpointer element) {
   GstDXGIDeviceInterop *device;
   GstDXGIDevice *dxgi_device;
 
-  dxgi_device = gst_dxgi_device_new ();
+  dxgi_device = g_object_new (GST_TYPE_DXGI_DEVICE_D3D12, NULL);
   device = gst_dxgi_device_interop_new_wrapped (context, dxgi_device);
 
   gst_dxgi_device_interop_set_share_context (context, device);
@@ -102,6 +120,8 @@ gst_dxgi_device_interop_ensure_context (GstElement * self, GstGLContext ** conte
     GstGLContext ** other_context, GstGLDisplay ** display)
 {
   GError *error = NULL;
+
+  gst_dxgi_device_interop_init_once();
 
   if (*context) {
     gst_gl_context_thread_add (*context, (GstGLContextThreadFunc) _gst_dxgi_device_interop_new,
@@ -156,7 +176,6 @@ context_error:
     return FALSE;
   }
 }
-
 
 static GstWGLFunctions *
 wgl_functions_new (GstGLContext * gl_context) {

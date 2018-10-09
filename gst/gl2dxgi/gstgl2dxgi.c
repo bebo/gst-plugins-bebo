@@ -912,7 +912,7 @@ static gboolean
 gst_gl2dxgi_ensure_gl_context(GstGL2DXGI * self) {
   GstGLBaseFilter *gl_base_filter = GST_GL_BASE_FILTER(self);
   g_assert(gl_base_filter);
-  return gst_dxgi_device_interop_ensure_context((GstElement *)self,
+  return gst_dxgi_device_interop_ensure_context ((GstElement *)self,
       &gl_base_filter->context, &self->other_context,
       &gl_base_filter->display);
 }
@@ -1005,7 +1005,7 @@ gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
     GstQuery * query)
 {
   GstGL2DXGI *self = GST_GL_2_DXGI(trans);
-  GST_LOG_OBJECT(self, "propose_allocation");
+  GST_LOG_OBJECT(self, "decide_allocation");
 
   GstCaps *caps;
   gboolean need_pool;
@@ -1018,8 +1018,9 @@ gst_gl_2_dxgi_decide_allocation (GstBaseTransform * trans,
   }
 
   GstVideoInfo info;
-  if (!gst_video_info_from_caps (&info, caps))
+  if (!gst_video_info_from_caps (&info, caps)) {
     goto invalid_caps;
+  }
 
   guint vi_size = (guint) info.size;
 

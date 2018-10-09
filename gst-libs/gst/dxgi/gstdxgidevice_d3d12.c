@@ -16,6 +16,9 @@
 #include <d3d11_4.h>
 #include <d3d12.h>
 
+GST_DEBUG_CATEGORY_STATIC (gst_dxgi_device_d3d12_debug);
+#define GST_CAT_DEFAULT   gst_dxgi_device_d3d12_debug
+
 G_DEFINE_TYPE (GstDXGIDeviceD3D12, gst_dxgi_device_d3d12, GST_TYPE_DXGI_DEVICE);
 
 static void gst_dxgi_device_d3d12_finalize (GObject * object);
@@ -28,6 +31,18 @@ static void gst_dxgi_device_set_multithread_protection (
     GstDXGIDeviceD3D12 * device,
     gboolean protection);
 
+void
+gst_dxgi_device_d3d12_init_once (void)
+{
+  static volatile gsize _init = 0;
+
+  if (g_once_init_enter (&_init)) {
+    GST_DEBUG_CATEGORY_INIT (gst_dxgi_device_d3d12_debug, "dxgidevice_d3d12", 0,
+        "dxgidevice d3d12 element");
+
+    g_once_init_leave (&_init, 1);
+  }
+}
 
 static void
 gst_dxgi_device_d3d12_class_init (GstDXGIDeviceD3D12Class * klass)
@@ -36,9 +51,13 @@ gst_dxgi_device_d3d12_class_init (GstDXGIDeviceD3D12Class * klass)
 }
 
 static void
-gst_dxgi_device_d3d12_init (GstDXGIDeviceD3D12 * device)
+gst_dxgi_device_d3d12_init (GstDXGIDeviceD3D12 * self)
 {
-  gst_dxgi_device_create_device(device);
+  GstDXGIDevice *base = (GstDXGIDevice *) self;
+
+  gst_dxgi_device_d3d12_init_once();
+
+  gst_dxgi_device_create_device(self);
 }
 
 static void
@@ -69,6 +88,8 @@ gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
 {
   GstDXGIDevice *base = GST_DXGI_DEVICE (device);
 
+  gst_dxgi_device_d3d12_init_once();
+
   HRESULT hr;
   D3D_FEATURE_LEVEL min_feature_level;
   IDXGIAdapter1 *adapter;
@@ -82,7 +103,7 @@ gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
   gst_dxgi_device_set_multithread_protection (device, TRUE);
 }
 
-static void gst_dxgi_device_set_multithread_protection (GstDXGIDevice * device,
+static void gst_dxgi_device_set_multithread_protection (GstDXGIDeviceD3D12 * device,
     gboolean protection)
 {
   GstDXGIDevice *base = GST_DXGI_DEVICE (device);

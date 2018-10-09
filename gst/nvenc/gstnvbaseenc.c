@@ -1834,7 +1834,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   data.in_gl_resource = in_gl_resource;
 
   in_gl_resource->nv_resource.resourceToRegister =
-    ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d11texture;
+    ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d_texture;
   nv_ret =
       NvEncRegisterResource (nvenc->encoder,
       &in_gl_resource->nv_resource);

@@ -10,7 +10,7 @@
 #include "gstdxgidevice_base.h"
 #include <gst/dxgi/gstdxgidevice_d3d12.h>
 
-G_DEFINE_TYPE (GstDXGIDevice, gst_dxgi_device, GST_TYPE_DXGI_DEVICE);
+G_DEFINE_TYPE (GstDXGIDevice, gst_dxgi_device, GST_TYPE_OBJECT);
 
 static void
 gst_dxgi_device_class_init (GstDXGIDeviceClass * klass)
@@ -25,6 +25,6 @@ gst_dxgi_device_init (GstDXGIDevice * device)
 GstDXGIDevice *
 gst_dxgi_device_new ()
 {
-  return g_object_new (GST_TYPE_DXGI_DEVICE_D3D12, NULL);
+  return NULL;
 }
 

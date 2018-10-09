@@ -24,13 +24,13 @@ G_BEGIN_DECLS
 G_GNUC_INTERNAL GType   gst_dxgi_device_interop_get_type (void);
 #define GST_TYPE_DXGI_DEVICE_INTEROP    (gst_dxgi_device_interop_get_type())
 
-#define GST_DXGI_DEVICE_INTEROP(o)      (G_TYPE_CHECK_INSTANCE_CAST((o), GST_TYPE_DXGI_DEVICE_INTEROP, GstDXGIDeviceInterop))
+#define GST_DXGI_DEVICE_INTEROP(o)              (G_TYPE_CHECK_INSTANCE_CAST((o), GST_TYPE_DXGI_DEVICE_INTEROP, GstDXGIDeviceInterop))
 #define GST_DXGI_DEVICE_INTEROP_CLASS(k)        (G_TYPE_CHECK_CLASS((k), GST_TYPE_DXGI_DEVICE_INTEROP, GstDXGIDeviceInteropClass))
 #define GST_IS_DXGI_DEVICE_INTEROP(o)           (G_TYPE_CHECK_INSTANCE_TYPE((o), GST_TYPE_DXGI_DEVICE_INTEROP))
 #define GST_IS_DXGI_DEVICE_INTEROP_CLASS(k)     (G_TYPE_CHECK_CLASS_TYPE((k), GST_TYPE_DXGI_DEVICE_INTEROP))
 #define GST_DXGI_DEVICE_INTEROP_GET_CLASS(o)    (G_TYPE_INSTANCE_GET_CLASS((o), GST_TYPE_DXGI_DEVICE_INTEROP, GstDXGIDeviceInteropClass))
 
-#define GST_DXGI_DEVICE_INTEROP_CONTEXT "gst_dxgi_device_interop_context"
+#define GST_DXGI_DEVICE_INTEROP_CONTEXT         "gst_dxgi_device_interop_context"
 
 typedef struct _GstWGLFunctions {
   PFNWGLDXOPENDEVICENVPROC wglDXOpenDeviceNV;
