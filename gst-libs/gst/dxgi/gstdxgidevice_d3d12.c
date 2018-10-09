@@ -7,6 +7,8 @@
 #include "config.h"
 #endif
 
+#define COBJMACROS
+
 #include "gstdxgidevice_d3d12.h"
 
 #include <windows.h>
@@ -48,8 +50,7 @@ gst_dxgi_device_d3d12_finalize (GObject * object)
 
   if (base->native_device) {
     d3d_device = (ID3D12Device *) base->native_device;
-    // d3d_device->Release();
-    // FIXME: how the fuck do you free these monster?
+    ID3D12Device_Release (d3d_device);
   }
 
   G_OBJECT_CLASS (gst_dxgi_device_d3d12_parent_class)->finalize (object);
@@ -72,7 +73,7 @@ gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
   D3D_FEATURE_LEVEL min_feature_level;
   IDXGIAdapter1 *adapter;
 
-  min_feature_level = D3D_FEATURE_LEVEL_12_0;
+  min_feature_level = D3D_FEATURE_LEVEL_11_0;
   adapter = gst_dxgi_device_get_adapter (device);
 
   hr = D3D12CreateDevice(adapter, min_feature_level, &IID_ID3D12Device,

@@ -32,7 +32,7 @@
 #include <GL/wglext.h>
 #include <gst/gl/gstgldisplay.h>
 #include <gst/video/gstvideometa.h>
-#include <gst/dxgi/gstdxgidevice.h>
+#include <gst/dxgi/gstdxgidevice_interop.h>
 
 #define BUFFER_COUNT 30
 #define INTERNAL_QUEUE_SIZE 4
@@ -910,9 +910,11 @@ _find_local_gl_context(GstGLBaseFilter * filter)
 
 static gboolean
 gst_gl2dxgi_ensure_gl_context(GstGL2DXGI * self) {
-  GstGLBaseFilter * gl_base_filter = GST_GL_BASE_FILTER(self);
+  GstGLBaseFilter *gl_base_filter = GST_GL_BASE_FILTER(self);
   g_assert(gl_base_filter);
-  return gst_dxgi_device_ensure_gl_context((GstElement *)self, &gl_base_filter->context, &self->other_context, &gl_base_filter->display);
+  return gst_dxgi_device_interop_ensure_context((GstElement *)self,
+      &gl_base_filter->context, &self->other_context,
+      &gl_base_filter->display);
 }
 
 static gboolean

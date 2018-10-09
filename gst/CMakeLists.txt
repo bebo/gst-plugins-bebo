@@ -36,7 +36,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 SET(shared_SOURCES
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
+  # ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgicontext.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.c
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_d3d12.c
@@ -46,7 +46,7 @@ SET(shared_SOURCES
 SET(shared_HEADERS
   ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
   ${CMAKE_SOURCE_DIR}/shared/config.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
+  # ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgicontext.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.h
@@ -87,24 +87,6 @@ SET(buffer_holder_FILES
   bufferholder/gstbufferholder.h
 )
 
-#  SET(bebosquisher_SOURCES
-#    bebosquisher/gstglbasemixer.c
-#    bebosquisher/gstglmixerbin.c
-#    bebosquisher/gstglmixer.c
-#    bebosquisher/gstglvideomixer.c
-#    bebosquisher/gstglstereomix.c
-#    bebosquisher/gstglutils.c
-#  )
-#  
-#  SET(bebosquisher_HEADERS
-#    bebosquisher/gstglbasemixer.h
-#    bebosquisher/gstglmixerbin.h
-#    bebosquisher/gstglmixer.h
-#    bebosquisher/gstglvideomixer.h
-#    bebosquisher/gstglstereomix.h
-#    bebosquisher/gstglutils.h
-#  )
-
 SET(noisegate_FILES
   noisegate/gstaudionoisegate.c
   noisegate/gstaudionoisegate.h
@@ -121,7 +103,6 @@ source_group("gstdshowsink" FILES ${gstdshowsink_SOURCES} ${gstdshowsink_HEADERS
 source_group("gl2dxgi" FILES ${gl2dxgi_SOURCES} ${gl2dxgi_HEADERS})
 source_group("shared" FILES ${shared_SOURCES} ${shared_HEADERS})
 source_group("plugin_init" FILES gstbeboplugin.c)
-# source_group("bebosquisher" FILES ${bebosquisher_SOURCES} ${bebosquisher_HEADERS})
 source_group("bufferholder" FILES ${buffer_holder_FILES})
 source_group("noisegate" FILES ${noisegate_FILES})
 source_group("noisesuppression" FILES ${noisesuppression_FILES})
@@ -136,8 +117,6 @@ ADD_LIBRARY(libgstbebo SHARED
   ${gstdshowsink_HEADERS}
   ${gl2dxgi_SOURCES}
   ${gl2dxgi_HEADERS}
-  # ${bebosquisher_SOURCES}
-  # ${bebosquisher_HEADERS}
   ${buffer_holder_FILES}
   ${noisegate_FILES}
   ${noisesuppression_FILES}
@@ -159,9 +138,6 @@ TARGET_LINK_LIBRARIES(libgstbebo
   dxguid
   opengl32
   gstallocators-1.0
-  # gstopenglmixers
-  #  gstbadallocators-1.0
-  #  gstbadbase-1.0
   gstbadvideo-1.0
   gstpbutils-1.0
   gstcontroller-1.0
