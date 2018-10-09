@@ -12,9 +12,8 @@
 
 G_BEGIN_DECLS
 
-G_GNUC_INTERNAL GType gst_dxgi_device_d3d12_get_type (void);
+GType gst_dxgi_device_d3d12_get_type (void);
 #define GST_TYPE_DXGI_DEVICE_D3D12            (gst_dxgi_device_d3d12_get_type())
-
 #define GST_DXGI_DEVICE_D3D12(o)              (G_TYPE_CHECK_INSTANCE_CAST((o), GST_TYPE_DXGI_DEVICE_D3D12, GstDXGIDeviceD3D12))
 #define GST_DXGI_DEVICE_D3D12_CLASS(k)        (G_TYPE_CHECK_CLASS((k), GST_TYPE_DXGI_DEVICE_D3D12, GstDXGIDeviceD3D12Class))
 #define GST_IS_DXGI_DEVICE_D3D12(o)           (G_TYPE_CHECK_INSTANCE_TYPE((o), GST_TYPE_DXGI_DEVICE_D3D12))

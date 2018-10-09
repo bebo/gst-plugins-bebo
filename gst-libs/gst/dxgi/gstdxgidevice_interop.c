@@ -82,6 +82,82 @@ gst_dxgi_device_interop_from_share_context (GstGLContext * context) {
   return share_context;
 }
 
+static void
+_gst_dxgi_device_interop_new (GstGLContext * context, gpointer element) {
+  if (gst_dxgi_device_interop_from_share_context(context) != NULL) {
+    return;
+  }
+
+  GstDXGIDeviceInterop *device;
+  GstDXGIDevice *dxgi_device;
+
+  dxgi_device = gst_dxgi_device_new ();
+  device = gst_dxgi_device_interop_new_wrapped (context, dxgi_device);
+
+  gst_dxgi_device_interop_set_share_context (context, device);
+}
+
+gboolean
+gst_dxgi_device_interop_ensure_context (GstElement * self, GstGLContext ** context,
+    GstGLContext ** other_context, GstGLDisplay ** display)
+{
+  GError *error = NULL;
+
+  if (*context) {
+    gst_gl_context_thread_add (*context, (GstGLContextThreadFunc) _gst_dxgi_device_interop_new,
+        self);
+    return TRUE;
+  }
+
+  if (!*context) {
+    gst_gl_ensure_element_data (GST_ELEMENT(self),
+      display,
+      other_context);
+  }
+
+  if (!*context) {
+    GST_OBJECT_LOCK (*display);
+    do {
+      if (*context) {
+        gst_object_unref (*context);
+        *context = NULL;
+      }
+
+      *context = gst_gl_display_get_gl_context_for_thread (*display, NULL);
+      if (!*context) {
+        if (!gst_gl_display_create_context (*display, *other_context,
+              context, &error)) {
+          GST_OBJECT_UNLOCK (*display);
+          goto context_error;
+        }
+      }
+    } while (!gst_gl_display_add_context (*display, *context));
+    GST_OBJECT_UNLOCK (*display);
+  }
+
+  gst_gl_context_thread_add (*context, (GstGLContextThreadFunc) _gst_dxgi_device_interop_new,
+      self);
+
+  return TRUE;
+
+context_error:
+  {
+    if (error) {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, ("%s", error->message),
+          (NULL));
+      g_clear_error (&error);
+    } else {
+      GST_ELEMENT_ERROR (self, RESOURCE, NOT_FOUND, (NULL), (NULL));
+    }
+    if (*context) {
+      gst_object_unref (*context);
+    }
+    *context = NULL;
+    return FALSE;
+  }
+}
+
+
 static GstWGLFunctions *
 wgl_functions_new (GstGLContext * gl_context) {
   GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));

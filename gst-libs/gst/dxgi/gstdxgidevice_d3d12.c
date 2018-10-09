@@ -18,25 +18,14 @@ G_DEFINE_TYPE (GstDXGIDeviceD3D12, gst_dxgi_device_d3d12, GST_TYPE_DXGI_DEVICE);
 
 static void gst_dxgi_device_d3d12_finalize (GObject * object);
 
-static IDXGIAdapter1 * gst_dxgi_device_get_adapter (GstDXGIDevice * device);
-static void gst_dxgi_device_set_multithread_protection (GstDXGIDevice * device,
+static IDXGIAdapter1 * gst_dxgi_device_get_adapter (
+    GstDXGIDeviceD3D12 * device);
+static void gst_dxgi_device_create_device (
+    GstDXGIDeviceD3D12 * device);
+static void gst_dxgi_device_set_multithread_protection (
+    GstDXGIDeviceD3D12 * device,
     gboolean protection);
 
-#if 0
-const static D3D_FEATURE_LEVEL d3d_feature_levels[] =
-{
-  D3D_FEATURE_LEVEL_10_0,
-  D3D_FEATURE_LEVEL_10_1,
-  D3D_FEATURE_LEVEL_11_0,
-  D3D_FEATURE_LEVEL_11_1,
-  D3D_FEATURE_LEVEL_12_0,
-  D3D_FEATURE_LEVEL_12_1
-};
-
-const static GUID IID_ID3D11Multithread = {
-  0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0}
-};
-#endif
 
 static void
 gst_dxgi_device_d3d12_class_init (GstDXGIDeviceD3D12Class * klass)
@@ -47,6 +36,7 @@ gst_dxgi_device_d3d12_class_init (GstDXGIDeviceD3D12Class * klass)
 static void
 gst_dxgi_device_d3d12_init (GstDXGIDeviceD3D12 * device)
 {
+  gst_dxgi_device_create_device(device);
 }
 
 static void
@@ -67,13 +57,15 @@ gst_dxgi_device_d3d12_finalize (GObject * object)
 
 
 static IDXGIAdapter1 *
-gst_dxgi_device_get_adapter (GstDXGIDevice * device) {
+gst_dxgi_device_get_adapter (GstDXGIDeviceD3D12 * device)
+{
   // TODO
   return NULL;
 }
 
 static void
-gst_dxgi_device_create_device (GstDXGIDevice * device) {
+gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
+{
   GstDXGIDevice *base = GST_DXGI_DEVICE (device);
 
   HRESULT hr;
