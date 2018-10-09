@@ -64,6 +64,9 @@ typedef struct _GstDXGIDeviceInteropClass {
 
 } GstDXGIDeviceInteropClass;
 
+gboolean
+gst_dxgi_device_interop_ensure_context (GstElement * self, GstGLContext ** context,
+    GstGLContext ** other_context, GstGLDisplay ** display);
 
 GstDXGIDeviceInterop *
 gst_dxgi_device_interop_new_wrapped (GstGLContext * gl_context, GstDXGIDevice * dxgi_device);
