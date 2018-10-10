@@ -67,11 +67,18 @@ gst_dxgi_device_interop_new_wrapped (GstGLContext * gl_context,
     GstDXGIDevice * dxgi_device)
 {
   GstDXGIDeviceInterop *device;
+  ID3D12Device *d3d12_device = (ID3D12Device *) dxgi_device->native_device;
 
   device = g_object_new (GST_TYPE_DXGI_DEVICE_INTEROP, NULL);
   device->wgl_funcs = wgl_functions_new(gl_context);
   device->dxgi_device = dxgi_device;
-  device->device_interop_handle = device->wgl_funcs->wglDXOpenDeviceNV(dxgi_device->native_device);
+
+  // GST_ERROR("Native Device: %llu, Node Count: %llu", dxgi_device->native_device,
+  //    ID3D12Device_GetNodeCount(d3d12_device));
+
+  //g_critical("wgl open device");
+  device->device_interop_handle = device->wgl_funcs->wglDXOpenDeviceNV(d3d12_device);
+  //g_critical("wgl open device bam son");
 
   gst_object_ref_sink (dxgi_device);
   gst_object_ref_sink (device);
@@ -181,7 +188,6 @@ static GstWGLFunctions *
 wgl_functions_new (GstGLContext * gl_context) {
   GST_INFO("GL_VENDOR  : %s", glGetString(GL_VENDOR));
   GST_INFO("GL_VERSION : %s", glGetString(GL_VERSION));
-  g_assert(strcmp(glGetString(GL_VENDOR), "Intel") != 0);
 
   GstWGLFunctions *func = g_new(GstWGLFunctions, 1);
 
@@ -199,6 +205,7 @@ wgl_functions_new (GstGLContext * gl_context) {
     gst_gl_context_get_proc_address(gl_context, "wglDXUnlockObjectsNV");
   func->wglDXSetResourceShareHandleNV = (PFNWGLDXSETRESOURCESHAREHANDLENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXSetResourceShareHandleNV");
+
   return func;
 }
 

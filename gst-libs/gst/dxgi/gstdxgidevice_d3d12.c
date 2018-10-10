@@ -55,9 +55,9 @@ gst_dxgi_device_d3d12_init (GstDXGIDeviceD3D12 * self)
 {
   GstDXGIDevice *base = (GstDXGIDevice *) self;
 
-  gst_dxgi_device_d3d12_init_once();
+  gst_dxgi_device_d3d12_init_once ();
 
-  gst_dxgi_device_create_device(self);
+  gst_dxgi_device_create_device (self);
 }
 
 static void
@@ -84,9 +84,9 @@ gst_dxgi_device_get_adapter (GstDXGIDeviceD3D12 * device)
 }
 
 static void
-gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
+gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * self)
 {
-  GstDXGIDevice *base = GST_DXGI_DEVICE (device);
+  GstDXGIDevice *base = GST_DXGI_DEVICE (self);
 
   gst_dxgi_device_d3d12_init_once();
 
@@ -95,12 +95,12 @@ gst_dxgi_device_create_device (GstDXGIDeviceD3D12 * device)
   IDXGIAdapter1 *adapter;
 
   min_feature_level = D3D_FEATURE_LEVEL_11_0;
-  adapter = gst_dxgi_device_get_adapter (device);
+  adapter = gst_dxgi_device_get_adapter (self);
 
   hr = D3D12CreateDevice(adapter, min_feature_level, &IID_ID3D12Device,
       &base->native_device);
 
-  gst_dxgi_device_set_multithread_protection (device, TRUE);
+  gst_dxgi_device_set_multithread_protection (self, TRUE);
 }
 
 static void gst_dxgi_device_set_multithread_protection (GstDXGIDeviceD3D12 * device,
@@ -113,11 +113,11 @@ static void gst_dxgi_device_set_multithread_protection (GstDXGIDeviceD3D12 * dev
   HRESULT hr;
 
   d3d_device = (ID3D12Device *) base->native_device;
-  hr = d3d_device->lpVtbl->QueryInterface(d3d_device, &IID_ID3D11Multithread,
+  hr = ID3D12Device_QueryInterface(d3d_device, &IID_ID3D11Multithread,
       (void**) &mt);
 
   if (hr == S_OK) {
-    mt->lpVtbl->SetMultithreadProtected(mt, protection);
+    ID3D11Multithread_SetMultithreadProtected(mt, protection);
   }
 }
 

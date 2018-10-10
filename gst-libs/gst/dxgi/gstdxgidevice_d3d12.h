@@ -10,6 +10,10 @@
 
 #include "gstdxgidevice_base.h"
 
+#define COBJMACROS
+#include <d3d12.h>
+#include <dxgi.h>
+
 G_BEGIN_DECLS
 
 GType gst_dxgi_device_d3d12_get_type (void);
