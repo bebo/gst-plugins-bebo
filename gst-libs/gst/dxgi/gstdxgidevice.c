@@ -20,9 +20,16 @@ gst_gl_dxgi_device_init_once(void)
 }
 
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR  : %s", glGetString(GL_VENDOR));
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VERSION : %s", glGetString(GL_VERSION));
-  g_assert(strcmp(glGetString(GL_VENDOR), "Intel") != 0);
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR  : %s",
+      glGetString(GL_VENDOR));
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VERSION : %s",
+      glGetString(GL_VERSION));
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_RENDERER : %s",
+      glGetString(GL_RENDERER));
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_SHADING_LANGUAGE_VERSION: %s",
+      glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+  // g_assert(strcmp(glGetString(GL_VENDOR), "Intel") != 0);
 
   share_context->wglDXOpenDeviceNV = (PFNWGLDXOPENDEVICENVPROC)
     gst_gl_context_get_proc_address(gl_context, "wglDXOpenDeviceNV");
@@ -72,7 +79,7 @@ _create_device_d3d11() {
       NULL);
   GST_CAT_INFO(GST_CAT_GL_DXGI, "CreateDevice HR: 0x%08x, level_used: 0x%08x (%d)", hr,
       (unsigned int) level_used, (unsigned int) level_used);
-  
+
   GUID myIID_ID3D112Multithread = {
     0x9B7E4E00, 0x342C, 0x4106, {0xA1, 0x9F, 0x4F, 0x27, 0x04, 0xF6, 0x89, 0xF0} };
 
@@ -127,7 +134,7 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
       display,
       other_context);
   }
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "other_context:%" GST_PTR_FORMAT, *other_context);
+  GST_CAT_DEBUG(GST_CAT_GL_DXGI, "other_context:%" GST_PTR_FORMAT, *other_context);
 
   if (!*context) {
     GST_OBJECT_LOCK (*display);
@@ -149,7 +156,7 @@ gst_dxgi_device_ensure_gl_context(GstElement * self, GstGLContext** context, Gst
     GST_OBJECT_UNLOCK (*display);
   }
   gst_gl_context_thread_add(*context, (GstGLContextThreadFunc) _init_d3d11_context, self);
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "context:%" GST_PTR_FORMAT, *context);
+  GST_CAT_DEBUG(GST_CAT_GL_DXGI, "context:%" GST_PTR_FORMAT, *context);
 
   return TRUE;
 
