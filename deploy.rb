@@ -6,7 +6,7 @@ require 'open3'
 require 'rbconfig'
 include Open3
 
-JENKINS_HOST = 'usw1-jenkins-002.blab.im'
+JENKINS_HOST = 'jenkins-windows.bebo-dev.com'
 JENKINS_PROJECT = 'gst-plugins-bebo'
 
 
