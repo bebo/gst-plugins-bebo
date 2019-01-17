@@ -20,13 +20,13 @@ gst_gl_dxgi_device_init_once(void)
 }
 
 static void init_wgl_functions(GstGLContext* gl_context, GstDXGID3D11Context *share_context) {
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR  : %s",
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VENDOR : %s",
       glGetString(GL_VENDOR));
   GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_VERSION : %s",
       glGetString(GL_VERSION));
   GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_RENDERER : %s",
       glGetString(GL_RENDERER));
-  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_SHADING_LANGUAGE_VERSION: %s",
+  GST_CAT_INFO(GST_CAT_GL_DXGI, "GL_SHADING_LANGUAGE_VERSION : %s",
       glGetString(GL_SHADING_LANGUAGE_VERSION));
 
   // g_assert(strcmp(glGetString(GL_VENDOR), "Intel") != 0);
