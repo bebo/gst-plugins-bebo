@@ -6,8 +6,7 @@
 #ifndef __GST_DXGI_H__
 #define __GST_DXGI_H__
 
-#include <gst/dxgi/gstdxgidevice_base.h>
-#include <gst/dxgi/gstdxgidevice_d3d12.h>
-#include <gst/dxgi/gstdxgimemory.h>
+#include <gst/dxgi/dxgicontext.h>
+#include <gst/dxgi/dxgidisplay.h>
 
 #endif /* __GST_DXGI_H__ */

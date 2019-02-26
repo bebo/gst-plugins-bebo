@@ -32,7 +32,7 @@
 /* #if HAVE_NVENC_GST_GL */
 #include <gst/gl/gl.h>
 #include <gst/video/gstvideometa.h>
-#include <gst/dxgi/gstdxgidevice_interop.h>
+#include <gst/dxgi/gstdxgidevice.h>
 
 #include <D3d11_4.h>
 
@@ -57,8 +57,7 @@ G_DEFINE_ABSTRACT_TYPE (D3DGstNvBaseEnc, gst_nv_base_enc, GST_TYPE_VIDEO_ENCODER
 
 #define GST_TYPE_NV_PRESET (gst_nv_preset_get_type())
 
-static gboolean gst_nv_base_enc_ensure_gl_context (D3DGstNvBaseEnc * self);
-static gboolean gst_nv_base_enc_drain_encoder (D3DGstNvBaseEnc * self);
+static gboolean gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self);
 static GType
 gst_nv_preset_get_type (void)
 {
@@ -587,10 +586,10 @@ gst_nv_base_enc_open (GstVideoEncoder * enc)
     GST_INFO("CREATING_ENCODER");
     NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS params = { 0, };
     NVENCSTATUS nv_ret;
-    GstDXGIDeviceInterop *share_context = gst_dxgi_device_interop_from_share_context (nvenc->context);
+    GstDXGID3D11Context *share_context = get_dxgi_share_context(nvenc->context);
     params.version = NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER;
     params.apiVersion = NVENCAPI_VERSION;
-    params.device = share_context->dxgi_device->native_device;
+    params.device = share_context->d3d11_device;
     params.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
     if (!share_context) {
       GST_ERROR("No DXGI share context.");
@@ -698,7 +697,7 @@ gst_nv_base_enc_start (GstVideoEncoder * enc)
 static gboolean
 gst_nv_base_enc_ensure_gl_context(D3DGstNvBaseEnc * self)
 {
-  return gst_dxgi_device_interop_ensure_context ((GstElement *) self,
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self,
     (GstGLContext **) &self->context,
     (GstGLContext **) &self->other_context,
     (GstGLDisplay **) &self->display);
@@ -709,7 +708,7 @@ gst_nv_base_enc_stop (GstVideoEncoder * enc)
 {
   D3DGstNvBaseEnc *nvenc = GST_D3D_NV_BASE_ENC (enc);
   GST_INFO("Stopping NVENC");
-  gst_nv_base_enc_drain_encoder (nvenc);
+  gst_nv_base_enc_drain_encoder(nvenc);
   gst_nv_base_enc_stop_bitstream_thread (nvenc);
   gst_nv_base_enc_free_buffers (nvenc);
 
@@ -965,6 +964,7 @@ gst_nv_base_enc_bitstream_thread (gpointer user_data)
 {
   GstVideoEncoder *enc = user_data;
   D3DGstNvBaseEnc *nvenc = user_data;
+  GstDXGID3D11Context * ctx = get_dxgi_share_context(nvenc->context);
 
   /* overview of operation:
    * 1. retreive the next buffer submitted to the bitstream pool
@@ -1132,6 +1132,7 @@ gst_nv_base_enc_start_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 static gboolean
 gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
 {
+  gpointer out_buf;
   GST_DEBUG_OBJECT(nvenc, "Stopping bitstream thread.");
   if (nvenc->bitstream_thread == NULL)
     return TRUE;
@@ -1145,12 +1146,10 @@ gst_nv_base_enc_stop_bitstream_thread (D3DGstNvBaseEnc * nvenc)
   }
   GST_FIXME_OBJECT (nvenc, "stop bitstream reading thread properly");
 
-  //gpointer out_buf;
   //while ((out_buf = g_async_queue_try_pop_unlocked (nvenc->bitstream_queue))) {
   //  GST_INFO_OBJECT (nvenc, "stole bitstream buffer %p from queue", out_buf);
   //  g_async_queue_push_unlocked (nvenc->bitstream_pool, out_buf);
   //}
-
   g_async_queue_push_unlocked (nvenc->bitstream_queue, SHUTDOWN_COOKIE);
   g_async_queue_unlock (nvenc->bitstream_pool);
   g_async_queue_unlock (nvenc->bitstream_queue);
@@ -1834,7 +1833,7 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   data.in_gl_resource = in_gl_resource;
 
   in_gl_resource->nv_resource.resourceToRegister =
-    ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d_texture;
+    ((GstGLDXGIMemory*)in_gl_resource->gl_mem[0])->d3d11texture;
   nv_ret =
       NvEncRegisterResource (nvenc->encoder,
       &in_gl_resource->nv_resource);

@@ -37,9 +37,9 @@
 #include "gstdshowsink.h"
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include <gst/dxgi/gstdxgidevice_interop.h>
 #include <string.h>
 #include "shared/bebo_shmem.h"
+#include <gst/dxgi/gstdxgidevice.h>
 
 #ifdef NDEBUG
 #undef GST_LOG_OBJECT
@@ -626,7 +626,7 @@ gst_shm_sink_unlock_stop (GstBaseSink * bsink)
 
 static gboolean
 gst_dshow_filter_sink_ensure_gl_context(GstDirectShowSink * self) {
-  return gst_dxgi_device_interop_ensure_context((GstElement *) self,
+  return gst_dxgi_device_ensure_gl_context((GstElement *) self,
       &self->context, &self->other_context, &self->display);
 }
 

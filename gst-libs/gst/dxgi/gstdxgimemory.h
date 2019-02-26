@@ -20,13 +20,10 @@
  * 
  *  vim: ts=2:sw=2
  */
-#ifndef __GST_DXGI_MEMORY_H__
-#define __GST_DXGI_MEMORY_H__
-
-#define COBJMACROS
+#pragma once
 
 #include <windows.h>
-#include <d3d12.h>
+#include <d3d11.h>
 #include <dxgi.h>
 
 #include <gst/gst.h>
@@ -41,7 +38,6 @@
 
 
 G_BEGIN_DECLS
-
 #define GST_IS_GL_DXGI_MEMORY_ALLOCATOR(obj) \
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GL_DXGI_MEMORY_ALLOCATOR))
 #define GST_IS_GL_DXGI_MEMORY_ALLOCATOR_CLASS(klass) \
@@ -67,7 +63,7 @@ typedef struct _GstGLDXGIMemory
   GstGLMemory mem;
   HANDLE interop_handle;
   HANDLE dxgi_handle;
-  ID3D12Resource *d3d_texture;
+  ID3D11Texture2D * d3d11texture;
   GLDXGILockStatus status;
   gpointer    _padding[GST_PADDING];
 } GstGLDXGIMemory;
@@ -84,10 +80,9 @@ typedef struct _GstGLDXGIMemoryAllocatorClass
   GstGLBaseMemoryAllocatorAllocFunction orig_alloc;
 } GstGLDXGIMemoryAllocatorClass;
 
-void gl_dxgi_map_d3d (GstGLDXGIMemory * gl_mem);
-void gl_dxgi_unmap_d3d (GstGLDXGIMemory * gl_mem);
+void gl_dxgi_map_d3d(GstGLDXGIMemory * gl_mem);
+void gl_dxgi_unmap_d3d(GstGLDXGIMemory * gl_mem);
 
-GType gst_gl_dxgi_memory_allocator_get_type (void);
+GType gst_gl_dxgi_memory_allocator_get_type(void);
 GstGLDXGIMemoryAllocator * gst_gl_dxgi_memory_allocator_new();
 
-#endif /* __GST_DXGI_MEMORY_H__ */

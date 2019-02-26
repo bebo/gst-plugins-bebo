@@ -29,10 +29,10 @@
 #include <gst/gl/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>
-#include <gst/dxgi/gstdxgidevice.h>
 #include <gst/gl/gstgldisplay.h>
 #include <gst/video/gstvideometa.h>
 #include "gstbufferholder.h"
+#include <gst/dxgi/gstdxgidevice.h>
 
 #define DEFAULT_SIZE_BUFFERS 5
 

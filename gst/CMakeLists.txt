@@ -36,22 +36,20 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 SET(shared_SOURCES
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.c
-  # ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgicontext.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_d3d12.c
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_interop.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/dxgidisplay.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/dxgicontext.c
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/d3d12/dxgidisplay_d3d12.c
 )
 
 SET(shared_HEADERS
   ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
   ${CMAKE_SOURCE_DIR}/shared/config.h
-  # ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
   ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgimemory.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgicontext.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_base.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_d3d12.h
-  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice_interop.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/gstdxgidevice.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/dxgidisplay.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/dxgicontext.h
+  ${CMAKE_SOURCE_DIR}/gst-libs/gst/dxgi/d3d12/dxgidisplay_d3d12.h
 )
 
 SET(nvenc_SOURCES
@@ -133,6 +131,7 @@ TARGET_LINK_LIBRARIES(libgstbebo
   rpcrt4
   uuid
   winmm
+  dxgi
   d3d11
   d3d12
   dxguid
