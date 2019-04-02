@@ -30,7 +30,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 SET(shared_FILES
   ${CMAKE_SOURCE_DIR}/shared/bebo_shmem.h
-  ${CMAKE_SOURCE_DIR}/shared/config.h
 )
 
 SET(preview_FILES

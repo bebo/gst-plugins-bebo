@@ -28,4 +28,4 @@ typedef struct _GstDXGID3D11Context
 GstDXGID3D11Context * get_dxgi_share_context(GstGLContext * context);
 gboolean gst_dxgi_device_ensure_gl_context(GstElement * element, GstGLContext ** context, GstGLContext ** other_context, GstGLDisplay ** display);
 
-#endif /* __GST_NVENC_H_INCLUDED__ */
+#endif /* __GST_DXGI_DEVICE_INCLUDED__ */

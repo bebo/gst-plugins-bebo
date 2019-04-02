@@ -1,7 +1,7 @@
 /* GStreamer audio filter example class
  * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
  * Copyright (C) <2003> David Schleef <ds@schleef.org>
- * Copyright (C) YEAR AUTHOR_NAME AUTHOR_EMAIL
+ * Copyright (c) 2019 Pigs in Flight, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -42,18 +42,6 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/**
- * SECTION:element-plugin
- *
- * FIXME:Describe plugin here.
- *
- * <refsect2>
- * <title>Example launch line</title>
- * |[
- launch -v -m audiotestsrc ! plugin ! autoaudiosink
- * ]|
- * </refsect2>
- */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

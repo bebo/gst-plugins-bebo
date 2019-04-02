@@ -1,4 +1,4 @@
-/* 
+/*
  *
  * LRUCache - a templated LRU cache class that allows specification of
  * key, value and optionally the map container type (defaults to std::map)
@@ -47,12 +47,12 @@ namespace lru {
       const Lock& operator =(const Lock&);
   };
   /**
-   *	Null or noop lock class that is the default synchronization
-   *	used in lru cache.
+   *    Null or noop lock class that is the default synchronization
+   *    used in lru cache.
    *
-   *	a simple pthread based lock would look like this:
-   *	<pre>
-   *		class MutexLock : public Lock {
+   *    a simple pthread based lock would look like this:
+   *    <pre>
+   *            class MutexLock : public Lock {
    public:
    MutexLock() { ::pthread_mutex_init(&m_lock, 0); }
    virtual ~MutexLock() { ::pthread_mutex_destroy(&m_lock); }
@@ -61,8 +61,8 @@ namespace lru {
    private:
    pthread_mutex_t m_lock;
    }
-   *	</pre>
-   *	
+   *    </pre>
+   *    
    */
   class NullLock: public Lock {
     public:
@@ -76,7 +76,7 @@ namespace lru {
       }
   };
   /**
-   *	helper class to auto lock and unlock within a scope
+   *    helper class to auto lock and unlock within a scope
    */
   class ScopedLock {
     public:
@@ -194,11 +194,11 @@ namespace lru {
     };
 
   /**
-   *	The LRU Cache class templated by
-   *		Key - key type
-   *		Value - value type
-   *		MapType - an associative container like std::map
-   *		LockType - a lock type derived from the Lock class (default: NullLock = no synchronization)
+   *    The LRU Cache class templated by
+   *            Key - key type
+   *            Value - value type
+   *            MapType - an associative container like std::map
+   *            LockType - a lock type derived from the Lock class (default: NullLock = no synchronization)
    */
   template<class Key, class Value,
     class MapType = std::map<Key, Node<Key, Value>*>,
