@@ -27,13 +27,13 @@
 #include "nvenc/gstnvh264enc.h"
 #include "nvenc/gstnvenc.h"
 #include "gl2dxgi/gstgl2dxgi.h"
-//#include "bebosquisher/gstglmixerbin.h"
-//#include "bebosquisher/gstglvideomixer.h"
-//#include "bebosquisher/gstglstereomix.h"
 #include "bufferholder/gstbufferholder.h"
 #include "noisegate/gstaudionoisegate.h"
 #include "noisesuppression/gstaudionoisesuppression.h"
 
+// Note: This is to prefer discrete gpu rather than integrated gpu.
+// This is increase performance with gl/dxgi. Applications required
+// to be signed otherwise these flags won't be doing anything.
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
@@ -44,31 +44,12 @@ plugin_init (GstPlugin * plugin)
     gst_element_register(plugin, "d3dnvh264enc", GST_RANK_PRIMARY * 2,
         gst_nv_h264_enc_get_type());
   }
-  gst_element_register(plugin, "dshowfiltersink",
-    GST_RANK_NONE, GST_TYPE_SHM_SINK);
-  gst_element_register(plugin, "gl2dxgi",
-    GST_RANK_NONE, GST_TYPE_GL_2_DXGI);
-#if 0
-  if (!gst_element_register(plugin, "beboglmixerbin",
-    GST_RANK_NONE, GST_TYPE_GL_MIXER_BIN)) {
+  if (!gst_element_register(plugin, "dshowfiltersink",
+    GST_RANK_NONE, GST_TYPE_SHM_SINK)) {
     return FALSE;
   }
-  if (!gst_element_register(plugin, "beboglvideomixer",
-    GST_RANK_NONE, gst_gl_video_mixer_bin_get_type())) {
-    return FALSE;
-  }
-
-  if (!gst_element_register(plugin, "beboglvideomixerelement",
-    GST_RANK_NONE, gst_gl_video_mixer_get_type())) {
-    return FALSE;
-  }
-  if (!gst_element_register(plugin, "beboglstereomix",
-    GST_RANK_NONE, GST_TYPE_GL_STEREO_MIX)) {
-    return FALSE;
-  }
-#endif
-  if (!gst_element_register(plugin, "bufferholder",
-    GST_RANK_NONE, GST_TYPE_BUFFER_HOLDER)) {
+  if (!gst_element_register(plugin, "gl2dxgi",
+    GST_RANK_NONE, GST_TYPE_GL_2_DXGI)) {
     return FALSE;
   }
   if (!gst_element_register(plugin, "noisegate",
@@ -77,6 +58,10 @@ plugin_init (GstPlugin * plugin)
   }
   if (!gst_element_register(plugin, "noisesuppression",
     GST_RANK_NONE, GST_TYPE_AUDIO_NOISE_SUPPRESSION)) {
+    return FALSE;
+  }
+  if (!gst_element_register(plugin, "bufferholder",
+    GST_RANK_NONE, GST_TYPE_BUFFER_HOLDER)) {
     return FALSE;
   }
   return TRUE;

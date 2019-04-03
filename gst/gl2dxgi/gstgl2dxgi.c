@@ -1,6 +1,7 @@
 /*
  * GStreamer
  * Copyright (C) 2015 Matthew Waters <matthew@centricular.com>
+ * Copyright (C) 2018 Pigs in Flight, Inc
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public

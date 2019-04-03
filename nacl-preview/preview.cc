@@ -1,5 +1,7 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.  Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+/*
+ * Copyright (c) 2019 Pigs in Flight, Inc.
+ * Author: Jake Loo <jake@bebo.com>
+ */
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -634,7 +636,6 @@ class PreviewInstance : public pp::Instance {
   GLuint color_loc_;
   GLint video_width_;
   GLint video_height_;
-
 
   struct shmem* shmem_;
   HANDLE shmem_handle_;
